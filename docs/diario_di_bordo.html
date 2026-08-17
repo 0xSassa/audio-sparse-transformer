@@ -293,6 +293,56 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
   <p>I sorgenti HTML dei PDF stavano in una cartella temporanea legata alla singola sessione di lavoro, quindi non ritrovabili in futuro. Spostati in <code>docs/</code> e aggiunto <code>scripts/build_docs.ps1</code> per rigenerare entrambi i PDF con un comando. Ora i documenti sono manutenibili e versionabili come il resto del codice.</p>
 </div>
 
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span><code>.gitignore</code>: <code>data/</code> nascondeva <code>src/data/</code></p>
+  <p>Al primo <code>git add --dry-run</code> risultavano <strong>18 file</strong> invece dei 23 attesi: mancava tutto <code>src/data/</code>. Causa: in gitignore un pattern <strong>senza barra iniziale matcha a qualsiasi profondità dell'albero</strong>, quindi <code>data/</code> escludeva anche <code>src/data/</code> — cioè la pipeline dati completa, in silenzio.</p>
+  <p>Corretto in <code>/data/</code>, ancorato alla radice. Senza il controllo preventivo si sarebbe ottenuto un repository che <em>sembra</em> completo e che al primo clone su un'altra macchina non funziona. Stesso codice perso due volte nella stessa giornata, per cause diverse.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Repository git locale, e solo il necessario dentro</p>
+  <p>Inizializzato il repository (<strong>locale, nessun remote, nessun invito</strong>). Esclusi dal versionamento la pagina del corso salvata e i suoi asset — il solo <code>semantic.css</code> era il 90 % delle righe versionate — e la cartella <code>paper pre progetto/</code>, che contiene PDF altrui non ridistribuibili. Restano sul disco, fuori dal repo. Da 44 519 a poco più di 4 000 righe versionate.</p>
+  <p>Rimosso anche il trailer di co-autoria dai messaggi di commit: la cronologia riporta solo l'autore.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Fase 2 completata: dataset scaricato e cache costruita</p>
+  <p>Scaricati 2,43 GB, MD5 verificato, estratto. Gli split ufficiali tornano <strong>esatti</strong>:</p>
+  <pre>[split] train       84843  (atteso  84843)  OK
+[split] validation   9981  (atteso   9981)  OK
+[split] test        11005  (atteso  11005)  OK</pre>
+  <p>Cache memmap costruita per tutti e tre gli split. Distribuzione delle classi nel training set: da 1 256 a 3 250 campioni per classe, cioè uno sbilanciamento di ~2,6× — non estremo, coerente con l'uso dell'accuratezza semplice come metrica.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>La memmap non si può picklare: <code>num_workers&gt;0</code> andava in crash</p>
+  <p>Primo smoke test su dati veri: con <code>num_workers=0</code> tutto bene, con <code>num_workers&gt;0</code> crash immediato con <code>OSError: [Errno 22] Invalid argument</code> e <code>UnpicklingError: pickle data was truncated</code>.</p>
+  <p><strong>Causa</strong>: su Windows il DataLoader usa il metodo <em>spawn</em>, che <strong>pickla l'oggetto Dataset</strong> per inviarlo a ogni worker. La memmap era un attributo dell'istanza, quindi pickle tentava di serializzare l'intero array da 2,7 GB.</p>
+  <p><strong>Correzione</strong>: apertura pigra della memmap tramite property e <code>__getstate__</code> che la rimuove dallo stato serializzato. Ogni worker riapre la propria vista sullo stesso file — che è il comportamento voluto, perché il sistema operativo condivide le pagine fra processi. Aggiunto un <strong>test di regressione</strong> che pickla il Dataset e verifica che il blob resti sotto i 100 KB.</p>
+  <p>Nota: il default di <code>configs/base.yaml</code> era <code>num_workers: 4</code>, quindi il bug sarebbe esploso al primo training.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Smoke test scritto male: le augmentation sembravano rotte</p>
+  <p>Il primo smoke test prendeva i primi 64 campioni della cache e riportava «classi attive per campione: 1,00», come se mixing e phasemix non mescolassero nulla.</p>
+  <p><strong>Non era un bug delle augmentation ma del test</strong>: la cache è scritta <strong>in ordine di classe</strong> (34 cambi di etichetta su 84 843 campioni), quindi i primi 64 elementi sono tutti <em>backward</em> e mescolarli fra loro produce un target a una sola classe. Rifatto il test con indici casuali: <strong>1,83 classi attive in media, massimo 2</strong> — esattamente il comportamento atteso.</p>
+  <p><strong>Conseguenza operativa</strong> da ricordare: la cache è ordinata per classe, quindi qualsiasi iterazione <em>senza shuffle</em> produce batch a classe singola. Va bene per la valutazione, sarebbe disastroso per il training.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Smoke test end-to-end e prestazioni</p>
+  <table>
+    <thead><tr><th>Misura</th><th class="c">Valore</th><th>Commento</th></tr></thead>
+    <tbody>
+      <tr><td>Front-end</td><td class="c">[64, 16000] → [64, 1, 64, 101]</td><td>media 0,000 · std 0,9999 · tutti finiti</td></tr>
+      <tr><td>Throughput dati</td><td class="c">~24 600 campioni/s</td><td><strong>~3,5 s per epoca</strong> di soli dati</td></tr>
+      <tr><td>Picco memoria GPU</td><td class="c">59 MB</td><td>su 8 GB: margine enorme</td></tr>
+      <tr><td>Clip zero-paddate</td><td class="c">11,6 %</td><td>registrazioni più corte di 1 s</td></tr>
+    </tbody>
+  </table>
+  <p>Conclusione: <strong>la pipeline dati non sarà mai il collo di bottiglia</strong>. Il costo di un'epoca sarà interamente il modello. Suite di test a <strong>19/19</strong>.</p>
+</div>
+
 <!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
@@ -320,6 +370,9 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
     <tr><td class="c">17/08</td><td>Lettura PDF impossibile (<code>poppler</code> mancante)</td><td>Aggirato con PyMuPDF dall'ambiente <code>DLA2026</code>.</td></tr>
     <tr><td class="c">17/08</td><td><strong>Cancellazione di <code>src/</code> e <code>scripts/</code></strong></td><td>Recuperate dal cestino, verificate. <strong>Lezione: inizializzare git subito.</strong></td></tr>
     <tr><td class="c">17/08</td><td><code>.gitignore</code> copriva <code>.venv/</code> ma l'ambiente si chiama <code>DL_F</code></td><td>Aggiunta la riga mancante prima del primo <code>git add</code>.</td></tr>
+    <tr><td class="c">17/08</td><td><code>data/</code> in gitignore nascondeva anche <code>src/data/</code></td><td>Corretto in <code>/data/</code>. Intercettato con <code>git add --dry-run</code> prima del commit.</td></tr>
+    <tr><td class="c">17/08</td><td>Memmap non picklabile: <code>num_workers&gt;0</code> in crash su Windows</td><td>Apertura pigra + <code>__getstate__</code>. Test di regressione aggiunto.</td></tr>
+    <tr><td class="c">17/08</td><td>Smoke test su batch non mescolato: augmentation apparentemente rotte</td><td>Era il test a essere sbagliato. Ha però rivelato che <strong>la cache è ordinata per classe</strong>.</td></tr>
   </tbody>
 </table>
 
@@ -329,7 +382,7 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
   <tbody>
     <tr><td class="c">0</td><td>Lettura paper + ancestor, setup</td><td>paper letti; <strong>SparseFormer ancora da leggere</strong>; form risorse e ricevimento da fare</td></tr>
     <tr><td class="c">1</td><td>Prerequisiti teorici</td><td>in corso, in parallelo</td></tr>
-    <tr><td class="c"><strong>2</strong></td><td>Dati, split, contatore FLOPs</td><td><strong>codice scritto e testato (18/18)</strong>; download dataset in corso</td></tr>
+    <tr><td class="c"><strong>2</strong></td><td>Dati, split, contatore FLOPs</td><td><strong>COMPLETATA</strong> — split esatti, cache costruita, 19/19 test, ~3,5 s/epoca di dati</td></tr>
     <tr><td class="c">3</td><td>Early conv + dense transformer</td><td>da fare — prossimo passo</td></tr>
     <tr><td class="c">4</td><td>Sparse feature extractor</td><td>da fare</td></tr>
     <tr><td class="c">4-bis</td><td>EAT-S <em>(opzionale)</em></td><td>da fare</td></tr>
@@ -341,7 +394,8 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
 <h4>Questioni aperte</h4>
 <ul>
   <li><strong>Leggere SparseFormer</strong> (<code>paper pre progetto/2304.03768v1.pdf</code>): è dove il metodo è spiegato per esteso.</li>
-  <li><strong>Inizializzare il repository git</strong> — priorità alta dopo l'incidente del 17/08.</li>
+  <li><s>Inizializzare il repository git</s> — fatto il 17/08, locale.</li>
+  <li>Valutare un <code>.gitattributes</code> con <code>* text=auto eol=lf</code>, per quando il repo verrà clonato da Linux.</li>
   <li>Compilare il <strong>form per le risorse di calcolo</strong> e fissare il <strong>ricevimento</strong> col docente.</li>
   <li>Risolvere la contraddizione «96 dimensional» vs «196 kernels» implementando entrambe le letture.</li>
   <li>Calibrare la convenzione FLOPs/MAC del paper misurando EAT-S con entrambi i contatori.</li>

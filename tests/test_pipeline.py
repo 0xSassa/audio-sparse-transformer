@@ -195,6 +195,37 @@ def test_count_parameters_respects_trainable_flag():
 # Utilita'
 # --------------------------------------------------------------------------
 
+def test_dataset_is_picklable_without_the_memmap(tmp_path):
+    """Regressione: su Windows il DataLoader usa 'spawn' e PICKLA il Dataset.
+
+    Se la memmap restasse un attributo dell'istanza, pickle proverebbe a
+    serializzare 2.7 GB e fallirebbe con OSError [Errno 22]. Il test
+    costruisce una cache finta minuscola e verifica che il round-trip
+    funzioni e che la memmap non finisca nello stato serializzato.
+    """
+    import pickle
+
+    from src.data.dataset import SpeechCommandsCached
+
+    n, clip = 8, 16_000
+    np.lib.format.open_memmap(
+        tmp_path / "train_wave.npy", mode="w+", dtype=np.int16, shape=(n, clip)
+    ).flush()
+    np.save(tmp_path / "train_label.npy", np.zeros(n, dtype=np.int64))
+
+    ds = SpeechCommandsCached(tmp_path, "train")
+    _ = ds[0]                      # forza l'apertura della memmap
+    assert ds._waves is not None
+
+    blob = pickle.dumps(ds)
+    assert len(blob) < 100_000     # non deve contenere l'array
+
+    revived = pickle.loads(blob)
+    assert revived._waves is None  # riaperta pigramente nel worker
+    assert len(revived) == n
+    assert revived[0][0].shape == (clip,)
+
+
 def test_seed_everything_is_reproducible():
     seed_everything(1234)
     a = torch.randn(50), np.random.rand(50)
