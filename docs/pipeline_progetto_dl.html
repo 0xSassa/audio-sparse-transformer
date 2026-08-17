@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Pipeline progetto e piano di studio — B031278 Deep Learning</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 16mm 16mm; }
+
+  :root{
+    --ink:#1a1a1a; --muted:#5a5f66; --accent:#123a6b; --accent2:#8a4b12;
+    --rule:#c8ccd2; --soft:#f2f4f7; --soft2:#eaeef4;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    font-family:"Georgia","Cambria",serif; color:var(--ink);
+    font-size:10.2pt; line-height:1.48; margin:0;
+  }
+  h1,h2,h3,h4,.sans,table,code,.box-t{ font-family:"Segoe UI","Calibri",sans-serif; }
+
+  h1{ font-size:21pt; line-height:1.2; margin:0 0 2mm; color:var(--accent); letter-spacing:-.2px; }
+  .sub{ font-size:11pt; color:var(--muted); margin:0 0 1mm; }
+  .meta{ font-size:8.6pt; color:var(--muted); margin:0; }
+
+  h2{
+    font-size:13.5pt; color:var(--accent); margin:9mm 0 3mm;
+    padding-bottom:1.6mm; border-bottom:1.6pt solid var(--accent);
+    page-break-after:avoid;
+  }
+  h2 .n{ color:var(--accent2); font-weight:700; margin-right:2.5mm; }
+  h3{ font-size:11pt; margin:6mm 0 2mm; color:#111; page-break-after:avoid; }
+  h4{ font-size:9.6pt; margin:4mm 0 1.5mm; color:var(--accent2);
+      text-transform:uppercase; letter-spacing:.4px; page-break-after:avoid; }
+  p{ margin:0 0 2.6mm; text-align:justify; }
+  ul,ol{ margin:0 0 3mm; padding-left:5.5mm; }
+  li{ margin-bottom:1.4mm; }
+  a{ color:var(--accent); text-decoration:none; }
+  code{ font-family:"Consolas","Courier New",monospace; font-size:8.8pt;
+        background:var(--soft); padding:.4mm 1mm; border-radius:2px; }
+  pre{ font-family:"Consolas","Courier New",monospace; font-size:8.4pt;
+       background:var(--soft); border-left:2.5pt solid var(--accent);
+       padding:2.5mm 3mm; margin:0 0 3mm; line-height:1.42;
+       white-space:pre-wrap; page-break-inside:avoid; }
+
+  table{ width:100%; border-collapse:collapse; font-size:8.7pt;
+         margin:0 0 4mm; page-break-inside:auto; }
+  thead{ display:table-header-group; }
+  tr{ page-break-inside:avoid; }
+  th{ background:var(--soft2); text-align:left; font-weight:600;
+      padding:1.7mm 2mm; border-bottom:1pt solid var(--rule); color:#0f2d52; }
+  td{ padding:1.7mm 2mm; border-bottom:.5pt solid var(--rule); vertical-align:top; }
+  td.c,th.c{ text-align:center; }
+  tbody tr:nth-child(even){ background:#fafbfc; }
+
+  .box{ border:.8pt solid var(--rule); border-left:3pt solid var(--accent2);
+        background:#fdfaf6; padding:3mm 3.5mm; margin:0 0 4mm;
+        page-break-inside:avoid; }
+  .box.info{ border-left-color:var(--accent); background:#f7f9fc; }
+  .box-t{ font-size:8.4pt; font-weight:700; text-transform:uppercase;
+          letter-spacing:.5px; color:var(--accent2); margin:0 0 1.5mm; }
+  .box.info .box-t{ color:var(--accent); }
+  .box p:last-child, .box ul:last-child{ margin-bottom:0; }
+
+  .tag{ display:inline-block; font-family:"Segoe UI",sans-serif; font-size:7.4pt;
+        font-weight:600; padding:.5mm 1.6mm; border-radius:2.5px;
+        border:.6pt solid; vertical-align:1px; white-space:nowrap; }
+  .t-hi{ color:#7d2b12; border-color:#e0b9a6; background:#fbeee8; }
+  .t-md{ color:#6b5410; border-color:#ddcf9e; background:#fbf6e6; }
+  .t-lo{ color:#3f4a55; border-color:#ccd3da; background:#f2f5f8; }
+  .t-req{ color:#123a6b; border-color:#b6c6dc; background:#eef3f9; }
+
+  .lead{ font-size:10.6pt; color:#2b3038; }
+  .brk{ page-break-before:always; }
+  .nobrk{ page-break-inside:avoid; }
+  hr.soft{ border:0; border-top:.6pt solid var(--rule); margin:5mm 0; }
+  .foot{ margin-top:7mm; padding-top:2.5mm; border-top:.6pt solid var(--rule);
+         font-size:8pt; color:var(--muted); }
+  .kv{ font-size:9pt; }
+  .kv td{ border:0; padding:.9mm 2mm .9mm 0; }
+  .kv td:first-child{ color:var(--muted); width:38mm; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Progetto d'esame — Pipeline realizzativa e piano di studio</h1>
+  <p class="sub">B031278 <em>Deep Learning</em>, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
+  <p class="sub" style="font-size:10pt">Riproduzione di <strong>Kavaki &amp; Mandel (2025)</strong>, <em>Audio Sparse-Transformer for Speech Classification</em>, con <strong>Gazneli et al. (2022)</strong> come baseline</p>
+  <p class="meta">Docente: Paolo Frasconi (DINFO) · Documento di lavoro personale · v2.0 — 17 agosto 2026<br>
+  <em>v2.0: metodo di Kavaki &amp; Mandel ricavato dal PDF integrale; ancestor corretto (SparseFormer, non la linea importance-map); Fase 3 semplificata a early conv + dense transformer.</em></p>
+</header>
+
+<h2><span class="n">1</span>Vincoli d'esame: cosa determina ogni scelta</h2>
+
+<p class="lead">Tutte le decisioni tecniche di questo documento discendono da cinque vincoli fissati dalla pagina del corso. Vanno tenuti presenti perché diversi di essi sono controintuitivi.</p>
+
+<table>
+  <thead><tr><th style="width:34mm">Vincolo</th><th>Contenuto e conseguenza operativa</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Concordare a ricevimento</strong></td>
+        <td>«You should discuss it with me during office hours and I will give you the details of what should be done.» Il testo dell'assegnazione è la proposta; i <em>dettagli operativi</em> (quale task esatto di Speech Commands, quali tabelle riprodurre, quanto ridurre) li fissa il docente. <strong>Ricevimento: lunedì 10:45–12:45, S. Marta.</strong></td></tr>
+    <tr><td><strong>Niente relazione</strong></td>
+        <td>Si consegna <em>solo il codice</em> più brevi istruzioni di riproduzione. Il <code>README.md</code> è quindi l'unico documento scritto valutato: va trattato come tale.</td></tr>
+    <tr><td><strong>Modalità di consegna</strong></td>
+        <td>Repository <strong>privato su Codeberg</strong> con l'utente <code>dl.unifi</code> invitato come membro. In alternativa zip via email, o link <code>https://0x0.st/</code> se supera 1 MB. <strong>Mai i dati</strong>: per quelli basta un link.</td></tr>
+    <tr><td><strong>Presentazione 30′</strong></td>
+        <td>Deve contenere: motivazione del problema <em>nel contesto della letteratura</em>, <em>derivazione tecnica</em> dei metodi, descrizione <em>dettagliata</em> del lavoro sperimentale. Più domande individuali su tutto il programma.</td></tr>
+    <tr><td><strong>Riduzione autorizzata</strong></td>
+        <td>«Va comunque bene ridurre la dimensione dei datasets e/o dei modelli, se le risorse di calcolo non fossero sufficienti.» Riduci <em>dataset e modello</em>, <strong>mai il protocollo di valutazione</strong>.</td></tr>
+  </tbody>
+</table>
+
+<div class="box">
+  <p class="box-t">L'avvertimento che vale per questo progetto più che per altri</p>
+  <p>«In some cases, studying the references covered in class may be sufficient but in other cases, <strong>especially when dealing with the details of the experimental procedures, reading other ancestors in the citation graph may be necessary</strong>.» Nel tuo caso non è un consiglio generico: il paper da riprodurre è un 4 pagine ICASSP <em>closed access e senza codice</em>, e il metodo vero è quasi certamente nei lavori precedenti degli stessi autori (§3).</p>
+</div>
+
+<p>Da attivare subito, indipendentemente da tutto il resto: il <strong>form Google per le risorse di calcolo</strong> indicato nella sezione <em>Computational resources</em> della pagina del corso.</p>
+
+<h2><span class="n">2</span>I due paper e come si incastrano</h2>
+
+<h3>2.1 Gazneli et al. 2022 — EAT (arXiv:2204.11479)</h3>
+<p>Accesso libero, <strong>codice ufficiale disponibile</strong> (<code>github.com/Alibaba-MIIL/AudioClassfication</code>). Rete di classificazione audio <strong>end-to-end sulla forma d'onda grezza</strong>, senza spettrogramma: stack di convoluzioni 1D (depth-wise con kernel lunghi sull'asse temporale, poi 1×1 channel-wise, filtro passa-basso fisso, downsampling di un fattore ≈256) seguito da un encoder transformer e da una testa lineare.</p>
+
+<table>
+  <thead><tr><th>Variante</th><th class="c">Canali</th><th class="c">Layer / teste</th><th class="c">Embedding</th><th class="c">Parametri</th></tr></thead>
+  <tbody>
+    <tr><td><strong>EAT-S</strong></td><td class="c">16</td><td class="c">4 / 8</td><td class="c">128</td><td class="c">5,3 M</td></tr>
+    <tr><td><strong>EAT-M</strong></td><td class="c">32</td><td class="c">6 / 16</td><td class="c">256</td><td class="c">25,5 M</td></tr>
+  </tbody>
+</table>
+
+<p>Il contributo dichiarato non è l'architettura ma le <strong>augmentation audio</strong>. Due famiglie:</p>
+<ul>
+  <li><strong>Label-mixing</strong> — Mixup (ampiezza), <em>FreqMix</em> (split dei bin FFT fra due campioni a un cutoff <em>k<sub>c</sub></em> = int(λ·n<sub>fft</sub>)), <em>PhaseMix</em> (mescola la fase preservando l'ampiezza), TimeMix/CutMix in versione 1D.</li>
+  <li><strong>Label-preserving</strong> — gain, rumore bianco e colorato, time shift, filtraggio, inversione di polarità, time masking, quantizzazione, resampling.</li>
+</ul>
+
+<p>Ricetta di training: <strong>AdamW</strong>, lr 5·10⁻⁴, schedule <strong>one-cycle</strong>, weight decay 10⁻⁵, <strong>EMA</strong> 0,995, label smoothing 0,1, <strong>BCE</strong> quando si usa il mixing.</p>
+
+<table>
+  <thead><tr><th>Dataset</th><th>Modello</th><th class="c">Risultato riportato</th></tr></thead>
+  <tbody>
+    <tr><td>ESC-50 (from scratch)</td><td>EAT-S</td><td class="c">92,15 %</td></tr>
+    <tr><td>ESC-50 (pretrain AudioSet)</td><td>EAT-M</td><td class="c">96,3 %</td></tr>
+    <tr><td>UrbanSound8K (from scratch)</td><td>EAT-S</td><td class="c">85,5 %</td></tr>
+    <tr><td><strong>SpeechCommands</strong></td><td><strong>EAT-S</strong></td><td class="c"><strong>98,15 %</strong></td></tr>
+    <tr><td>AudioSet</td><td>EAT-M</td><td class="c">42,6 mAP</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Kavaki &amp; Mandel 2025 — Audio Sparse-Transformer (ICASSP)</h3>
+<p>Cinque pagine, closed access, nessun codice pubblico. Idea: sostituire la lunga sequenza di frame temporali con una <strong>sequenza corta di token latenti</strong>. Il metodo completo è in §3.</p>
+<p>Risultati riportati su Google Speech Commands V2: <strong>96,88 %</strong> con 2,87 M parametri e 0,055 G FLOPs, cioè <strong>−85,25 % di FLOPs rispetto a EAT-S</strong> e −91,47 % rispetto al proprio baseline denso.</p>
+
+<div class="box info">
+  <p class="box-t">Qual è davvero il baseline — e perché questo semplifica il progetto</p>
+  <p>Il confronto <em>controllato</em> del paper <strong>non è contro EAT-S</strong>, ma contro il proprio <strong>dense-transformer</strong>: la stessa identica architettura che processa la sequenza dei frame temporali invece dei token latenti (96,67 %, 4,80 M, 0,645 G). Il numero di EAT-S è <em>citato dalla letteratura</em>, non rimisurato dagli autori.</p>
+  <p>Conseguenza operativa: il baseline da costruire per primo è <strong>early convolution + dense transformer</strong>, che condivide quasi tutto il codice col modello sparso e si ottiene cambiando solo il tokenizer. La reimplementazione completa di EAT-S, con tutte le sue augmentation, diventa <strong>opzionale</strong>.</p>
+</div>
+
+<div class="box">
+  <p class="box-t">Distinzione da avere pronta all'orale</p>
+  <p>Qui «sparse» significa <strong>pochi token</strong>, non <strong>attenzione sparsa</strong>. La complessità della self-attention è <em>O</em>(n²d) per la matrice di attenzione e <em>O</em>(n d²) per le proiezioni: questo lavoro attacca <strong>n</strong>, non il pattern di attenzione. I parenti concettuali sono TokenLearner, Adaptive Token Sampling e Perceiver — <em>non</em> gli Sparse Transformers di Child et al. (2019), Longformer o BigBird. Confondere le due cose è l'errore che un esaminatore cerca.</p>
+</div>
+
+<h2 class="brk"><span class="n">3</span>Il metodo, per intero</h2>
+
+<div class="box info">
+  <p class="box-t">Da dove viene davvero</p>
+  <p>L'ancestor del metodo è <strong>SparseFormer</strong> (Gao et al. 2023, arXiv:2304.03768, <em>Sparse visual recognition via limited latent tokens</em>), un modello per ImageNet: questo lavoro ne è la trasposizione all'audio. Gli altri due riferimenti strutturali sono <strong>Faster R-CNN</strong> (parametrizzazione delle regioni) e <strong>AdaMixer</strong> (pesi di decoding adattivi). <strong>Le regioni non sono scelte per saliency né per energia: sono parametri appresi</strong>, aggiustati iterativamente dai token stessi. Leggere SparseFormer non è opzionale — è il posto dove il metodo è spiegato per esteso.</p>
+</div>
+
+<p>Il modello ha due componenti: lo <strong>sparse feature extractor</strong> e il <strong>classification transformer</strong>.</p>
+
+<h3>3.1 Sparse feature extractor</h3>
+<p>Si parte da <em>N</em> token latenti <em>t</em> ∈ ℝ<sup>d</sup>, ciascuno accoppiato a una regione <em>b</em> = (<em>x</em>, <em>y</em>, <em>w</em>, <em>h</em>) nel piano tempo-frequenza. <strong>Sia i token iniziali sia le regioni iniziali sono parametri del modello, appresi durante il training.</strong> I centri sono inizializzati su una <strong>griglia</strong>, larghezza e altezza a metà della dimensione della feature map. Il blocco seguente si ripete <em>L<sub>rep</sub></em> volte:</p>
+
+<table>
+  <thead><tr><th class="c" style="width:12mm">Passo</th><th style="width:44mm">Operazione</th><th>Formulazione</th></tr></thead>
+  <tbody>
+    <tr><td class="c"><strong>1</strong></td><td><strong>Aggiustamento della regione</strong><br><span style="color:var(--muted)">parametrizzazione Faster R-CNN</span></td>
+        <td>(<em>t<sub>x</sub></em>, <em>t<sub>y</sub></em>, <em>t<sub>w</sub></em>, <em>t<sub>h</sub></em>) = Linear(<em>t</em>)<br>
+            <em>x'</em> = <em>x</em> + <em>t<sub>x</sub></em>·<em>w</em> &nbsp;·&nbsp; <em>y'</em> = <em>y</em> + <em>t<sub>y</sub></em>·<em>h</em><br>
+            <em>w'</em> = <em>w</em>·exp(<em>t<sub>w</sub></em>) &nbsp;·&nbsp; <em>h'</em> = <em>h</em>·exp(<em>t<sub>h</sub></em>)</td></tr>
+    <tr><td class="c"><strong>2</strong></td><td><strong>Campionamento sparso</strong><br><span style="color:var(--muted)">P punti per token</span></td>
+        <td>{(Δ<em>x<sub>i</sub></em>, Δ<em>y<sub>i</sub></em>)}<sub>P</sub> = Linear(LayerNorm(<em>t</em>))<br>
+            <em>x̃<sub>i</sub></em> = <em>x</em> + 0,5·Δ<em>x<sub>i</sub></em>·<em>w</em> &nbsp;·&nbsp; <em>ỹ<sub>i</sub></em> = <em>y</em> + 0,5·Δ<em>y<sub>i</sub></em>·<em>h</em><br>
+            offset normalizzati a <strong>tre deviazioni standard</strong>; feature estratte per <strong>interpolazione bilineare</strong> → <em>x</em><sup>(0)</sup> ∈ ℝ<sup>P×C</sup></td></tr>
+    <tr><td class="c"><strong>3</strong></td><td><strong>Decoding adattivo</strong><br><span style="color:var(--muted)">stile AdaMixer</span></td>
+        <td>[<em>M<sub>c</sub></em> | <em>M<sub>s</sub></em>] = <em>F</em>(<em>t</em>), &nbsp; <em>M<sub>c</sub></em> ∈ ℝ<sup>C×C</sup>, <em>M<sub>s</sub></em> ∈ ℝ<sup>P×P</sup><br>
+            <em>F</em> = due reti lineari con dimensione nascosta <em>d</em>/4<br>
+            <em>x</em><sup>(1)</sup> = GELU(<em>x</em><sup>(0)</sup><em>M<sub>c</sub></em>) &nbsp; <span style="color:var(--muted)">(mixing sui canali)</span><br>
+            <em>x</em><sup>(2)</sup> = GELU(<em>M<sub>s</sub></em><em>x</em><sup>(1)</sup>) &nbsp; <span style="color:var(--muted)">(mixing spaziale)</span><br>
+            <strong><em>t'</em> = <em>t</em> + Linear(<em>x</em><sup>(2)</sup>)</strong> &nbsp; <span style="color:var(--muted)">(update residuo del token)</span></td></tr>
+  </tbody>
+</table>
+
+<div class="box">
+  <p class="box-t">Il dettaglio che decide se il modello impara o no</p>
+  <p><strong>Non si campiona direttamente dallo spettrogramma.</strong> Il gradiente che passa per l'interpolazione bilineare è troppo rumoroso quando i punti di campionamento sono pochi e locali. Si applica prima una <strong>early convolution</strong> (Xiao et al. 2021) e si campiona sul suo output. Saltare questo passaggio è il modo più diretto per ottenere un modello che non converge.</p>
+</div>
+
+<h3>3.2 Classification transformer</h3>
+<p>La sequenza di <em>N</em> token latenti entra in uno stack di transformer-encoder. <strong>Nessun positional encoding</strong>: i token non hanno un ordine intrinseco. Si fa la media degli embedding finali e si applica un classificatore lineare. La complessità della MHSA è <em>O</em>(<em>N</em>²) con <em>N</em> ≪ <em>T</em>, dove <em>T</em> è il numero di frame temporali del modello denso: <strong>è qui che sta tutto il guadagno</strong>.</p>
+
+<h3>3.3 Configurazione e training</h3>
+<table>
+  <thead><tr><th class="c">N token</th><th class="c">P campioni</th><th class="c">d<sub>token</sub></th><th class="c">d<sub>encoder</sub></th><th class="c">L<sub>rep</sub></th><th class="c">L<sub>encoder</sub></th></tr></thead>
+  <tbody><tr><td class="c">4</td><td class="c">36</td><td class="c">64</td><td class="c">128</td><td class="c">3</td><td class="c">8</td></tr></tbody>
+</table>
+<p>Un layer lineare fa da ponte fra le due dimensioni (64 → 128). Training: <strong>AdamW</strong> (β₁ = 0,9, β₂ = 0,99, eps = 10⁻⁸), lr <strong>3·10⁻⁴</strong>, schedule <strong>one-cycle</strong>, weight decay 10⁻⁵, <strong>EMA</strong> 0,995, batch size <strong>64</strong>. Augmentation: <em>mixing</em> e <em>phasemix</em>, prese direttamente da EAT.</p>
+
+<h3>3.4 Le ambiguità da risolvere e documentare</h3>
+<p>Il paper tace su punti che devi decidere tu. <strong>Non è un problema: è il materiale migliore per la presentazione</strong>, purché ogni scelta sia dichiarata e, dove conta, testata in entrambe le versioni.</p>
+<table>
+  <thead><tr><th style="width:52mm">Ambiguità</th><th>Come gestirla</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Parametri dello spettrogramma</strong> — mai dichiarati: mel o lineare? <code>n_fft</code>? hop? numero di bin?</td><td>È il parametro libero <strong>più impattante</strong> di tutto il progetto. Parti da una configurazione standard per keyword spotting (mel, 25 ms finestra / 10 ms hop, 64 bin) e trattala come iperparametro dichiarato.</td></tr>
+    <tr><td><strong>Contraddizione interna in §3.2 del paper</strong>: feature «96 dimensional» ma «196 kernels» 7×7 stride 2</td><td>Uno dei due è un refuso. Implementa entrambe le letture e riporta il confronto: è esattamente il tipo di verifica che distingue una riproduzione seria.</td></tr>
+    <tr><td>Numero di layer della early convolution non dichiarato</td><td>Segui Xiao et al. 2021 e dichiara la scelta.</td></tr>
+    <tr><td>Numero di epoche non dichiarato</td><td>Fissa un budget, dichiaralo, e verifica la convergenza sulle curve.</td></tr>
+    <tr><td>Come il dense-transformer costruisce i frame dall'output della early conv</td><td>Interpretazione da dichiarare; è il baseline, quindi conta.</td></tr>
+    <tr><td>Se i FLOPs di EAT-S (0,373 G) siano misurati o citati</td><td>Sono <strong>citati</strong>. Se vuoi confrontarti con EAT-S devi rimisurarli col <em>tuo</em> contatore, altrimenti confronti convenzioni diverse.</td></tr>
+  </tbody>
+</table>
+
+<div class="box">
+  <p class="box-t">Un'osservazione critica già disponibile</p>
+  <p>Nella Tabella 3 del paper l'ablation sul numero di token <strong>non è monotona</strong>: 16 token danno 97,53 % ma 25 token danno 97,20 %, per poi risalire a 97,94 % con 36. I risultati sono su <strong>singolo seed</strong>. Questo suggerisce un rumore da seed dell'ordine di 0,3–0,4 punti, cioè paragonabile a diverse delle differenze discusse nel paper. È la giustificazione sperimentale dei tuoi ≥3 seed, ed è un'ottima osservazione critica da portare all'orale.</p>
+</div>
+
+<h2><span class="n">4</span>Pipeline realizzativa — sei fasi</h2>
+
+<p class="lead">Il principio che governa l'ordine: <strong>l'infrastruttura di misura si costruisce prima del modello</strong>, perché ciò che va riprodotto è un trade-off accuratezza/FLOPs, non un'accuratezza. Un contatore di FLOPs scritto dopo il modello tende ad essere costruito per confermare il risultato atteso.</p>
+
+<h3>Fase 0 — Sblocco</h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>Rimuovere tutte le dipendenze esterne dal progetto.</td></tr>
+  <tr><td>Azioni</td><td><s>PDF via proxy UNIFI</s> <strong>fatto</strong> · leggere <strong>SparseFormer</strong> (arXiv:2304.03768), dove il metodo è spiegato per esteso · form risorse di calcolo · ricevimento del lunedì con una pagina di proposta (task, riduzioni previste, metriche) · repo privato Codeberg con <code>dl.unifi</code> invitato · ambiente Python verificato.</td></tr>
+  <tr><td>Criterio di uscita</td><td>Hai letto entrambi i paper più SparseFormer, hai parlato col docente, <code>torch.cuda.get_device_capability()</code> restituisce <code>(12, 0)</code>.</td></tr>
+</table>
+
+<h3>Fase 1 — Prerequisiti mirati</h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>Studiare i prerequisiti <em>nell'ordine in cui servono al codice</em>, non «tutto il libro dall'inizio».</td></tr>
+  <tr><td>Azioni</td><td>Segui il calendario di §6, che alterna un blocco teorico e il pezzo di codice che lo usa.</td></tr>
+  <tr><td>Criterio di uscita</td><td>Non è una fase separata: corre in parallelo a tutte le altre fino alla fine.</td></tr>
+</table>
+
+<h3>Fase 2 — Dati e misura <span class="tag t-hi">fase critica</span></h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>Un dataset con split corretti e un contatore di FLOPs affidabile, <em>prima</em> di qualsiasi modello.</td></tr>
+  <tr><td>Azioni</td><td>Vedi il protocollo sperimentale dettagliato in §5.</td></tr>
+  <tr><td>Criterio di uscita</td><td>Sai caricare un batch in &lt;50 ms, e sai misurare i FLOPs di un modulo arbitrario con due contatori indipendenti che concordano.</td></tr>
+</table>
+
+<h3>Fase 3 — Baseline: early convolution + dense transformer</h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>Riprodurre il <strong>dense-transformer</strong> degli autori: 96,67 %, 4,80 M parametri, 0,645 G FLOPs. È il baseline del confronto controllato, non EAT-S.</td></tr>
+  <tr><td>Azioni</td><td>Spettrogramma → early convolution (Xiao et al. 2021) → sequenza di frame temporali → stack di 8 transformer-encoder → average pooling → classificatore lineare. Ricetta: AdamW lr 3·10⁻⁴, one-cycle, wd 10⁻⁵, EMA 0,995, batch 64, mixing + phasemix.</td></tr>
+  <tr><td>Perché prima</td><td>Condivide <strong>tutto il codice a valle</strong> col modello sparso: cambia solo come si producono i token. Farlo per primo isola i bug del training loop da quelli del tokenizer.</td></tr>
+  <tr><td>Criterio di uscita</td><td>Un numero su test set riproducibile su 3 seed, con deviazione standard, e FLOPs misurati.</td></tr>
+</table>
+
+<h3>Fase 4 — Sparse feature extractor</h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>Il metodo di §3, reimplementato da zero: 96,88 %, 2,87 M, 0,055 G.</td></tr>
+  <tr><td>Struttura</td><td>Tre moduli intercambiabili via config, esattamente i tre passi di §3.1: <em>(a)</em> <strong>region adjustment</strong> (Linear + parametrizzazione esponenziale); <em>(b)</em> <strong>sparse sampling</strong> (offset appresi + interpolazione bilineare) — <em>N</em> e <em>P</em> sono le due manopole del trade-off; <em>(c)</em> <strong>feature decoding</strong> adattivo (M<sub>c</sub>, M<sub>s</sub>, update residuo). Il transformer è quello della Fase 3, riusato senza modifiche.</td></tr>
+  <tr><td>Ordine di implementazione</td><td>Prima il forward con regioni <strong>fisse</strong> su griglia (niente aggiustamento): verifica shape e FLOPs. Poi attiva l'aggiustamento iterativo. Così sai da dove viene un eventuale mancato apprendimento.</td></tr>
+  <tr><td>Deliverable chiave</td><td>La <strong>curva accuratezza vs FLOPs</strong> al variare di <em>N</em> ∈ {4, 9, 16, 25, 36} e <em>P</em> ∈ {16, 36, 64, 128} — cioè le due ablation della Tabella 3 del paper, ma <strong>con più seed</strong>. È il grafico centrale della presentazione.</td></tr>
+  <tr><td>Verifica qualitativa</td><td>Riproduci la <strong>Figura 2</strong>: i punti campionati sovrapposti allo spettrogramma, un colore per token, ai tre stadi di <em>L<sub>rep</sub></em>. Dovresti vedere il campionamento passare da uniforme a concentrato. È la diapositiva che convince più di qualsiasi tabella.</td></tr>
+</table>
+
+<h3>Fase 4-bis — EAT-S <span class="tag t-lo">opzionale</span></h3>
+<table class="kv">
+  <tr><td>Quando farlo</td><td>Solo dopo che Fasi 3 e 4 sono chiuse. Serve se vuoi confrontarti con EAT-S <em>con il tuo contatore di FLOPs</em> anziché citarne i numeri.</td></tr>
+  <tr><td>Azioni</td><td>Front-end conv 1D (depthwise + 1×1) → transformer → testa; ricetta EAT completa; <strong>ablation delle augmentation</strong> (nessuna → +mixup → +FreqMix/PhaseMix → completa), che è il contributo dichiarato del paper 1.</td></tr>
+  <tr><td>Sul codice ufficiale</td><td>Esiste. <strong>Consultalo per risolvere ambiguità, non per copiare</strong>, e <strong>dichiaralo</strong> nel README e all'orale.</td></tr>
+</table>
+
+<h3>Fase 5 — Esperimenti onesti</h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>Rendere i risultati difendibili sotto interrogatorio.</td></tr>
+  <tr><td>Azioni</td><td><strong>≥3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Ablation sul criterio di selezione delle regioni: <em>la saliency appresa serve davvero, o basta l'energia?</em> — è la domanda scientificamente più interessante che puoi porre a questo paper.</td></tr>
+  <tr><td>Bonus ad alto rendimento</td><td>Il programma ha una voce dedicata all'<em>hyperparameter optimization</em> (lezioni 02/12 e 10/12). Usa <strong>Optuna con Hyperband/ASHA</strong> per tarare K e il learning rate: trasformi un pezzo di programma teorico in un pezzo del tuo progetto, e all'orale spieghi successive halving avendolo eseguito.</td></tr>
+  <tr><td>Regola</td><td>Meglio <strong>3 configurazioni × 3 seed</strong> che 9 configurazioni × 1 seed.</td></tr>
+</table>
+
+<h3>Fase 6 — Presentazione e orale</h3>
+<table class="kv">
+  <tr><td>Obiettivo</td><td>30 minuti che coprano letteratura, derivazione, esperimenti.</td></tr>
+  <tr><td>Struttura</td><td>Problema e letteratura (5′) → metodo e derivazione (10′) → esperimenti e risultati (10′) → limiti e domande (5′).</td></tr>
+  <tr><td>Criterio di uscita</td><td>Sai scrivere alla lavagna tutte le derivazioni di §8 senza appunti.</td></tr>
+</table>
+
+<h3 class="brk">Criterio di successo — definirlo ora, non a posteriori</h3>
+<table>
+  <thead><tr><th style="width:36mm">Livello</th><th>Condizione</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Successo pieno</strong></td><td>EAT-S entro ~1–2 punti dal valore riportato; sparse-transformer che, a parità di pipeline, perde ~1 punto rispetto a EAT-S tagliando i FLOPs di un fattore ≈5–7; curva accuratezza/FLOPs coerente col claim.</td></tr>
+    <tr><td><strong>Successo accettabile</strong><br><span style="color:var(--muted);font-size:8.4pt">sufficiente per un ottimo voto</span></td><td>Numeri assoluti più bassi per budget ridotto, ma <strong>trend riprodotto</strong> e <strong>gap analizzato e spiegato</strong> con esperimenti.</td></tr>
+    <tr><td><strong>Fallimento vero</strong></td><td>Non saper dire <em>perché</em> i tuoi numeri differiscono da quelli pubblicati.</td></tr>
+  </tbody>
+</table>
+<p>Un progetto che afferma «non ho riprodotto il 96,88 %, ho ottenuto il 94,1 %, ed ecco le tre cause candidate isolate con questi esperimenti» vale più di un numero identico ottenuto senza capire perché.</p>
+
+<h2><span class="n">5</span>Protocollo sperimentale</h2>
+
+<h3>5.1 Google Speech Commands V2 — protocollo confermato dal paper</h3>
+<p>105 829 clip, <strong>35 classi</strong>, 16 kHz, zero-padding a 1 secondo esatto. Il paper dichiara la ripartizione, e coincide con gli split ufficiali:</p>
+<table>
+  <thead><tr><th>Split</th><th class="c">Campioni</th><th>Uso</th></tr></thead>
+  <tbody>
+    <tr><td>Training</td><td class="c">84 843</td><td>addestramento</td></tr>
+    <tr><td>Validation</td><td class="c">9 981</td><td>scelta degli iperparametri</td></tr>
+    <tr><td>Test</td><td class="c">11 005</td><td>valutazione finale — <strong>una sola volta</strong></td></tr>
+  </tbody>
+</table>
+<p><strong>Usa gli split ufficiali</strong> <code>validation_list.txt</code> e <code>testing_list.txt</code>, basati sull'hash dello speaker ID e quindi <strong>speaker-disjoint</strong>. Se i tuoi conteggi non danno esattamente 84 843 / 9 981 / 11 005, la pipeline dati è sbagliata: è un test di correttezza gratuito, sfruttalo. Split casuali gonfiano l'accuratezza di punti interi ed è un errore che verrà notato.</p>
+<p>Il secondo dataset del paper è <strong>ESC-50</strong> (2 000 clip, 50 classi, 5-fold cross-validation, ricampionato da 44,1 a 22,05 kHz). È la parte <em>riducibile</em> del progetto: affrontala solo se Speech Commands è chiuso.</p>
+
+<h3>5.1-bis Target di riproduzione</h3>
+<table>
+  <thead><tr><th>Modello</th><th class="c">Params</th><th class="c">FLOPs</th><th class="c">Accuracy</th><th>Nota</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Sparse-transformer</strong> (N=4, P=36)</td><td class="c">2,87 M</td><td class="c">0,055 G</td><td class="c"><strong>96,88 %</strong></td><td>obiettivo della Fase 4</td></tr>
+    <tr><td><strong>Dense-transformer</strong></td><td class="c">4,80 M</td><td class="c">0,645 G</td><td class="c">96,67 %</td><td>obiettivo della Fase 3</td></tr>
+    <tr><td>EAT-S</td><td class="c">5,30 M</td><td class="c">0,373 G</td><td class="c">98,15 %</td><td><em>citato</em>, non rimisurato dagli autori</td></tr>
+    <tr><td>HTS-AT</td><td class="c">28,80 M</td><td class="c">4,066 G</td><td class="c">98,00 %</td><td>citato</td></tr>
+    <tr><td>SimPF (MobileNetV2)</td><td class="c">3,40 M</td><td class="c">0,244 G</td><td class="c">95,60 %</td><td>citato</td></tr>
+  </tbody>
+</table>
+<p>Verifica di coerenza già fatta: 0,055 / 0,373 = 0,147, cioè <strong>−85,3 %</strong> rispetto a EAT-S; 0,055 / 0,645 = 0,085, cioè <strong>−91,5 %</strong> rispetto al denso. I numeri del paper sono internamente consistenti.</p>
+
+<h3>5.2 Misura del costo computazionale</h3>
+<p>Il claim da riprodurre è <strong>−85,25 % di FLOPs</strong>: senza un contatore identico applicato ai due modelli non hai riprodotto niente.</p>
+<ul>
+  <li>Misura su <strong>un singolo input da 1 s, in inferenza</strong>, e dichiara la convenzione usata (FLOPs vs MACs: differiscono di un fattore 2 — molti paper li confondono).</li>
+  <li><strong>Due contatori indipendenti</strong> che devono concordare: <code>torch.utils.flop_counter.FlopCounterMode</code> (nativo, nessuna dipendenza) e <code>fvcore</code>.</li>
+  <li>Per il modello sparso i FLOPs dipendono da K: riporta il valore <em>teorico</em> e quello <em>misurato</em>, e segnala eventuali discrepanze.</li>
+  <li>Riporta anche <strong>parametri, latenza wall-clock e picco di memoria</strong>: i FLOPs da soli non predicono il tempo reale, ed è un'osservazione che fa una buona diapositiva.</li>
+</ul>
+
+<h3>5.3 Prestazioni della pipeline dati</h3>
+<div class="box info">
+  <p class="box-t">Il collo di bottiglia non è la GPU</p>
+  <p>Pre-ricampiona tutto e salva in un unico tensore <strong>memory-mapped</strong> di forma <code>[N, 16000]</code> in <code>int16</code>, e sposta le <strong>augmentation su GPU</strong>. Ingombro su disco: <strong>2,72 GB</strong> per il training set (84 843 × 16 000 × 2 B), 0,32 GB per validation, 0,35 GB per test — circa 3,4 GB in totale. Non serve che stia in RAM: il sistema operativo tiene in page cache le parti calde.</p>
+  <p>Le augmentation su forma d'onda eseguite in CPU dentro il DataLoader sono ciò che ti farà credere di non avere abbastanza GPU — quasi sempre non è vero. Con 8 GB di VRAM il modello sparso (2,87 M parametri, input da 1 s) gira largamente entro i limiti al batch 64 dichiarato dal paper.</p>
+</div>
+
+<h3>5.4 Riduzioni ammesse, in ordine di preferenza</h3>
+<ol>
+  <li>Task a <strong>12 classi</strong> anziché 35;</li>
+  <li>sottocampionamento a ~30 % degli <strong>speaker</strong> (mantenendo lo split speaker-disjoint);</li>
+  <li><strong>8 kHz</strong> anziché 16 kHz;</li>
+  <li>larghezza/profondità del transformer dimezzate.</li>
+</ol>
+<p>In tutti i casi: <strong>documenta la riduzione nel README</strong> e mantieni intatto il protocollo di valutazione.</p>
+
+<h2 class="brk"><span class="n">6</span>Piano di studio — dieci settimane</h2>
+
+<p class="lead">Ritmo consigliato per chi lavora da solo e senza scadenza fissata: <strong>alternanza settimanale</strong> fra un blocco teorico e il pezzo di codice che lo usa. È più lento sulla carta della sequenza «prima studio tutto, poi implemento», ma è l'unico modo per arrivare all'orale con le derivazioni davvero proprie.</p>
+
+<table>
+  <thead><tr><th class="c" style="width:11mm">Sett.</th><th style="width:62mm">Studio</th><th>Codice</th></tr></thead>
+  <tbody>
+    <tr><td class="c"><strong>1</strong></td><td>PDF Kavaki &amp; Mandel · ImportantAug (arXiv:2112.07156) · Interspeech 2020</td><td>Ambiente · dataset SC-V2 · split ufficiali · cache memory-mapped</td></tr>
+    <tr><td class="c"><strong>2</strong></td><td>Autodiff (Baydin et al. 2017; Gebremedhin &amp; Walther 2020) · conv arithmetic (Dumoulin &amp; Visin 2016)</td><td>Front-end conv 1D · <strong>contatore FLOPs con doppia verifica</strong></td></tr>
+    <tr><td class="c"><strong>3</strong></td><td>Attention e transformer (Vaswani et al. 2017; BB24 12.1) · einops (Rogozhnikov 2022)</td><td>Encoder transformer · EAT-S completo</td></tr>
+    <tr><td class="c"><strong>4</strong></td><td>Ottimizzatori (Kingma &amp; Ba; Loshchilov &amp; Hutter) · normalizzazione (Ioffe &amp; Szegedy; Wu &amp; He)</td><td>Training loop · one-cycle · EMA → <strong>primo numero su SC-V2</strong></td></tr>
+    <tr><td class="c"><strong>5</strong></td><td>Data augmentation · mixup · BCE con target mixati · dropout (Srivastava et al. 2014)</td><td>Augmentation di EAT · ablation delle augmentation</td></tr>
+    <tr><td class="c"><strong>6–7</strong></td><td>Tokenizzazione e ViT (Dosovitskiy et al. 2020) · positional encoding · saliency</td><td>Sparse tokenizer · <strong>curva accuratezza/FLOPs al variare di K</strong></td></tr>
+    <tr><td class="c"><strong>8</strong></td><td>HPO (Snoek et al. 2012; Li et al. 2018) · GP (RW06 1,2,4) · successive halving</td><td>Optuna + ASHA su K e learning rate</td></tr>
+    <tr><td class="c"><strong>9–10</strong></td><td><strong>Ripasso trasversale degli argomenti non toccati dal progetto</strong>: GNN, U-Net e segmentazione, GP in dettaglio, contrastive/SimCLR, domain adaptation</td><td>Figure · README · presentazione · prove a voce</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">7</span>Il programma d'esame come checklist</h2>
+
+<p>Tabella di tutte le lezioni con le letture <span class="tag t-req">richieste</span> (da studiare per l'esame) e la rilevanza per il progetto: <span class="tag t-hi">alta</span> = ci lavori direttamente · <span class="tag t-md">media</span> = ti serve per capire · <span class="tag t-lo">bassa</span> = da studiare a parte.</p>
+
+<table>
+  <thead><tr><th class="c" style="width:14mm">Data</th><th style="width:60mm">Argomenti</th><th>Letture</th><th class="c" style="width:16mm">Progetto</th></tr></thead>
+  <tbody>
+    <tr><td class="c">17/09</td><td>Forme di apprendimento; cenni storici</td><td>BB24 1; GBC16 5.1</td><td class="c"><span class="tag t-lo">bassa</span></td></tr>
+    <tr><td class="c">19/09</td><td>Supervised learning ed ERM; classificatore ottimo</td><td>BB24 4.1–4.2, 5.2–5.3; GBC16 5.5</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">24/09</td><td>Direzione generativa; LDA; MLE; ottimalità degli iperpiani; reti a singolo strato; MLE↔ERM</td><td>BB24 3.2, 5.1; GBC16 5.5, 5.7</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">26/09</td><td>Loss per regressione (L2, L1, Huber); minimi quadrati; loss per classificazione (0-1, hinge, log); GLM; Bernoulli in exp family</td><td>BB24 4.1, 5.4</td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">01/10</td><td>GLM: regressione logistica; log-loss e likelihood; Gaussian e Poisson; softmax</td><td>BB24 5.4, 5.1; ZLLS23 4</td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">03/10</td><td>Geometria della softmax; <strong>log-sum-exp</strong>; GD e SGD</td><td>BB24 7.1–7.2; ZLLS23 4, 12 · <span class="tag t-req">Bottou &amp; Bousquet 2007</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">08/10</td><td>GD vs SGD; tassi di convergenza; tradeoff del large scale learning; minibatch; momentum; <strong>Adagrad, RMSProp, Adam</strong></td><td>BB24 7.2–7.3 · <span class="tag t-req">Bottou &amp; Bousquet</span> <span class="tag t-req">Hinton 2012</span> <span class="tag t-req">Kingma &amp; Ba</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">15/10</td><td>Feature learning ed <strong>end-to-end learning</strong>; composizionalità; training layerwise; denoising autoencoder; MLP; rettificatori</td><td>BB24 6; GBC16 6, 6.1, 6.3–6.4, 14.2 · <span class="tag t-req">Bengio et al. 2013</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">16/10</td><td><em>Video 1</em> — framework, ambiente di sviluppo, tensori, lavoro remoto</td><td>ZLLS23 2.1–2.3</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">17/10</td><td>Espressività; basis function; reti RBF; Leaky/Parametric ReLU; MLP di ReLU come funzioni lineari a tratti; grafi di computazione</td><td>BB24 8, 9.1 · <span class="tag t-req">Baydin et al. 2017</span></td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">22/10</td><td><strong>Autodiff forward e reverse</strong>; inizializzazione (LeCun, Glorot, He); regolarizzazione esplicita; ridge</td><td>BB24 8, 7.2.5, 9.1; GBC16 6.5, 7.1, 8.4; ZLLS 2.5, 5.4.2, 5.5 · <span class="tag t-req">Gebremedhin &amp; Walther 2020</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">23/10</td><td><em>Video 2</em> — logistic regression in TensorFlow puro; Tensorboard; in PyTorch</td><td>ZLLS23 4</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">24/10</td><td>Interpretazioni del ridge; bias-variance e <strong>double descent</strong>; interpretazione bayesiana e MAP; L1, lasso, elastic net</td><td>BB24 9.1–9.2, 9.3.2; GBC16 7.1–7.2, 7.8–7.9</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">25/10</td><td><strong>Weight decay; AdamW</strong>; weight sharing; early stopping; <strong>dropout</strong>; GELU e relazione col dropout</td><td>BB24 7.2.5, 7.4, 9.1.3; GBC16 7.4, 8.4, 8.7.1 · <span class="tag t-req">Srivastava et al. 2014</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">31/10</td><td><strong>Data augmentation</strong>; batch e layer normalization; CNN per segnali N-dimensionali e loro inductive bias</td><td>BB24 9.1.3, 7.4, 10.1; GBC16 9.1–9.2 · <span class="tag t-req">Ioffe &amp; Szegedy 2015</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">04/11</td><td><em>Video 3</em> — autodiff in TensorFlow e PyTorch; MLP in TF/Keras</td><td>ZLLS23 2.5, 5</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">05/11</td><td>Equivarianza traslazionale; <strong>convoluzione, canali, stride, pooling</strong>; convoluzioni dilatate e trasposte</td><td>BB24 10.1–10.2; GBC16 9.3–9.5; ZLLS23 7.2–7.6 · <span class="tag t-req">Dumoulin &amp; Visin 2016</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">07/11</td><td><strong>Bottleneck 1×1</strong>; norm per CNN (batch, layer, instance, group); gates; mixture of experts; skip connection, highway, residual; EfficientNet; segmentazione e U-Net; Dice loss</td><td>BB24 10.4–10.5; ZLLS23 9.4 · <span class="tag t-req">Wu &amp; He 2018</span> <span class="tag t-req">Ronneberger et al. 2015</span></td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">11/11</td><td><em>Video 4</em> — <strong>dataloader in PyTorch</strong>; CNN e DenseNet</td><td>ZLLS23 7 · <span class="tag t-req">Huang et al. 2017</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">12/11</td><td>Problemi su sequenze; NLP di base; embedding; RNN e loro grafo di computazione; vanishing/exploding gradient</td><td>BB24 12.2; JM24 9; GBC16 10.1–10.2</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">14/11</td><td>RNN impilate e bidirezionali; <strong>LSTM e GRU</strong>; seq2seq; encoder-decoder; decoding: greedy, Viterbi, beam search, sampling</td><td>BB24 11.3, 12.2; ZLLS23 10; JM24 8.4, 9.1 · <span class="tag t-req">Chung et al. 2014</span> <span class="tag t-req">Hochreiter &amp; Schmidhuber 1997</span> <span class="tag t-req">Sutskever et al. 2014</span></td><td class="c"><span class="tag t-lo">bassa</span></td></tr>
+    <tr><td class="c">19/11</td><td>Meccanismo di attenzione originale; soft dictionary; RNN con attention; traduzione automatica; <strong>attention per classificazione di sequenze</strong></td><td>BB24 12.2 · <span class="tag t-req">Bahdanau et al. 2014</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">21/11</td><td><strong>Self-attention; parametrizzazione; complessità; multi-head; masking e batch matmul; transformer</strong></td><td>BB24 12.1 · <span class="tag t-req">Vaswani et al. 2017</span> <span class="tag t-req">Rogozhnikov 2022 (einops)</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">26/11</td><td><strong>Positional encoding; Vision Transformer</strong>; transfer learning; pretraining/fine-tuning; self-supervised e pretext task</td><td>BB24 12.1–12.4, 6.3 · <span class="tag t-req">Vaswani et al. 2017</span> <span class="tag t-req">Dosovitskiy et al. 2020</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+    <tr><td class="c">02/12</td><td><em>Video 5</em> — il problema dell'HPO; algoritmo elementare; introduzione ai processi gaussiani</td><td>B06 2.3, 3.3; RW06 1, 2, 4</td><td class="c"><span class="tag t-md">media</span></td></tr>
+    <tr><td class="c">05/12</td><td>Pretraining e fine-tuning in BERT; triplet loss; contrastive learning; SimCLR; domain adaptation; HPO model-based</td><td>JM24 11 · <span class="tag t-req">Devlin et al. 2018</span> <span class="tag t-req">van den Oord et al. 2019</span> <span class="tag t-req">Schroff et al. 2015</span> <span class="tag t-req">Chen et al. 2020</span></td><td class="c"><span class="tag t-lo">bassa</span></td></tr>
+    <tr><td class="c">10/12</td><td>HPO model-based ed expected improvement; approcci multi-fidelity; <strong>successive halving, Hyperband</strong>, ASHA; meta-learning; domain adaptation; reweighting; <strong>mixup</strong></td><td><span class="tag t-req">Snoek et al. 2012</span> <span class="tag t-req">Bergstra et al. 2013</span> <span class="tag t-req">Li et al. 2018</span></td><td class="c"><span class="tag t-hi">alta</span></td></tr>
+  </tbody>
+</table>
+
+<div class="box">
+  <p class="box-t">Copertura</p>
+  <p>Il progetto tocca direttamente o indirettamente la grande maggioranza del programma. Restano scoperti <strong>cinque argomenti</strong>, da studiare a parte nelle settimane 9–10: <strong>graph neural network</strong>, <strong>U-Net e segmentazione semantica</strong>, <strong>processi gaussiani in dettaglio</strong>, <strong>contrastive learning e SimCLR</strong>, <strong>domain adaptation e generalization</strong>. Sono cinque isole, non un programma intero.</p>
+</div>
+
+<h2 class="brk"><span class="n">8</span>Le derivazioni da saper fare alla lavagna</h2>
+
+<p>La pagina del corso è esplicita: «if the method uses an optimizer, which happens with overwhelming probability, <strong>you are supposed to know how it works</strong>». Tieni un quaderno di derivazioni a mano parallelo al codice: ogni volta che scrivi una riga del training loop, deriva la cosa corrispondente.</p>
+
+<table>
+  <thead><tr><th style="width:52mm">Derivazione</th><th>Perché proprio questa</th></tr></thead>
+  <tbody>
+    <tr><td>Gradiente della cross-entropy con softmax: <em>∂L/∂z = p − y</em></td><td>È la testa del tuo classificatore; il risultato pulito è il motivo per cui si usano insieme.</td></tr>
+    <tr><td>Il trick del <strong>log-sum-exp</strong></td><td>Lezione dedicata (03/10) e problema numerico reale nel tuo codice.</td></tr>
+    <tr><td>Update di <strong>Adam</strong> con bias correction; differenza fra L2 e <strong>weight decay disaccoppiato</strong> (AdamW)</td><td>EAT usa AdamW. Domanda quasi certa: «perché in Adam L2 e weight decay non coincidono?»</td></tr>
+    <tr><td>Complessità della self-attention: <em>O</em>(n²d) per l'attenzione, <em>O</em>(n d²) per le proiezioni</td><td><strong>È la giustificazione dell'intero paper 2.</strong> Devi saper dire per quali n domina quale termine, e quindi quanto guadagni davvero riducendo n.</td></tr>
+    <tr><td>Perché lo scaling 1/√d<sub>k</sub></td><td>Domanda standard su Vaswani et al.</td></tr>
+    <tr><td>Backprop attraverso una convoluzione 1D, e il caso <strong>depthwise</strong></td><td>È il front-end di EAT.</td></tr>
+    <tr><td>Reverse-mode AD: costo <em>O</em>(1)× il forward; perché reverse per <em>f</em>: ℝⁿ→ℝ e forward nel caso opposto</td><td>Due lezioni e due letture richieste (Baydin; Gebremedhin &amp; Walther).</td></tr>
+    <tr><td>Dimensione dell'output e receptive field di una convoluzione con stride e dilation</td><td>Lettura richiesta (Dumoulin &amp; Visin); ti serve per dimensionare il front-end.</td></tr>
+    <tr><td><strong>BatchNorm</strong>: forward, backward, differenza train/eval, e perché aiuta</td><td>Lettura richiesta (Ioffe &amp; Szegedy); la spiegazione «internal covariate shift» è contestata — sappilo.</td></tr>
+    <tr><td><strong>Mixup</strong>: perché BCE e non CE con target mescolati; lettura come regolarizzatore</td><td>Scelta esplicita nella ricetta di EAT: devi saperla motivare, non solo copiare.</td></tr>
+    <tr><td>Dropout come ensemble implicito / regolarizzazione adattiva</td><td>Lettura richiesta (Srivastava et al. 2014).</td></tr>
+    <tr><td>Bias-variance e <strong>double descent</strong></td><td>Lezione 24/10; domanda tipica sui regimi sovraparametrizzati.</td></tr>
+    <tr><td>Posterior di un GP ed <strong>expected improvement</strong></td><td>Se usi Optuna devi saper spiegare cosa c'è sotto.</td></tr>
+    <tr><td><strong>Successive halving</strong> e Hyperband: allocazione del budget</td><td>Lettura richiesta (Li et al. 2018); lo esegui davvero in Fase 5.</td></tr>
+    <tr><td><strong>Gradiente attraverso l'interpolazione bilineare</strong> rispetto alle <em>coordinate</em> di campionamento</td><td>È il meccanismo che rende differenziabile la selezione delle regioni — cioè il cuore del paper. Devi anche saper spiegare <em>perché</em> quel gradiente è rumoroso con pochi punti, e quindi perché serve la early convolution.</td></tr>
+    <tr><td>Perché <em>w'</em> = <em>w</em>·exp(<em>t<sub>w</sub></em>) e non <em>w'</em> = <em>w</em> + <em>t<sub>w</sub></em></td><td>La forma esponenziale garantisce larghezze positive e rende l'aggiornamento moltiplicativo, quindi invariante di scala. Viene da Faster R-CNN: domanda naturale in sede d'esame.</td></tr>
+    <tr><td>Perché il <strong>decoding adattivo</strong> (M<sub>c</sub>, M<sub>s</sub> generati da <em>t</em>) e non un semplice layer lineare</td><td>Il paper dice esplicitamente che «simply using a linear layer is not effective». Saper spiegare la differenza fra pesi <em>fissi</em> e pesi <em>condizionati sul token</em> è il punto concettuale di AdaMixer.</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">9</span>Presentazione: struttura e domande probabili</h2>
+
+<table>
+  <thead><tr><th class="c" style="width:14mm">Minuti</th><th style="width:44mm">Sezione</th><th>Contenuto</th></tr></thead>
+  <tbody>
+    <tr><td class="c">0–5</td><td>Problema e letteratura</td><td>Classificazione audio; perché end-to-end vs spettrogramma; perché il costo dei transformer su audio è un problema; dove si collocano i due paper.</td></tr>
+    <tr><td class="c">5–15</td><td>Metodo e derivazione</td><td>EAT: front-end e augmentation. Sparse-Transformer: scoring, sampling, decoding. <strong>La derivazione della complessità</strong> come filo conduttore.</td></tr>
+    <tr><td class="c">15–25</td><td>Esperimenti</td><td>Protocollo (split ufficiali, seed, contatori di FLOPs) → tabella dei risultati tuoi accanto a quelli pubblicati → <strong>curva accuratezza/FLOPs</strong> → ablation.</td></tr>
+    <tr><td class="c">25–30</td><td>Limiti e domande</td><td>Cosa non hai riprodotto e perché; ambiguità del paper e come le hai risolte.</td></tr>
+  </tbody>
+</table>
+
+<h4>Domande da aspettarsi</h4>
+<ul>
+  <li>«Sparse in che senso? Attenzione sparsa o pochi token?» → §2.2.</li>
+  <li>«Come funziona l'ottimizzatore che hai usato?» → derivazione di AdamW alla lavagna.</li>
+  <li>«Perché lo split ufficiale e non uno casuale?» → speaker-disjoint, leakage fra train e test.</li>
+  <li>«FLOPs o MACs? Misurati come?» → convenzione dichiarata, due contatori concordi.</li>
+  <li>«Il guadagno in FLOPs si traduce in latenza reale?» → i tuoi numeri di wall-clock; spesso no, ed è interessante spiegare perché.</li>
+  <li>«Perché il tuo numero differisce da quello del paper?» → le cause candidate isolate sperimentalmente.</li>
+  <li>«L'augmentation X serve davvero?» → la tua ablation.</li>
+</ul>
+
+<h2><span class="n">10</span>Struttura del repository e consegna</h2>
+
+<pre>audio-sparse-transformer/
+  README.md              # comandi, seed, versioni, tempi, tabella risultati
+                         # tuoi ACCANTO a quelli dei paper — unico documento valutato
+  requirements.txt       # vincoli di installazione
+  requirements.lock.txt  # pip freeze dopo la prima installazione riuscita
+  configs/               # un YAML per ogni esperimento riportato
+  src/
+    data/                # download, split ufficiali, cache memmap, augmentation
+    models/              # eat.py, sparse_tokenizer.py, transformer.py
+    train.py  eval.py  flops.py
+  scripts/               # run_baseline.sh, run_sparse.sh, run_ablation.sh
+  tests/                 # test del tokenizer e delle shape
+  results/               # CSV/JSON dei run + notebook che genera le figure</pre>
+
+<ul>
+  <li>Repo <strong>privato</strong> su Codeberg, con <code>dl.unifi</code> invitato come membro.</li>
+  <li><strong>Nessun dato nel repo</strong>: solo il link al dataset.</li>
+  <li>Nel README dichiara esplicitamente <strong>cosa hai consultato del codice ufficiale di EAT</strong> e cosa hai scritto da zero.</li>
+</ul>
+
+<h2><span class="n">11</span>Ambiente di sviluppo</h2>
+
+<table class="kv">
+  <tr><td>GPU</td><td>NVIDIA GeForce RTX 5050 Laptop, 8151 MiB, driver 592.82 — architettura <strong>Blackwell, compute capability sm_120</strong></td></tr>
+  <tr><td>Python</td><td>3.12.4 di sistema, venv dedicato al progetto</td></tr>
+  <tr><td>Stack verificato</td><td>torch 2.9.1+cu128 (CUDA 12.8, arch list include sm_120) · torchaudio 2.9.1</td></tr>
+</table>
+
+<div class="box">
+  <p class="box-t">Due trappole già identificate</p>
+  <p><strong>1. Wheel sbagliata.</strong> Le build PyTorch di default (CUDA ≤12.6) arrivano a sm_90 e falliscono a runtime con <code>no kernel image is available for execution on the device</code> — un errore che sembra un driver rotto e non lo è. Installa dall'indice <code>cu128</code> e verifica che <code>torch.cuda.get_device_capability()</code> restituisca <code>(12, 0)</code> <em>prima</em> di scrivere altro.</p>
+  <p><strong>2. Backend audio mancante.</strong> torchaudio 2.9+ ha dismesso l'I/O interno: senza <code>soundfile</code> installato non carichi i <code>.wav</code> di Speech Commands. Il suffisso <code>+cpu</code> di torchaudio invece <em>non</em> è un problema: le trasformate sono composte da operazioni PyTorch normali e girano su tensori CUDA.</p>
+</div>
+
+<p>Perché un venv dedicato e non un ambiente esistente: il progetto è valutato sulla riproducibilità e l'unico documento consegnato è codice più istruzioni. Un <code>pip freeze</code> prodotto da un ambiente generalista con JAX, OpenCV, mediapipe e pyautogui genera un <code>requirements.txt</code> privo di significato, che il docente non può usare per riprodurre nulla. Un ambiente dedicato con versioni pinnate <em>è</em> parte del deliverable.</p>
+
+<h2><span class="n">12</span>Riferimenti</h2>
+
+<h4>Paper del progetto</h4>
+<ul>
+  <li>Gazneli, A., Zimerman, G., Ridnik, T., Sharir, G., &amp; Noy, A. (2022). <em>End-to-End Audio Strikes Back: Boosting Augmentations Towards An Efficient Audio Classification Network.</em> arXiv:2204.11479. Codice: <code>github.com/Alibaba-MIIL/AudioClassfication</code></li>
+  <li>Kavaki, H. S., &amp; Mandel, M. I. (2025). <em>Audio Sparse-Transformer for Speech Classification.</em> ICASSP 2025, 1–5. DOI 10.1109/ICASSP49660.2025.10890475 — <strong>closed access</strong></li>
+</ul>
+
+<h4>Ancestors indispensabili — da cui viene il metodo (§3)</h4>
+<ul>
+  <li><strong>Gao, Z., Tong, Z., Wang, L., &amp; Shou, M. Z. (2023). <em>SparseFormer: Sparse Visual Recognition via Limited Latent Tokens.</em> arXiv:2304.03768.</strong> — Il modello di cui il paper 2 è la trasposizione all'audio. <strong>Lettura non opzionale.</strong></li>
+  <li>Gao, Z., Wang, L., Han, B., &amp; Guo, S. (2022). <em>AdaMixer: A Fast-Converging Query-Based Object Detector.</em> CVPR 2022. — Origine del decoding adattivo (M<sub>c</sub>, M<sub>s</sub>).</li>
+  <li>Ren, S., He, K., Girshick, R., &amp; Sun, J. (2015). <em>Faster R-CNN.</em> NeurIPS 28. — Origine della parametrizzazione delle regioni.</li>
+  <li>Xiao, T., Singh, M., Mintun, E., Darrell, T., Dollár, P., &amp; Girshick, R. (2021). <em>Early Convolutions Help Transformers See Better.</em> NeurIPS 34. — Il front-end senza cui il campionamento non impara.</li>
+</ul>
+
+<h4>Contesto: i modelli con cui il paper si confronta</h4>
+<ul>
+  <li>Warden, P. (2018). <em>Speech Commands: A Dataset for Limited-Vocabulary Speech Recognition.</em> arXiv:1804.03209. — Il dataset e i suoi split ufficiali.</li>
+  <li>Berg, A., O'Connor, M., &amp; Tairum Cruz, M. (2021). <em>Keyword Transformer.</em> arXiv:2104.00769 — 97,7 % su SC V2.</li>
+  <li>Gong, Y., Chung, Y.-A., &amp; Glass, J. (2021). <em>AST: Audio Spectrogram Transformer.</em> arXiv:2104.01778 — 98,1 % con pretraining ImageNet.</li>
+  <li>Chen, K., et al. (2022). <em>HTS-AT: A Hierarchical Token-Semantic Audio Transformer.</em> ICASSP 2022 — 98,0 %.</li>
+  <li>Smith, L. N. (2018). <em>A Disciplined Approach to Neural Network Hyper-Parameters, Part 1.</em> arXiv:1803.09820. — Lo schedule one-cycle usato da entrambi i paper.</li>
+  <li>Tarvainen, A., &amp; Valpola, H. (2017). <em>Mean Teachers Are Better Role Models.</em> NeurIPS 30. — L'EMA dei pesi.</li>
+  <li>Tokozume, Y., Ushiku, Y., &amp; Harada, T. (2017). <em>Learning from Between-Class Examples for Deep Sound Recognition.</em> arXiv:1711.10282. — Il <em>mixing</em> in ambito audio.</li>
+</ul>
+
+<h4>Testi del corso</h4>
+<table class="kv">
+  <tr><td><strong>BB24</strong></td><td>Bishop &amp; Bishop (2024), <em>Deep Learning: Foundations and Concepts</em>, Springer — <code>bishopbook.com</code></td></tr>
+  <tr><td><strong>GBC16</strong></td><td>Goodfellow, Bengio &amp; Courville (2016), <em>Deep Learning</em>, MIT Press — <code>deeplearningbook.org</code></td></tr>
+  <tr><td><strong>P24</strong></td><td>Prince (2024), <em>Understanding Deep Learning</em>, MIT Press — <code>udlbook.com</code></td></tr>
+  <tr><td><strong>ZLLS23</strong></td><td>Zhang, Lipton, Li &amp; Smola (2023), <em>Dive into Deep Learning</em> — <code>d2l.ai</code></td></tr>
+  <tr><td><strong>JM24</strong></td><td>Jurafsky &amp; Martin (2025), <em>Speech and Language Processing</em>, 3ª ed. draft</td></tr>
+  <tr><td><strong>B06</strong></td><td>Bishop (2006), <em>Pattern Recognition and Machine Learning</em></td></tr>
+  <tr><td><strong>RW06</strong></td><td>Rasmussen &amp; Williams (2006), <em>Gaussian Processes for Machine Learning</em>, MIT Press</td></tr>
+</table>
+
+<p style="font-size:8.6pt;color:var(--muted)">Il testo completo dei paper linkati dalla pagina del corso è accessibile da IP UNIFI; dall'esterno usare il proxy <code>proxy-auth.unifi.it:8888</code> con le proprie credenziali.</p>
+
+<p class="foot">Documento di lavoro personale per l'esame B031278 — Deep Learning, Fall 2025, Università di Firenze. I dati bibliografici e i risultati numerici sono tratti dalla pagina ufficiale del corso, dal preprint arXiv di Gazneli et al. e dal testo integrale di Kavaki &amp; Mandel (ICASSP 2025). Le formule di §3 sono trascritte dal paper; le ambiguità di §3.4 sono punti su cui il paper non si pronuncia e che vanno risolti e dichiarati in fase di implementazione.</p>
+
+</body>
+</html>

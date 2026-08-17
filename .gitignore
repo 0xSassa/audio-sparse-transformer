@@ -1,0 +1,42 @@
+# Dati: MAI nel repository (la consegna chiede il codice, non i dati)
+#
+# ATTENZIONE alla barra iniziale: "data/" senza slash davanti matcha
+# QUALSIASI cartella chiamata data a ogni livello dell'albero, e quindi
+# escluderebbe anche src/data/ — cioe' meta' del codice sorgente, in
+# silenzio. "/data/" e' ancorato alla radice del repository.
+/data/
+*.npy
+*.tar.gz
+*.wav
+
+# Ambiente
+.venv/
+DL_F/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Output degli esperimenti
+results/**/*.pt
+results/**/*.ckpt
+runs/
+wandb/
+optuna*.db
+
+# PDF dei paper: non ridistribuibili.
+# I due PDF nostri sono rigenerabili da docs/ con scripts\build_docs.ps1,
+# ma li teniamo versionati perche' sono i documenti che si consultano.
+*.pdf
+!Pipeline_progetto_DL.pdf
+!Diario_di_bordo.pdf
+
+# Materiale di riferimento, non artefatti del progetto: restano sul disco
+# ma fuori dal repository. La pagina del corso e' reperibile online e il
+# solo CSS di Semantic UI pesava il 90% delle righe versionate.
+B031278 - Deep Learning - Fall 2025.html
+B031278 - Deep Learning - Fall 2025_files/
+paper pre progetto/
+
+# Sistema
+.DS_Store
+Thumbs.db

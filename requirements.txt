@@ -1,0 +1,121 @@
+# =============================================================================
+#  Progetto d'esame - B031278 Deep Learning (UNIFI, Fall 2025)
+#  Audio Sparse-Transformer (Kavaki & Mandel 2025) / baseline EAT-S
+#  su Google Speech Commands V2
+#
+#  Ambiente target: Windows 11 - Python 3.12.4
+#                   NVIDIA GeForce RTX 5050 Laptop (Blackwell, sm_120, 8 GB)
+# =============================================================================
+#
+#  INSTALLAZIONE IN DUE PASSI - l'ordine conta.
+#
+#    python -m venv .venv
+#    .venv\Scripts\activate
+#    python -m pip install -U pip setuptools wheel
+#
+#    # passo 1: stack CUDA dall'indice PyTorch (NON da PyPI)
+#    pip install torch==2.9.1+cu128 torchaudio==2.9.1 ^
+#        --index-url https://download.pytorch.org/whl/cu128
+#
+#    # passo 2: tutto il resto da PyPI (torch risulta gia' soddisfatto)
+#    pip install -r requirements.txt
+#
+#  VERIFICA - deve stampare "(12, 0) True":
+#    python -c "import torch; print(torch.cuda.get_device_capability(), torch.cuda.is_available())"
+#    python -c "import soundfile; print('audio backend ok')"
+#
+#  DOPO la prima installazione riuscita, congela le versioni esatte:
+#    pip freeze > requirements.lock.txt
+#  Il file .lock e' quello che accompagna la consegna: garantisce la
+#  riproducibilita' bit-per-bit dell'ambiente, questo file garantisce
+#  solo che l'installazione vada a buon fine.
+# =============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Core deep learning - build CUDA 12.8, OBBLIGATORIA per sm_120
+# ---------------------------------------------------------------------------
+# Le wheel di default (cu126 e precedenti) sono compilate fino a sm_90 e
+# falliscono a runtime con "no kernel image is available for execution on
+# the device": sembra un driver rotto, non lo e'. Vedi passo 1 qui sopra.
+#
+# torchaudio e' pinnato SENZA suffisso locale di proposito: cosi' pip accetta
+# indifferentemente la variante +cpu o +cu128. Il suffisso +cpu non e' un
+# problema, le trasformate sono op PyTorch e girano su tensori CUDA.
+torch==2.9.1+cu128
+torchaudio==2.9.1
+
+# ---------------------------------------------------------------------------
+# I/O audio - NECESSARIO
+# ---------------------------------------------------------------------------
+# torchaudio 2.9+ ha dismesso l'I/O interno: senza un backend non si caricano
+# i .wav di Speech Commands. soundfile (libsndfile) e' sufficiente per i wav.
+soundfile>=0.12.1,<1.0
+
+# ---------------------------------------------------------------------------
+# Stack scientifico
+# ---------------------------------------------------------------------------
+numpy>=2.1,<3.0
+scipy>=1.14,<2.0
+pandas>=2.2,<3.0
+scikit-learn>=1.5,<2.0          # confusion matrix, metriche, stratificazioni
+
+# ---------------------------------------------------------------------------
+# Architettura del modello
+# ---------------------------------------------------------------------------
+# einops: Rogozhnikov 2022 e' LETTURA RICHIESTA del corso (lezione 21/11).
+# Usarlo per il reshape del multi-head attention e' coerente col programma.
+einops>=0.8,<1.0
+torchmetrics>=1.4,<2.0          # accuracy/mAP consistenti fra train ed eval
+
+# ---------------------------------------------------------------------------
+# Misura del costo computazionale - FASE 2, il cuore della riproduzione
+# ---------------------------------------------------------------------------
+# Il claim da riprodurre e' -85.25% di FLOPs: servono DUE contatori indipendenti
+# che concordino. Il terzo, torch.utils.flop_counter.FlopCounterMode, e' nativo
+# in torch e non richiede dipendenze.
+fvcore>=0.1.5
+torchinfo>=1.8,<2.0
+
+# ---------------------------------------------------------------------------
+# Tracking degli esperimenti
+# ---------------------------------------------------------------------------
+tensorboard>=2.17,<3.0
+# wandb>=0.18,<1.0              # opzionale: richiede account e connessione
+
+# ---------------------------------------------------------------------------
+# Hyperparameter optimization - FASE 5
+# ---------------------------------------------------------------------------
+# Optuna con Hyperband/ASHA su K (numero di token) e learning rate.
+# Successive halving e Hyperband (Li et al. 2018) sono programma d'esame:
+# eseguirli davvero e' il modo piu' economico di padroneggiarli.
+optuna>=4.0,<5.0
+
+# ---------------------------------------------------------------------------
+# Figure e analisi
+# ---------------------------------------------------------------------------
+matplotlib>=3.9,<4.0
+seaborn>=0.13,<1.0
+jupyterlab>=4.2,<5.0
+ipykernel>=6.29,<7.0
+
+# ---------------------------------------------------------------------------
+# Utilita' e qualita' del codice
+# ---------------------------------------------------------------------------
+tqdm>=4.66,<5.0
+PyYAML>=6.0,<7.0                # file di configurazione in configs/
+pytest>=8.3,<9.0                # test su shape e tokenizer sparso
+ruff>=0.6                       # lint + format, dipendenza singola
+
+# ---------------------------------------------------------------------------
+# OPZIONALI - installare solo se servono davvero
+# ---------------------------------------------------------------------------
+# librosa>=0.10                 # feature audio extra. ATTENZIONE: tira dentro
+#                               # numba, che vincola la versione di Python.
+#                               # torchaudio copre gia' mel-spectrogram, MFCC,
+#                               # resampling e SpecAugment: quasi certamente
+#                               # non serve.
+# torchcodec>=0.1               # backend di decoding alternativo a soundfile,
+#                               # utile solo per formati diversi dal wav.
+# datasets>=3.0                 # HuggingFace. Non serve: Speech Commands e'
+#                               # in torchaudio.datasets.SPEECHCOMMANDS.

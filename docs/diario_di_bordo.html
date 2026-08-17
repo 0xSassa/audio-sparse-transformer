@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Diario di bordo — Progetto Audio Sparse-Transformer</title>
+<style>
+  @page { size: A4; margin: 17mm 15mm 15mm 15mm; }
+  :root{
+    --ink:#191919; --muted:#5a6068; --accent:#0f5132; --accent2:#8a4b12;
+    --rule:#c9ced4; --soft:#f2f5f3; --soft2:#e7efea;
+  }
+  *{ box-sizing:border-box; }
+  body{ font-family:"Georgia","Cambria",serif; color:var(--ink); font-size:10pt; line-height:1.46; margin:0; }
+  h1,h2,h3,h4,.sans,table,code,.box-t,.tag,.entry-h{ font-family:"Segoe UI","Calibri",sans-serif; }
+
+  h1{ font-size:20pt; margin:0 0 2mm; color:var(--accent); letter-spacing:-.2px; }
+  .sub{ font-size:10.5pt; color:var(--muted); margin:0 0 1mm; }
+  .meta{ font-size:8.4pt; color:var(--muted); margin:0; }
+
+  h2{ font-size:13pt; color:var(--accent); margin:8mm 0 3mm; padding-bottom:1.5mm;
+      border-bottom:1.6pt solid var(--accent); page-break-after:avoid; }
+  h3{ font-size:10.6pt; margin:5.5mm 0 2mm; color:#111; page-break-after:avoid; }
+  h4{ font-size:9.2pt; margin:4mm 0 1.5mm; color:var(--accent2);
+      text-transform:uppercase; letter-spacing:.4px; page-break-after:avoid; }
+  p{ margin:0 0 2.4mm; text-align:justify; }
+  ul,ol{ margin:0 0 2.6mm; padding-left:5.5mm; }
+  li{ margin-bottom:1.2mm; }
+  code{ font-family:"Consolas","Courier New",monospace; font-size:8.6pt;
+        background:var(--soft); padding:.3mm 1mm; border-radius:2px; }
+  pre{ font-family:"Consolas","Courier New",monospace; font-size:8.2pt;
+       background:var(--soft); border-left:2.5pt solid var(--accent);
+       padding:2.2mm 3mm; margin:0 0 3mm; line-height:1.4;
+       white-space:pre-wrap; page-break-inside:avoid; }
+
+  table{ width:100%; border-collapse:collapse; font-size:8.6pt; margin:0 0 3.5mm; }
+  thead{ display:table-header-group; }
+  tr{ page-break-inside:avoid; }
+  th{ background:var(--soft2); text-align:left; font-weight:600; padding:1.6mm 2mm;
+      border-bottom:1pt solid var(--rule); color:#0b3d26; }
+  td{ padding:1.6mm 2mm; border-bottom:.5pt solid var(--rule); vertical-align:top; }
+  td.c,th.c{ text-align:center; }
+  tbody tr:nth-child(even){ background:#fafbfa; }
+
+  /* voce di diario */
+  .entry{ border-left:2.5pt solid var(--rule); padding:0 0 0 4mm; margin:0 0 5mm; }
+  .entry.dec{ border-left-color:#0f5132; }
+  .entry.err{ border-left-color:#9b2c2c; }
+  .entry.fix{ border-left-color:#8a4b12; }
+  .entry.ver{ border-left-color:#1f4e79; }
+  .entry-h{ font-size:9.6pt; font-weight:700; margin:0 0 1.5mm; color:#111; }
+  .entry p:last-child, .entry ul:last-child, .entry table:last-child{ margin-bottom:0; }
+
+  .tag{ display:inline-block; font-size:7.2pt; font-weight:700; padding:.4mm 1.5mm;
+        border-radius:2.5px; border:.6pt solid; vertical-align:1.5px;
+        text-transform:uppercase; letter-spacing:.3px; margin-right:1.5mm; white-space:nowrap; }
+  .t-dec{ color:#0f5132; border-color:#a8ccb8; background:#eaf3ee; }
+  .t-err{ color:#9b2c2c; border-color:#e0b4b4; background:#fbeded; }
+  .t-fix{ color:#8a4b12; border-color:#e0c4a6; background:#fbf2e8; }
+  .t-ver{ color:#1f4e79; border-color:#b4c8dd; background:#eef3f9; }
+  .t-doc{ color:#4a3f6b; border-color:#c4bcd9; background:#f2f0f8; }
+
+  .box{ border:.8pt solid var(--rule); border-left:3pt solid var(--accent2);
+        background:#fdfaf6; padding:3mm 3.5mm; margin:0 0 4mm; page-break-inside:avoid; }
+  .box.info{ border-left-color:var(--accent); background:#f5faf7; }
+  .box-t{ font-size:8.2pt; font-weight:700; text-transform:uppercase;
+          letter-spacing:.5px; color:var(--accent2); margin:0 0 1.5mm; }
+  .box.info .box-t{ color:var(--accent); }
+  .box p:last-child, .box ul:last-child{ margin-bottom:0; }
+
+  .brk{ page-break-before:always; }
+  .foot{ margin-top:7mm; padding-top:2.5mm; border-top:.6pt solid var(--rule);
+         font-size:7.8pt; color:var(--muted); }
+  .kv td{ border:0; padding:.8mm 2mm .8mm 0; }
+  .kv td:first-child{ color:var(--muted); width:40mm; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Diario di bordo</h1>
+  <p class="sub">Progetto d'esame — riproduzione di <em>Audio Sparse-Transformer</em> (Kavaki &amp; Mandel, ICASSP 2025)</p>
+  <p class="sub" style="font-size:9.6pt">B031278 Deep Learning, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
+  <p class="meta">Ultimo aggiornamento: 17 agosto 2026</p>
+</header>
+
+<div class="box info">
+  <p class="box-t">A cosa serve questo documento</p>
+  <p>Registro cronologico di <strong>tutto</strong> ciò che viene fatto sul progetto: decisioni e loro motivazione, verifiche eseguite, <strong>errori commessi</strong> e cambi di direzione. Serve per ripassare, per ricostruire <em>perché</em> una scelta è stata fatta mesi dopo, e per rispondere all'orale a domande del tipo «perché hai fatto così e non cosà».</p>
+  <p>Il piano di lavoro sta invece in <code>Pipeline_progetto_DL.pdf</code>: quello dice <em>cosa</em> fare, questo dice <em>cosa è stato fatto</em>.</p>
+</div>
+
+<h4>Legenda</h4>
+<p>
+  <span class="tag t-dec">decisione</span> scelta presa, con motivazione ·
+  <span class="tag t-ver">verifica</span> qualcosa controllato o misurato ·
+  <span class="tag t-err">errore</span> sbaglio commesso ·
+  <span class="tag t-fix">correzione</span> rettifica di qualcosa detto o fatto prima ·
+  <span class="tag t-doc">artefatto</span> file prodotto
+</p>
+
+<h4>Come si aggiorna</h4>
+<p>Il sorgente è <code>docs/diario_di_bordo.html</code>. Dopo averlo modificato:</p>
+<pre>powershell -File scripts\build_docs.ps1</pre>
+<p>rigenera <code>Diario_di_bordo.pdf</code> e <code>Pipeline_progetto_DL.pdf</code> nella cartella di progetto, usando Edge in modalità headless (nessuna dipendenza da installare).</p>
+
+<!-- ==================================================================== -->
+<h2 class="brk">Giorno 1 — mercoledì 12 agosto 2026</h2>
+<p class="meta" style="margin-bottom:4mm">Obiettivo della sessione: capire cosa chiede l'esame, cosa dicono i due paper, e definire un metodo di lavoro.</p>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Analisi della pagina del corso</p>
+  <p>Letta integralmente la pagina ufficiale (<code>ai.dinfo.unifi.it/teaching/dl_2025.html</code>), salvata in locale. Estratti i vincoli d'esame che condizionano ogni scelta tecnica:</p>
+  <ul>
+    <li>progetto da <strong>concordare a ricevimento</strong> (lunedì 10:45–12:45, S. Marta): il docente dà i dettagli operativi;</li>
+    <li><strong>nessuna relazione scritta</strong> — si consegna solo codice più istruzioni di riproduzione, quindi il <code>README.md</code> è l'unico documento valutato;</li>
+    <li>consegna su <strong>repository privato Codeberg</strong> con l'utente <code>dl.unifi</code> invitato; <strong>mai i dati</strong>, solo un link;</li>
+    <li>presentazione di <strong>30 minuti</strong> con letteratura, derivazione tecnica ed esperimenti; domande individuali su tutto il programma;</li>
+    <li>riduzione di dataset e modelli <strong>esplicitamente autorizzata</strong> se le risorse non bastano;</li>
+    <li>esiste un <strong>form Google per richiedere risorse di calcolo</strong>.</li>
+  </ul>
+  <p>Annotato l'avvertimento del docente sul leggere «other ancestors in the citation graph»: si rivelerà centrale il giorno 2.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Ricerca sui due paper assegnati</p>
+  <p><strong>Gazneli et al. 2022 (EAT)</strong>: arXiv ad accesso libero, codice ufficiale su <code>github.com/Alibaba-MIIL/AudioClassfication</code>. Estratti architettura (conv 1D depthwise su waveform grezza + transformer), varianti EAT-S 5,3 M / EAT-M 25,5 M, le augmentation proposte (Mixup, FreqMix, PhaseMix, TimeMix/CutMix) e la ricetta di training (AdamW, one-cycle, EMA 0,995, label smoothing, BCE).</p>
+  <p><strong>Kavaki &amp; Mandel 2025</strong>: risultato <strong>closed access</strong>, nessun preprint arXiv, nessun codice pubblico. Semantic Scholar riporta <code>openAccessPdf: CLOSED</code> e reference list elisa dall'editore. Disponibile solo l'abstract: 96,88 % su Speech Commands V2 con −85,25 % di FLOPs rispetto a EAT-S.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Ipotesi sbagliata sull'origine del metodo</p>
+  <p>Non potendo leggere il paper, è stata formulata l'ipotesi che le «regioni significative» dello spettrogramma derivassero dalla linea di ricerca precedente di Mandel sulle <em>importance map</em> — <em>Identifying Important Time-Frequency Locations</em> (Interspeech 2020) e <em>ImportantAug</em> (ICASSP 2022) — e che il decoding fosse un embedding di punti con encoding posizionale continuo, cioè lo spettrogramma trattato come point cloud.</p>
+  <p><strong>L'ipotesi era sbagliata</strong> ed è stata smentita il giorno 2 leggendo il PDF. Il vero ancestor è SparseFormer. Vedi la voce del 17/08. L'ipotesi era stata comunque marcata come «da confermare, non da dare per buona»: la lezione è che un'ipotesi plausibile su un metodo non letto resta una congettura, e va tenuta separata dai fatti.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Struttura del lavoro in sei fasi</p>
+  <p>Definito un piano che mette <strong>l'infrastruttura di misura prima del modello</strong>. Motivazione: il claim da riprodurre è un <em>rapporto</em> accuratezza/FLOPs, non un'accuratezza; un contatore di FLOPs scritto dopo il modello tende a essere costruito per confermare il risultato atteso.</p>
+  <p>Definiti anche i <strong>criteri di successo in anticipo</strong>, per non poterli riscrivere a posteriori in base a quello che esce.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Ricognizione della macchina</p>
+  <table class="kv">
+    <tr><td>GPU</td><td>NVIDIA GeForce RTX 5050 Laptop, 8151 MiB, driver 592.82 — <strong>Blackwell, sm_120</strong></td></tr>
+    <tr><td>Python di sistema</td><td>3.12.4</td></tr>
+    <tr><td>Disponibili</td><td>miniconda, git — <code>uv</code> assente, PyTorch non installato</td></tr>
+  </table>
+  <p>Verificati i due ambienti DL esistenti: <code>C:\ai\pytorch_env</code> (torch 2.9.1+cu128, Python 3.12.4) e conda <code>DLA2026</code> (torch 2.10.0, CUDA 13, Python 3.14.3). <strong>Entrambi già compatibili con sm_120.</strong> In entrambi mancavano però <code>soundfile</code> e <code>numba</code>, e <code>torchaudio</code> era nella variante <code>+cpu</code>.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Ambiente dedicato invece di riusare quelli esistenti</p>
+  <p>Scelto di creare un venv nuovo su Python 3.12 anziché usare <code>pytorch_env</code> o <code>DLA2026</code>. Tre motivi:</p>
+  <ul>
+    <li><strong>riproducibilità</strong>: un <code>pip freeze</code> da un ambiente generalista con JAX, OpenCV, mediapipe e pyautogui produce un <code>requirements.txt</code> inutilizzabile, e l'ambiente <em>è</em> parte del deliverable;</li>
+    <li><code>DLA2026</code> appartiene a <strong>un altro corso</strong>: modificarlo rischia di romperne il lavoro;</li>
+    <li>Python 3.14 di <code>DLA2026</code> taglierebbe fuori numba/librosa se dovessero servire.</li>
+  </ul>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Generazione del PDF fallita al primo tentativo</p>
+  <p>Il primo tentativo di conversione HTML→PDF con Edge headless non ha prodotto alcun file. Causa: un flag inesistente (<code>--print-to-pdf-no-header</code>) e il profilo utente di Edge bloccato da un'istanza attiva. <strong>Risolto</strong> passando un <code>--user-data-dir</code> dedicato e terminando i processi <code>msedge</code> residui. La ricetta funzionante è ora in <code>scripts/build_docs.ps1</code>.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Prodotti i primi due file</p>
+  <ul>
+    <li><code>Pipeline_progetto_DL.pdf</code> <strong>v1.0</strong> — 14 pagine: vincoli d'esame, analisi dei paper, pipeline in 6 fasi, protocollo sperimentale, piano di studio a 10 settimane, programma del corso come checklist, derivazioni da saper fare, struttura del repo;</li>
+    <li><code>requirements.txt</code> — installazione in due passi, con la motivazione di ogni pacchetto non ovvio.</li>
+  </ul>
+</div>
+
+<!-- ==================================================================== -->
+<h2 class="brk">Giorno 2 — lunedì 17 agosto 2026</h2>
+<p class="meta" style="margin-bottom:4mm">Obiettivo: leggere il paper vero, correggere il piano, costruire l'infrastruttura della Fase 2.</p>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>I PDF dei paper sono arrivati</p>
+  <p>Trovati nella cartella: <code>2204.11479v5.pdf</code> (EAT), <code>Audio_Sparse-Transformer_for_Speech_Classification.pdf</code> (copia UNIFI da IEEE Xplore) e una cartella <code>paper pre progetto/</code> con ViT, <em>Attention is all you need</em> e <strong>arXiv 2304.03768</strong>.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>Ostacolo tecnico: lettura dei PDF</p>
+  <p>Lo strumento di lettura PDF richiedeva <code>poppler</code>, non installato e non installabile sul momento. <strong>Aggirato</strong> usando <strong>PyMuPDF</strong>, già presente nell'ambiente conda <code>DLA2026</code>, per estrarre il testo in un file temporaneo. Utile ricordarlo: gli ambienti esistenti sono una risorsa anche quando non li si usa per il progetto.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>L'ancestor era un altro — ipotesi del giorno 1 smentita</p>
+  <p>Letto il paper per intero. Il metodo <strong>non</strong> deriva dalla linea importance-map di Mandel. L'origine è <strong>SparseFormer</strong> (Gao et al. 2023, <strong>arXiv:2304.03768</strong>, <em>Sparse visual recognition via limited latent tokens</em>), un modello per ImageNet di cui questo lavoro è la trasposizione all'audio. Gli altri due riferimenti strutturali sono <strong>Faster R-CNN</strong> (parametrizzazione delle regioni) e <strong>AdaMixer</strong> (pesi di decoding adattivi).</p>
+  <p>Differenza sostanziale rispetto all'ipotesi: <strong>le regioni non sono selezionate per saliency o energia — sono parametri appresi</strong>, aggiustati iterativamente dai token stessi. E il transformer <strong>non usa positional encoding</strong>, perché i token non hanno ordine.</p>
+  <p>Nota: <code>2304.03768</code> era <em>già</em> nella cartella <code>paper pre progetto/</code>. L'ancestor giusto era a disposizione fin dall'inizio.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Cambio di direzione: il baseline non è EAT-S</p>
+  <p>Dalla Tabella 2 del paper emerge che il confronto <em>controllato</em> non è contro EAT-S ma contro il <strong>dense-transformer</strong> degli autori: stessa architettura che processa i frame temporali invece dei token latenti. Il numero di EAT-S è <strong>citato dalla letteratura</strong>, non rimisurato dagli autori.</p>
+  <table>
+    <thead><tr><th>Modello</th><th class="c">Params</th><th class="c">FLOPs</th><th class="c">Accuracy</th></tr></thead>
+    <tbody>
+      <tr><td>Sparse-transformer (N=4, P=36)</td><td class="c">2,87 M</td><td class="c">0,055 G</td><td class="c">96,88 %</td></tr>
+      <tr><td>Dense-transformer</td><td class="c">4,80 M</td><td class="c">0,645 G</td><td class="c">96,67 %</td></tr>
+      <tr><td>EAT-S <em>(citato)</em></td><td class="c">5,30 M</td><td class="c">0,373 G</td><td class="c">98,15 %</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Conseguenza sul piano</strong>: la Fase 3 diventa «early convolution + dense transformer», che condivide tutto il codice a valle col modello sparso; la reimplementazione completa di EAT-S scende a <strong>Fase 4-bis, opzionale</strong>. Semplificazione netta e riduzione del rischio.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Il metodo, ricavato dal paper</p>
+  <p><em>N</em> token latenti e <em>N</em> regioni <em>b</em>=(x,y,w,h), <strong>entrambi parametri appresi</strong>; centri inizializzati su griglia, larghezze a metà della dimensione della feature map. Per <em>L<sub>rep</sub></em>=3 volte: aggiustamento della regione via <code>Linear(t)</code> con parametrizzazione esponenziale → campionamento di <em>P</em> punti con offset appresi e interpolazione bilineare → decoding adattivo con M<sub>c</sub> e M<sub>s</sub> generati da <em>t</em>, GELU, update residuo del token. Poi 8 transformer-encoder, average pooling, classificatore lineare.</p>
+  <p>Configurazione: N=4, P=36, d<sub>token</sub>=64, d<sub>encoder</sub>=128, L<sub>enc</sub>=8. Training: AdamW lr 3·10⁻⁴, β=(0,9 · 0,99), one-cycle, wd 10⁻⁵, EMA 0,995, batch 64, augmentation <em>mixing</em> e <em>phasemix</em>.</p>
+  <p><strong>Dettaglio critico</strong>: non si campiona dallo spettrogramma diretto — il gradiente attraverso l'interpolazione bilineare è troppo rumoroso con pochi punti. Si applica prima una <em>early convolution</em> e si campiona sul suo output.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Ambiguità trovate nel paper</p>
+  <p>Sei punti su cui il paper tace o si contraddice, tutti da dichiarare come assunzioni:</p>
+  <ul>
+    <li><strong>parametri dello spettrogramma mai dichiarati</strong> (mel o lineare? n_fft? hop? bin?) — il parametro libero più impattante;</li>
+    <li><strong>contraddizione interna in §3.2</strong>: feature «96 dimensional» ma «196 kernels» 7×7 stride 2;</li>
+    <li>numero di layer della early convolution non dichiarato;</li>
+    <li>numero di epoche non dichiarato;</li>
+    <li>come il dense-transformer costruisce i frame dall'output della early conv;</li>
+    <li>convenzione FLOPs vs MAC non dichiarata.</li>
+  </ul>
+  <p>Osservazione critica aggiuntiva: nella Tabella 3 l'ablation sui token <strong>non è monotona</strong> (16 token → 97,53 %, 25 token → 97,20 %, 36 → 97,94 %) e i risultati sono su <strong>singolo seed</strong>. Suggerisce un rumore da seed di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse nel paper. È la giustificazione sperimentale dei ≥3 seed.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>Stima sbagliata della dimensione della cache</p>
+  <p>Nella v1.0 del PDF la cache del training set era stimata «≈1,7 GB». Valore corretto: <strong>2,72 GB</strong> (84 843 × 16 000 campioni × 2 byte). Con validation e test si arriva a ~3,4 GB. Corretto nel PDF e nel codice.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span><code>Pipeline_progetto_DL.pdf</code> v2.0 — 16 pagine</p>
+  <p>§3 riscritta col metodo reale e le formule; §3.4 nuova con le ambiguità; Fase 3 riscritta e Fase 4-bis aggiunta; §5.1 con gli split esatti e i target di riproduzione; §8 con tre derivazioni in più; §12 con la bibliografia corretta.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Codice della Fase 2</p>
+  <pre>src/data/speech_commands.py   download, split ufficiali, cache memmap
+src/data/dataset.py           Dataset e DataLoader
+src/data/features.py          log-mel su GPU
+src/data/augment.py           mixing e phasemix su GPU
+src/flops.py                  doppio contatore + latenza
+src/utils.py                  seed, config, EMA
+scripts/check_env.py          verifica ambiente
+scripts/prepare_data.py       Fase 2 completa
+configs/base.yaml             assunzioni marcate [ASSUNZIONE]
+README.md  .gitignore</pre>
+  <p>Scelta di progettazione: <code>build_splits()</code> <strong>fallisce di proposito</strong> se i conteggi non danno esattamente 84 843 / 9 981 / 11 005. Sono i numeri dichiarati dal paper e coincidono con gli elenchi ufficiali speaker-disjoint: è un test di correttezza gratuito.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Cancellazione accidentale di <code>src/</code> e <code>scripts/</code></p>
+  <p>Alle <strong>16:54</strong>, contestualmente alla creazione del venv <code>DL_F</code>, le cartelle <code>src/</code> e <code>scripts/</code> sono state eliminate insieme a un primo <code>.venv</code> — presumibilmente una multi-selezione sfuggita durante la pulizia del primo tentativo di ambiente. Metà del codice del progetto è sparita senza che ci fosse ancora un repository git.</p>
+  <p><strong>Recuperate dal cestino</strong> e riverificate: tutti i file alle dimensioni originali, tutti ricompilano.</p>
+  <p><strong>Lezione</strong>: il repository git va inizializzato <em>subito</em>, non «quando il codice sarà pronto». Un <code>git init</code> più un commit avrebbero reso l'incidente un non-evento.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span><code>.gitignore</code> non copriva il venv</p>
+  <p>Il <code>.gitignore</code> ignorava <code>.venv/</code>, ma l'ambiente si chiama <code>DL_F</code>: al primo <code>git add</code> sarebbero finiti sotto controllo di versione diverse migliaia di file. Aggiunta la riga <code>DL_F/</code>.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Installazione dell'ambiente</p>
+  <p>Verificata la raggiungibilità di <strong>entrambi</strong> gli indici pacchetti — <code>pypi.org</code> e <code>download.pytorch.org/whl/cu128</code> — prima di iniziare: se il secondo non risponde, pip ripiega silenziosamente sulla build CPU-only. Aggiornati pip (24.0 → 26.2.1), setuptools e wheel.</p>
+  <p>Installazione di torch avviata in background e <strong>interrotta su richiesta</strong>, ma il pacchetto era già stato installato per intero e funzionante. L'installazione è stata poi completata manualmente.</p>
+  <p>Esito di <code>scripts/check_env.py</code>:</p>
+  <pre>torch 2.9.1+cu128 · CUDA 12.8 · capability (12, 0) · kernel di prova OK
+arch compilate: sm_70 … sm_100, <strong>sm_120</strong>
+torchaudio 2.9.1+cu128 · soundfile 0.14.0 · numpy 2.5.2
+yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
+=> ambiente pronto</pre>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Suite di test: 18 su 18 passati</p>
+  <p>Scritta <code>tests/test_pipeline.py</code>, eseguibile <strong>senza dataset</strong>: forme del front-end, invarianti delle augmentation, contatore di FLOPs, EMA, riproducibilità dei seed. Eseguita prima del download di 2,3 GB, per separare i bug dell'infrastruttura da quelli del modello.</p>
+  <p>Risultati notevoli:</p>
+  <ul>
+    <li>front-end conferma la forma <code>[B, 1, 64, 101]</code> — quel <strong>101</strong> è la <em>T</em> del modello denso, che il modello sparso riduce a <strong>N=4</strong> token: il fattore ~25 da cui viene il guadagno;</li>
+    <li><strong>rapporto FLOPs/MAC verificato empiricamente</strong>: su un <code>Linear(100→200)</code> senza bias, fvcore riporta 20 000 e il contatore nativo di torch 40 000 — <strong>esattamente 2,000000</strong>. L'avvertenza di <code>src/flops.py</code> non è più un'ipotesi;</li>
+    <li>EMA con decay 0,9 si sposta di esattamente 1 − decay = 0,1: la media mobile insegue, non copia.</li>
+  </ul>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Sorgenti della documentazione dentro al progetto</p>
+  <p>I sorgenti HTML dei PDF stavano in una cartella temporanea legata alla singola sessione di lavoro, quindi non ritrovabili in futuro. Spostati in <code>docs/</code> e aggiunto <code>scripts/build_docs.ps1</code> per rigenerare entrambi i PDF con un comando. Ora i documenti sono manutenibili e versionabili come il resto del codice.</p>
+</div>
+
+<!-- ==================================================================== -->
+<h2 class="brk">Registro delle decisioni</h2>
+<table>
+  <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:52mm">Decisione</th><th>Motivazione</th></tr></thead>
+  <tbody>
+    <tr><td class="c">12/08</td><td>Infrastruttura di misura prima del modello</td><td>Il claim è un rapporto accuratezza/FLOPs: un contatore scritto dopo tende a confermare il risultato atteso.</td></tr>
+    <tr><td class="c">12/08</td><td>Venv dedicato, non riuso di ambienti esistenti</td><td>Riproducibilità (l'ambiente è parte del deliverable); <code>DLA2026</code> appartiene a un altro corso.</td></tr>
+    <tr><td class="c">12/08</td><td>Criteri di successo definiti in anticipo</td><td>Per non poterli riscrivere a posteriori in base ai risultati.</td></tr>
+    <tr><td class="c">12/08</td><td>Installazione pip in due passi</td><td><code>--index-url</code> sostituisce PyPI; <code>--extra-index-url</code> esporrebbe a dependency confusion.</td></tr>
+    <tr><td class="c">17/08</td><td><strong>Baseline = dense-transformer, non EAT-S</strong></td><td>È il confronto controllato del paper; EAT-S è un numero citato. Riduce il lavoro e il rischio.</td></tr>
+    <tr><td class="c">17/08</td><td>Split ufficiali con verifica bloccante dei conteggi</td><td>Speaker-disjoint; i tre numeri dichiarati dal paper sono un test di correttezza gratuito.</td></tr>
+    <tr><td class="c">17/08</td><td>Ogni assunzione marcata <code>[ASSUNZIONE]</code></td><td>Il paper tace su sei punti: vanno dichiarati, non nascosti. È materiale da presentazione.</td></tr>
+    <tr><td class="c">17/08</td><td>Test prima del download del dataset</td><td>Separare i bug dell'infrastruttura da quelli del modello costa 2 secondi invece di ore.</td></tr>
+    <tr><td class="c">17/08</td><td>Sorgenti dei documenti in <code>docs/</code></td><td>Erano in una cartella temporanea di sessione: non ritrovabili in futuro.</td></tr>
+  </tbody>
+</table>
+
+<h2>Errori e correzioni</h2>
+<table>
+  <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:48mm">Cosa è andato storto</th><th>Esito</th></tr></thead>
+  <tbody>
+    <tr><td class="c">12/08</td><td>Ipotesi sbagliata sull'ancestor del metodo (importance-map di Mandel)</td><td>Smentita il 17/08: è SparseFormer. Era marcata «da confermare», ma resta una congettura presa per plausibile troppo a lungo.</td></tr>
+    <tr><td class="c">12/08</td><td>Stima della cache: 1,7 GB</td><td>Valore corretto <strong>2,72 GB</strong>. Corretto in PDF e codice.</td></tr>
+    <tr><td class="c">12/08</td><td>Generazione PDF fallita (flag inesistente, profilo Edge bloccato)</td><td>Risolto con <code>--user-data-dir</code> dedicato; ricetta salvata in <code>scripts/build_docs.ps1</code>.</td></tr>
+    <tr><td class="c">17/08</td><td>Lettura PDF impossibile (<code>poppler</code> mancante)</td><td>Aggirato con PyMuPDF dall'ambiente <code>DLA2026</code>.</td></tr>
+    <tr><td class="c">17/08</td><td><strong>Cancellazione di <code>src/</code> e <code>scripts/</code></strong></td><td>Recuperate dal cestino, verificate. <strong>Lezione: inizializzare git subito.</strong></td></tr>
+    <tr><td class="c">17/08</td><td><code>.gitignore</code> copriva <code>.venv/</code> ma l'ambiente si chiama <code>DL_F</code></td><td>Aggiunta la riga mancante prima del primo <code>git add</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2>Stato al 17 agosto 2026</h2>
+<table>
+  <thead><tr><th class="c" style="width:14mm">Fase</th><th style="width:56mm">Contenuto</th><th>Stato</th></tr></thead>
+  <tbody>
+    <tr><td class="c">0</td><td>Lettura paper + ancestor, setup</td><td>paper letti; <strong>SparseFormer ancora da leggere</strong>; form risorse e ricevimento da fare</td></tr>
+    <tr><td class="c">1</td><td>Prerequisiti teorici</td><td>in corso, in parallelo</td></tr>
+    <tr><td class="c"><strong>2</strong></td><td>Dati, split, contatore FLOPs</td><td><strong>codice scritto e testato (18/18)</strong>; download dataset in corso</td></tr>
+    <tr><td class="c">3</td><td>Early conv + dense transformer</td><td>da fare — prossimo passo</td></tr>
+    <tr><td class="c">4</td><td>Sparse feature extractor</td><td>da fare</td></tr>
+    <tr><td class="c">4-bis</td><td>EAT-S <em>(opzionale)</em></td><td>da fare</td></tr>
+    <tr><td class="c">5</td><td>Ablation, seed multipli, HPO</td><td>da fare</td></tr>
+    <tr><td class="c">6</td><td>Presentazione</td><td>da fare</td></tr>
+  </tbody>
+</table>
+
+<h4>Questioni aperte</h4>
+<ul>
+  <li><strong>Leggere SparseFormer</strong> (<code>paper pre progetto/2304.03768v1.pdf</code>): è dove il metodo è spiegato per esteso.</li>
+  <li><strong>Inizializzare il repository git</strong> — priorità alta dopo l'incidente del 17/08.</li>
+  <li>Compilare il <strong>form per le risorse di calcolo</strong> e fissare il <strong>ricevimento</strong> col docente.</li>
+  <li>Risolvere la contraddizione «96 dimensional» vs «196 kernels» implementando entrambe le letture.</li>
+  <li>Calibrare la convenzione FLOPs/MAC del paper misurando EAT-S con entrambi i contatori.</li>
+  <li>Verificare la formula di <em>PhaseMix</em> contro il codice ufficiale di EAT.</li>
+</ul>
+
+<p class="foot">Diario di bordo del progetto d'esame B031278 — Deep Learning, Fall 2025, Università di Firenze. Documento di lavoro personale, aggiornato a ogni sessione. Sorgente: <code>docs/diario_di_bordo.html</code> — rigenerare con <code>scripts\build_docs.ps1</code>.</p>
+
+</body>
+</html>
