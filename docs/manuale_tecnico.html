@@ -1,8 +1,8 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<title>Manuale tecnico â€” Audio Sparse-Transformer</title>
+<title>Manuale tecnico — Audio Sparse-Transformer</title>
 <style>
   @page { size: A4; margin: 18mm 16mm 16mm 16mm; }
   :root{
@@ -79,115 +79,115 @@
 <header>
   <h1>Manuale tecnico</h1>
   <p class="sub">Riproduzione di <em>Audio Sparse-Transformer for Speech Classification</em><br>Kavaki &amp; Mandel, ICASSP 2025</p>
-  <p class="sub" style="font-size:9.8pt">Progetto d'esame â€” B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, UniversitÃ  di Firenze</p>
-  <p class="meta">Versione 1.2 â€” 18 agosto 2026 Â· documento vivo, aggiornato a ogni sessione<br>
+  <p class="sub" style="font-size:9.8pt">Progetto d'esame — B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, Università di Firenze</p>
+  <p class="meta">Versione 1.2 — 18 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
   <em>v1.1: consultato il codice di SparseFormer e di EAT. Corrette le formule di <code>mixing</code> e <code>phasemix</code>, la sequenza dello stem e il default della normalizzazione; risolte la formula degli offset e l'inizializzazione a griglia.<br>
   v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.</em></p>
 </header>
 
 <div class="box info" style="margin-top:6mm">
   <p class="box-t">Come leggere questo manuale</p>
-  <p>Documenta <strong>tutto</strong>: la matematica sottostante, l'architettura, ogni scelta implementativa e la sua motivazione. Ãˆ pensato per due usi: ripassare in vista dell'orale, e poter rispondere a Â«perchÃ© hai fatto cosÃ¬Â» su qualunque riga di codice.</p>
+  <p>Documenta <strong>tutto</strong>: la matematica sottostante, l'architettura, ogni scelta implementativa e la sua motivazione. È pensato per due usi: ripassare in vista dell'orale, e poter rispondere a «perché hai fatto così» su qualunque riga di codice.</p>
   <p>Tre marcatori ricorrono nel testo:</p>
-  <p><span class="tag t-pap">dal paper</span> dichiarato esplicitamente da Kavaki &amp; Mandel Â· <span class="tag t-ass">assunzione</span> scelta nostra su un punto in cui il paper tace Â· <span class="tag t-evi">evidenza</span> supportato da una misura che abbiamo eseguito.</p>
+  <p><span class="tag t-pap">dal paper</span> dichiarato esplicitamente da Kavaki &amp; Mandel · <span class="tag t-ass">assunzione</span> scelta nostra su un punto in cui il paper tace · <span class="tag t-evi">evidenza</span> supportato da una misura che abbiamo eseguito.</p>
   <p>Documenti fratelli: <code>Pipeline_progetto_DL.pdf</code> (il piano) e <code>Diario_di_bordo.pdf</code> (la cronaca, con gli errori).</p>
 </div>
 
 <h4>Indice</h4>
 <ol class="toc">
-  <li>Il problema e l'inquadramento <span class="s">â€” keyword spotting, i due paper, la catena di ancestors</span></li>
-  <li>Dalla forma d'onda allo spettrogramma <span class="s">â€” STFT, scala mel, logaritmo, normalizzazione</span></li>
-  <li>Il transformer <span class="s">â€” attenzione, scaling, complessitÃ , pre-norm, codifica posizionale</span></li>
-  <li>Convoluzione e early convolution <span class="s">â€” aritmetica, campo recettivo, perchÃ© serve</span></li>
-  <li>Ottimizzazione <span class="s">â€” da SGD ad AdamW, one-cycle, EMA</span></li>
-  <li>Loss e augmentation <span class="s">â€” softmax, BCE, mixup, phasemix</span></li>
-  <li>Il metodo sparso, per intero <span class="s">â€” regioni, campionamento, decoding adattivo</span></li>
-  <li>La ricostruzione del modello denso <span class="s">â€” vincoli numerici, ricerca, risultati</span></li>
-  <li>Catalogo delle assunzioni <span class="s">â€” ognuna con la sua evidenza</span></li>
+  <li>Il problema e l'inquadramento <span class="s">— keyword spotting, i due paper, la catena di ancestors</span></li>
+  <li>Dalla forma d'onda allo spettrogramma <span class="s">— STFT, scala mel, logaritmo, normalizzazione</span></li>
+  <li>Il transformer <span class="s">— attenzione, scaling, complessità, pre-norm, codifica posizionale</span></li>
+  <li>Convoluzione e early convolution <span class="s">— aritmetica, campo recettivo, perché serve</span></li>
+  <li>Ottimizzazione <span class="s">— da SGD ad AdamW, one-cycle, EMA</span></li>
+  <li>Loss e augmentation <span class="s">— softmax, BCE, mixup, phasemix</span></li>
+  <li>Il metodo sparso, per intero <span class="s">— regioni, campionamento, decoding adattivo</span></li>
+  <li>La ricostruzione del modello denso <span class="s">— vincoli numerici, ricerca, risultati</span></li>
+  <li>Catalogo delle assunzioni <span class="s">— ognuna con la sua evidenza</span></li>
   <li>Il codice, file per file</li>
   <li>Protocollo sperimentale e misura</li>
   <li>Riferimenti</li>
 </ol>
 
 <!-- ================================================================= -->
-<h2>1 Â· Il problema e l'inquadramento</h2>
+<h2>1 · Il problema e l'inquadramento</h2>
 
 <h3>1.1 Che cosa stiamo classificando</h3>
-<p>Il compito Ã¨ <strong>keyword spotting</strong>: data una registrazione di un secondo contenente una singola parola pronunciata, dire quale delle 35 parole del vocabolario Ã¨. Il dataset Ã¨ <em>Google Speech Commands V2</em> (Warden 2018): 105 829 clip a 16 kHz.</p>
-<p>Ãˆ un problema di classificazione a 35 classi, con due caratteristiche che ne determinano il trattamento. Primo: gli esempi sono <strong>corti e di lunghezza fissa</strong>, quindi non serve gestire sequenze di lunghezza variabile nÃ© allineamento. Secondo: il compito Ã¨ pensato per <strong>dispositivi a risorse limitate</strong> â€” un assistente vocale che ascolta in continuo â€” e per questo il costo computazionale Ã¨ una metrica di prima classe, non un dettaglio.</p>
+<p>Il compito è <strong>keyword spotting</strong>: data una registrazione di un secondo contenente una singola parola pronunciata, dire quale delle 35 parole del vocabolario è. Il dataset è <em>Google Speech Commands V2</em> (Warden 2018): 105 829 clip a 16 kHz.</p>
+<p>È un problema di classificazione a 35 classi, con due caratteristiche che ne determinano il trattamento. Primo: gli esempi sono <strong>corti e di lunghezza fissa</strong>, quindi non serve gestire sequenze di lunghezza variabile né allineamento. Secondo: il compito è pensato per <strong>dispositivi a risorse limitate</strong> — un assistente vocale che ascolta in continuo — e per questo il costo computazionale è una metrica di prima classe, non un dettaglio.</p>
 
 <h3>1.2 I due paper e il loro rapporto</h3>
-<p><strong>Gazneli et al. 2022 â€” EAT.</strong> Rete end-to-end che opera sulla <em>forma d'onda grezza</em>, senza spettrogramma: stack di convoluzioni 1D seguito da un encoder transformer. Il contributo dichiarato non Ã¨ l'architettura ma un insieme di <em>augmentation audio</em>. EAT-S ha 5,3 M parametri e riporta 98,15 % su Speech Commands.</p>
-<p><strong>Kavaki &amp; Mandel 2025 â€” Audio Sparse-Transformer.</strong> Osserva che la complessitÃ  della self-attention cresce quadraticamente con la lunghezza della sequenza, e che nell'audio le dipendenze a lungo raggio contano poco. Sostituisce quindi la lunga sequenza di frame temporali con una <strong>sequenza cortissima di token latenti</strong> â€” quattro â€” ottenuti campionando poche regioni informative dello spettrogramma. Riporta 96,88 % con 2,87 M parametri e 0,055 G FLOPs.</p>
+<p><strong>Gazneli et al. 2022 — EAT.</strong> Rete end-to-end che opera sulla <em>forma d'onda grezza</em>, senza spettrogramma: stack di convoluzioni 1D seguito da un encoder transformer. Il contributo dichiarato non è l'architettura ma un insieme di <em>augmentation audio</em>. EAT-S ha 5,3 M parametri e riporta 98,15 % su Speech Commands.</p>
+<p><strong>Kavaki &amp; Mandel 2025 — Audio Sparse-Transformer.</strong> Osserva che la complessità della self-attention cresce quadraticamente con la lunghezza della sequenza, e che nell'audio le dipendenze a lungo raggio contano poco. Sostituisce quindi la lunga sequenza di frame temporali con una <strong>sequenza cortissima di token latenti</strong> — quattro — ottenuti campionando poche regioni informative dello spettrogramma. Riporta 96,88 % con 2,87 M parametri e 0,055 G FLOPs.</p>
 
 <div class="box info">
   <p class="box-t">Il punto che ha ristrutturato il nostro piano</p>
-  <p>Il confronto <em>controllato</em> del paper non Ã¨ contro EAT-S, ma contro il proprio <strong>dense-transformer</strong>: la stessa identica architettura che processa la sequenza dei frame temporali invece dei token latenti (96,67 %, 4,80 M, 0,645 G). Il numero di EAT-S Ã¨ <strong>citato dalla letteratura</strong>, non rimisurato dagli autori.</p>
-  <p>Conseguenza: il baseline da riprodurre per primo Ã¨ il denso, non EAT-S. Condivide con lo sparso tutto il codice a valle e isola i bug del training loop da quelli del tokenizer.</p>
+  <p>Il confronto <em>controllato</em> del paper non è contro EAT-S, ma contro il proprio <strong>dense-transformer</strong>: la stessa identica architettura che processa la sequenza dei frame temporali invece dei token latenti (96,67 %, 4,80 M, 0,645 G). Il numero di EAT-S è <strong>citato dalla letteratura</strong>, non rimisurato dagli autori.</p>
+  <p>Conseguenza: il baseline da riprodurre per primo è il denso, non EAT-S. Condivide con lo sparso tutto il codice a valle e isola i bug del training loop da quelli del tokenizer.</p>
 </div>
 
 <h3>1.3 La catena di ancestors</h3>
-<p>Il metodo non nasce nell'audio. Ãˆ la trasposizione di <strong>SparseFormer</strong> (Gao et al. 2023), un modello per ImageNet che riconosce immagini campionando poche regioni invece di processare tutti i patch. Da SparseFormer arrivano tre componenti, ciascuna con la propria origine:</p>
+<p>Il metodo non nasce nell'audio. È la trasposizione di <strong>SparseFormer</strong> (Gao et al. 2023), un modello per ImageNet che riconosce immagini campionando poche regioni invece di processare tutti i patch. Da SparseFormer arrivano tre componenti, ciascuna con la propria origine:</p>
 <table>
   <thead><tr><th style="width:44mm">Componente</th><th>Origine</th></tr></thead>
   <tbody>
-    <tr><td>Parametrizzazione delle regioni</td><td><strong>Faster R-CNN</strong> (Ren et al. 2015) â€” la codifica (Î”x, Î”y, log Î”w, log Î”h) delle bounding box</td></tr>
-    <tr><td>Decoding adattivo</td><td><strong>AdaMixer</strong> (Gao et al. 2022) â€” pesi di mixing generati dalla query invece che fissi</td></tr>
-    <tr><td>Front-end convolutivo</td><td><strong>Xiao et al. 2021</strong> â€” <em>Early Convolutions Help Transformers See Better</em></td></tr>
+    <tr><td>Parametrizzazione delle regioni</td><td><strong>Faster R-CNN</strong> (Ren et al. 2015) — la codifica (Δx, Δy, log Δw, log Δh) delle bounding box</td></tr>
+    <tr><td>Decoding adattivo</td><td><strong>AdaMixer</strong> (Gao et al. 2022) — pesi di mixing generati dalla query invece che fissi</td></tr>
+    <tr><td>Front-end convolutivo</td><td><strong>Xiao et al. 2021</strong> — <em>Early Convolutions Help Transformers See Better</em></td></tr>
   </tbody>
 </table>
-<p>Leggere SparseFormer non Ã¨ opzionale: le cinque pagine ICASSP comprimono in tre formule ciÃ² che lÃ¬ Ã¨ esposto per esteso.</p>
+<p>Leggere SparseFormer non è opzionale: le cinque pagine ICASSP comprimono in tre formule ciò che lì è esposto per esteso.</p>
 
 <h3>1.4 Il codice di riferimento: cosa abbiamo consultato, e per cosa</h3>
-<p>La consegna chiede di reimplementare il metodo <em>in modo autonomo</em>. La pagina del corso prevede perÃ² esplicitamente che Â«reading other ancestors in the citation graph may be necessaryÂ», specialmente Â«when dealing with the details of the experimental proceduresÂ». Questa sezione dichiara esattamente cosa Ã¨ stato consultato e a quale scopo. <strong>Nessuna riga Ã¨ stata copiata.</strong></p>
+<p>La consegna chiede di reimplementare il metodo <em>in modo autonomo</em>. La pagina del corso prevede però esplicitamente che «reading other ancestors in the citation graph may be necessary», specialmente «when dealing with the details of the experimental procedures». Questa sezione dichiara esattamente cosa è stato consultato e a quale scopo. <strong>Nessuna riga è stata copiata.</strong></p>
 <table>
   <thead><tr><th style="width:34mm">Paper</th><th style="width:44mm">Repository</th><th>Uso</th></tr></thead>
   <tbody>
-    <tr><td><strong>Kavaki &amp; Mandel 2025</strong></td><td><em>nessuna</em></td><td>Verificato leggendo tutte e cinque le pagine: nessun link, nessuna menzione di codice pubblico. Il metodo Ã¨ reimplementato dalle sole formule del paper.</td></tr>
-    <tr><td><strong>SparseFormer</strong><br>Gao et al. 2023</td><td><code>github.com/showlab/<wbr>sparseformer</code><br><span style="color:var(--muted)">file: <code>imagenet/models/sparseformer.py</code></span></td><td>Sciolte tre ambiguitÃ  che il paper ICASSP lascia aperte: la formula della normalizzazione Â«a tre deviazioni standardÂ» (Â§7.3), l'inizializzazione di token e regioni (Â§7.1), e la sequenza esatta dello stem convolutivo (Â§4.3).</td></tr>
-    <tr><td><strong>EAT</strong><br>Gazneli et al. 2022</td><td><code>github.com/Alibaba-MIIL/<wbr>AudioClassfication</code><br><span style="color:var(--muted)">file: <code>datasets/batch_augs.py</code>, <code>trainer.py</code>, <code>utils/helper_funcs.py</code></span></td><td>Ricavate le formule di <code>mixing</code> e <code>phasemix</code> (Â§6.3), la loro programmazione e la costruzione del target mixato (Â§6.3.4â€“5), i parametri di one-cycle (Â§5.3) e il criterio del weight decay (Â§5.2).</td></tr>
+    <tr><td><strong>Kavaki &amp; Mandel 2025</strong></td><td><em>nessuna</em></td><td>Verificato leggendo tutte e cinque le pagine: nessun link, nessuna menzione di codice pubblico. Il metodo è reimplementato dalle sole formule del paper.</td></tr>
+    <tr><td><strong>SparseFormer</strong><br>Gao et al. 2023</td><td><code>github.com/showlab/<wbr>sparseformer</code><br><span style="color:var(--muted)">file: <code>imagenet/models/sparseformer.py</code></span></td><td>Sciolte tre ambiguità che il paper ICASSP lascia aperte: la formula della normalizzazione «a tre deviazioni standard» (§7.3), l'inizializzazione di token e regioni (§7.1), e la sequenza esatta dello stem convolutivo (§4.3).</td></tr>
+    <tr><td><strong>EAT</strong><br>Gazneli et al. 2022</td><td><code>github.com/Alibaba-MIIL/<wbr>AudioClassfication</code><br><span style="color:var(--muted)">file: <code>datasets/batch_augs.py</code>, <code>trainer.py</code>, <code>utils/helper_funcs.py</code></span></td><td>Ricavate le formule di <code>mixing</code> e <code>phasemix</code> (§6.3), la loro programmazione e la costruzione del target mixato (§6.3.4–5), i parametri di one-cycle (§5.3) e il criterio del weight decay (§5.2).</td></tr>
   </tbody>
 </table>
 <div class="box warn">
-  <p class="box-t">PerchÃ© questa consultazione era necessaria</p>
-  <p>Una prima versione delle augmentation, scritta dalle sole descrizioni testuali, Ã¨ risultata <strong>sbagliata su quasi tutti i dettagli</strong>: trasformata sbagliata, ampiezza mescolata invece che preservata, distribuzione di Î» sbagliata, peso dell'etichetta sbagliato. Nessuno di questi errori era rilevabile dal testo del paper.</p>
-  <p>Attenzione alla versione: il repository di SparseFormer contiene anche una libreria <code>sparseformer/</code> corrispondente alle versioni ICLR 2024 e CVPR 2024, <em>successive e diverse</em>. Il file rilevante Ã¨ quello sotto <code>imagenet/</code>, che implementa la v1 (arXiv:2304.03768), cioÃ¨ la versione che Kavaki &amp; Mandel citano.</p>
+  <p class="box-t">Perché questa consultazione era necessaria</p>
+  <p>Una prima versione delle augmentation, scritta dalle sole descrizioni testuali, è risultata <strong>sbagliata su quasi tutti i dettagli</strong>: trasformata sbagliata, ampiezza mescolata invece che preservata, distribuzione di λ sbagliata, peso dell'etichetta sbagliato. Nessuno di questi errori era rilevabile dal testo del paper.</p>
+  <p>Attenzione alla versione: il repository di SparseFormer contiene anche una libreria <code>sparseformer/</code> corrispondente alle versioni ICLR 2024 e CVPR 2024, <em>successive e diverse</em>. Il file rilevante è quello sotto <code>imagenet/</code>, che implementa la v1 (arXiv:2304.03768), cioè la versione che Kavaki &amp; Mandel citano.</p>
 </div>
 
 <!-- ================================================================= -->
-<h2>2 Â· Dalla forma d'onda allo spettrogramma</h2>
+<h2>2 · Dalla forma d'onda allo spettrogramma</h2>
 
-<h3>2.1 PerchÃ© non lavorare sul segnale grezzo</h3>
-<p>Una clip di un secondo a 16 kHz Ã¨ un vettore di 16 000 campioni. Un transformer che trattasse ogni campione come token affronterebbe una sequenza di lunghezza 16 000, con una matrice di attenzione da 2,56Â·10â¸ elementi per testa: impraticabile. Serve una rappresentazione che comprima il tempo preservando il contenuto fonetico. EAT risolve il problema con convoluzioni 1D a stride elevato; Kavaki &amp; Mandel usano invece la rappresentazione tempo-frequenza classica.</p>
+<h3>2.1 Perché non lavorare sul segnale grezzo</h3>
+<p>Una clip di un secondo a 16 kHz è un vettore di 16 000 campioni. Un transformer che trattasse ogni campione come token affronterebbe una sequenza di lunghezza 16 000, con una matrice di attenzione da 2,56·10⁸ elementi per testa: impraticabile. Serve una rappresentazione che comprima il tempo preservando il contenuto fonetico. EAT risolve il problema con convoluzioni 1D a stride elevato; Kavaki &amp; Mandel usano invece la rappresentazione tempo-frequenza classica.</p>
 
 <h3>2.2 Short-Time Fourier Transform</h3>
 <p>Si divide il segnale in finestre brevi e sovrapposte, su ciascuna si calcola la trasformata di Fourier discreta. Detto <span class="v">x</span>[<span class="v">n</span>] il segnale e <span class="v">w</span>[<span class="v">n</span>] una finestra di lunghezza <span class="v">L</span>:</p>
 <div class="eq">
-  <span class="v">X</span>[<span class="v">m</span>, <span class="v">k</span>] = Î£<sub><span class="v">n</span>=0</sub><sup><span class="v">L</span>âˆ’1</sup> <span class="v">x</span>[<span class="v">n</span> + <span class="v">mÂ·H</span>] Â· <span class="v">w</span>[<span class="v">n</span>] Â· <span class="v">e</span><sup>âˆ’<span class="v">j</span>2Ï€<span class="v">kn</span>/<span class="v">L</span></sup>
+  <span class="v">X</span>[<span class="v">m</span>, <span class="v">k</span>] = Σ<sub><span class="v">n</span>=0</sub><sup><span class="v">L</span>−1</sup> <span class="v">x</span>[<span class="v">n</span> + <span class="v">m·H</span>] · <span class="v">w</span>[<span class="v">n</span>] · <span class="v">e</span><sup>−<span class="v">j</span>2π<span class="v">kn</span>/<span class="v">L</span></sup>
   <span class="n">(2.1)</span>
 </div>
-<p>dove <span class="v">m</span> indicizza il frame temporale, <span class="v">k</span> il bin di frequenza e <span class="v">H</span> Ã¨ l'<em>hop</em>, cioÃ¨ l'avanzamento fra finestre consecutive.</p>
-<p>Il compromesso fondamentale Ã¨ quello di Heisenberg per l'analisi tempo-frequenza: una finestra lunga dÃ  buona risoluzione in frequenza (Î”f â‰ˆ <span class="v">f<sub>s</sub></span>/<span class="v">L</span>) ma cattiva nel tempo; una corta il contrario. Per il parlato la convenzione Ã¨ una finestra di <strong>20â€“30 ms</strong>, che Ã¨ la scala su cui l'apparato fonatorio si puÃ² considerare stazionario, con hop di <strong>10 ms</strong>.</p>
+<p>dove <span class="v">m</span> indicizza il frame temporale, <span class="v">k</span> il bin di frequenza e <span class="v">H</span> è l'<em>hop</em>, cioè l'avanzamento fra finestre consecutive.</p>
+<p>Il compromesso fondamentale è quello di Heisenberg per l'analisi tempo-frequenza: una finestra lunga dà buona risoluzione in frequenza (Δf ≈ <span class="v">f<sub>s</sub></span>/<span class="v">L</span>) ma cattiva nel tempo; una corta il contrario. Per il parlato la convenzione è una finestra di <strong>20–30 ms</strong>, che è la scala su cui l'apparato fonatorio si può considerare stazionario, con hop di <strong>10 ms</strong>.</p>
 
 <h3>2.3 La scala mel</h3>
-<p>La percezione umana dell'altezza non Ã¨ lineare in frequenza: distinguiamo bene 200 da 300 Hz, quasi nulla 8000 da 8100 Hz. La scala mel modella questa compressione:</p>
+<p>La percezione umana dell'altezza non è lineare in frequenza: distinguiamo bene 200 da 300 Hz, quasi nulla 8000 da 8100 Hz. La scala mel modella questa compressione:</p>
 <div class="eq">
-  <span class="v">m</span>(<span class="v">f</span>) = 2595 Â· log<sub>10</sub>(1 + <span class="v">f</span> / 700)
+  <span class="v">m</span>(<span class="v">f</span>) = 2595 · log<sub>10</sub>(1 + <span class="v">f</span> / 700)
   <span class="n">(2.2)</span>
 </div>
-<p>Si costruisce quindi un banco di <span class="v">M</span> filtri triangolari equispaziati <em>in mel</em>, e si proietta lo spettro di potenza |<span class="v">X</span>[<span class="v">m</span>,<span class="v">k</span>]|Â² su questa base. Il risultato Ã¨ una matrice <span class="v">M</span> Ã— <span class="v">T</span> molto piÃ¹ compatta dello spettrogramma lineare, con risoluzione fine alle basse frequenze â€” dove stanno formanti e armoniche della voce â€” e grossolana alle alte.</p>
+<p>Si costruisce quindi un banco di <span class="v">M</span> filtri triangolari equispaziati <em>in mel</em>, e si proietta lo spettro di potenza |<span class="v">X</span>[<span class="v">m</span>,<span class="v">k</span>]|² su questa base. Il risultato è una matrice <span class="v">M</span> × <span class="v">T</span> molto più compatta dello spettrogramma lineare, con risoluzione fine alle basse frequenze — dove stanno formanti e armoniche della voce — e grossolana alle alte.</p>
 
 <h3>2.4 Il logaritmo</h3>
 <p>Si applica infine il logaritmo alle energie di banda. Tre ragioni, tutte solide:</p>
 <ul>
-  <li><strong>percettiva</strong>: la sonoritÃ  percepita Ã¨ approssimativamente logaritmica nell'intensitÃ  (legge di Weber-Fechner);</li>
-  <li><strong>statistica</strong>: le energie hanno distribuzione fortemente asimmetrica con code lunghe; il logaritmo le rende quasi gaussiane, che Ã¨ il regime in cui le reti si addestrano meglio;</li>
-  <li><strong>algebrica</strong>: un guadagno moltiplicativo sul segnale (registrare piÃ¹ forte) diventa un <em>offset additivo</em> costante sullo spettrogramma logaritmico. Questo trasforma un fastidio moltiplicativo in uno additivo, che una normalizzazione o una BatchNorm rimuove banalmente.</li>
+  <li><strong>percettiva</strong>: la sonorità percepita è approssimativamente logaritmica nell'intensità (legge di Weber-Fechner);</li>
+  <li><strong>statistica</strong>: le energie hanno distribuzione fortemente asimmetrica con code lunghe; il logaritmo le rende quasi gaussiane, che è il regime in cui le reti si addestrano meglio;</li>
+  <li><strong>algebrica</strong>: un guadagno moltiplicativo sul segnale (registrare più forte) diventa un <em>offset additivo</em> costante sullo spettrogramma logaritmico. Questo trasforma un fastidio moltiplicativo in uno additivo, che una normalizzazione o una BatchNorm rimuove banalmente.</li>
 </ul>
 
-<h3>2.5 I nostri parametri, e perchÃ© <span class="tag t-evi">evidenza</span></h3>
-<p>Il paper <strong>non dichiara alcun parametro dello spettrogramma</strong>: nÃ© il tipo, nÃ© <code>n_fft</code>, nÃ© l'hop, nÃ© il numero di bin. Avevamo identificato questo come il grado di libertÃ  potenzialmente piÃ¹ impattante dell'intera riproduzione. Lo abbiamo misurato.</p>
-<p><strong>Esperimento (sonda lineare).</strong> Per ciascun valore di <span class="v">M</span> si calcolano le log-mel di 12 000 clip di training e 4 000 di validation, si mediano su 8 finestre temporali, si standardizzano e si addestra una <em>regressione logistica multinomiale</em> â€” un solo strato lineare. L'accuratezza risultante misura quanta informazione <em>linearmente decodificabile</em> contiene la rappresentazione, senza coinvolgere alcun modello profondo.</p>
+<h3>2.5 I nostri parametri, e perché <span class="tag t-evi">evidenza</span></h3>
+<p>Il paper <strong>non dichiara alcun parametro dello spettrogramma</strong>: né il tipo, né <code>n_fft</code>, né l'hop, né il numero di bin. Avevamo identificato questo come il grado di libertà potenzialmente più impattante dell'intera riproduzione. Lo abbiamo misurato.</p>
+<p><strong>Esperimento (sonda lineare).</strong> Per ciascun valore di <span class="v">M</span> si calcolano le log-mel di 12 000 clip di training e 4 000 di validation, si mediano su 8 finestre temporali, si standardizzano e si addestra una <em>regressione logistica multinomiale</em> — un solo strato lineare. L'accuratezza risultante misura quanta informazione <em>linearmente decodificabile</em> contiene la rappresentazione, senza coinvolgere alcun modello profondo.</p>
 <table>
   <thead><tr><th class="c">bin mel</th><th class="c">dim. feature</th><th class="c">accuratezza sonda</th><th class="c">F dopo lo stem</th></tr></thead>
   <tbody>
@@ -200,24 +200,24 @@
 </table>
 <div class="box">
   <p class="box-t">Il risultato smentisce la preoccupazione iniziale</p>
-  <p>L'escursione fra il peggiore e il migliore Ã¨ di <strong>0,8 punti percentuali</strong> su un intervallo di risoluzione che varia di un fattore quattro, e la curva <strong>non Ã¨ monotona</strong>: 128 bin fanno peggio di 80. Il parametro che temevamo dominante Ã¨ in realtÃ  quasi <strong>piatto</strong>.</p>
-  <p>Scegliamo <strong>64 bin</strong>: sta a 0,22 punti dal migliore â€” differenza dentro il rumore â€” ed Ã¨ l'unico valore che dopo lo stem convolutivo produce <span class="v">F</span> = 16, una potenza di due. Questo conta perchÃ© il modello sparso inizializza le regioni Â«a metÃ  della dimensione della feature mapÂ» e ne campiona l'interno: una griglia 16 Ã— 51 Ã¨ geometricamente piÃ¹ pulita di una 20 Ã— 51.</p>
-  <p><em>Limite dichiarato</em>: la sonda lineare Ã¨ un <em>lower bound</em>. Un modello profondo potrebbe sfruttare la risoluzione in modi che un classificatore lineare non vede. L'evidenza giustifica il non accanirsi, non dimostra l'ottimalitÃ .</p>
+  <p>L'escursione fra il peggiore e il migliore è di <strong>0,8 punti percentuali</strong> su un intervallo di risoluzione che varia di un fattore quattro, e la curva <strong>non è monotona</strong>: 128 bin fanno peggio di 80. Il parametro che temevamo dominante è in realtà quasi <strong>piatto</strong>.</p>
+  <p>Scegliamo <strong>64 bin</strong>: sta a 0,22 punti dal migliore — differenza dentro il rumore — ed è l'unico valore che dopo lo stem convolutivo produce <span class="v">F</span> = 16, una potenza di due. Questo conta perché il modello sparso inizializza le regioni «a metà della dimensione della feature map» e ne campiona l'interno: una griglia 16 × 51 è geometricamente più pulita di una 20 × 51.</p>
+  <p><em>Limite dichiarato</em>: la sonda lineare è un <em>lower bound</em>. Un modello profondo potrebbe sfruttare la risoluzione in modi che un classificatore lineare non vede. L'evidenza giustifica il non accanirsi, non dimostra l'ottimalità.</p>
 </div>
-<p>Parametri finali: <code>n_fft = 400</code> (25 ms), <code>hop = 160</code> (10 ms), <code>M = 64</code>, <span class="v">f</span> âˆˆ [20, 7600] Hz. Una clip da un secondo produce 16000/160 + 1 = <strong>101 frame</strong>.</p>
+<p>Parametri finali: <code>n_fft = 400</code> (25 ms), <code>hop = 160</code> (10 ms), <code>M = 64</code>, <span class="v">f</span> ∈ [20, 7600] Hz. Una clip da un secondo produce 16000/160 + 1 = <strong>101 frame</strong>.</p>
 
 <h4>Mel o spettrogramma lineare? <span class="tag t-evi">evidenza</span></h4>
-<p>Domanda piÃ¹ fondamentale del numero di bin, e per un po' l'avevamo data per scontata. Il paper scrive sempre <em>Â«spectrogramÂ»</em> per il proprio modello; l'unica volta che dice <em>Â«Mel-spectrogramÂ»</em> Ã¨ descrivendo KWT, un lavoro altrui. Tecnicamente, quindi, non lo dichiara.</p>
-<p>Il sostegno alla scelta del mel viene da tre fonti, nessuna delle quali Ã¨ EAT:</p>
+<p>Domanda più fondamentale del numero di bin, e per un po' l'avevamo data per scontata. Il paper scrive sempre <em>«spectrogram»</em> per il proprio modello; l'unica volta che dice <em>«Mel-spectrogram»</em> è descrivendo KWT, un lavoro altrui. Tecnicamente, quindi, non lo dichiara.</p>
+<p>Il sostegno alla scelta del mel viene da tre fonti, nessuna delle quali è EAT:</p>
 <ul>
-  <li><strong>KWT</strong> (Berg et al. 2021), il modello piÃ¹ vicino al nostro compito â€” keyword spotting su Speech Commands con un transformer â€” usa, per parola dello stesso Kavaki, Â«a sequence of non-overlapping <strong>Mel-spectrogram</strong> patchesÂ»;</li>
+  <li><strong>KWT</strong> (Berg et al. 2021), il modello più vicino al nostro compito — keyword spotting su Speech Commands con un transformer — usa, per parola dello stesso Kavaki, «a sequence of non-overlapping <strong>Mel-spectrogram</strong> patches»;</li>
   <li><strong>AST</strong> (Gong et al. 2021), l'altro riferimento citato, opera su spettrogrammi 2D con banco mel;</li>
-  <li>EAT stesso, pur non usandolo, riporta che i sistemi di riconoscimento audio si basano Â«mostly on a <strong>mel-spectrogram</strong> representationÂ» e cita una comparazione sistematica fra rappresentazioni che ne deduce la <em>superioritÃ </em>.</li>
+  <li>EAT stesso, pur non usandolo, riporta che i sistemi di riconoscimento audio si basano «mostly on a <strong>mel-spectrogram</strong> representation» e cita una comparazione sistematica fra rappresentazioni che ne deduce la <em>superiorità</em>.</li>
 </ul>
 <div class="box warn">
   <p class="box-t">Una precisazione che va fatta</p>
-  <p>Sarebbe scorretto giustificare il mel dicendo Â«lo usa l'altro paper assegnatoÂ»: <strong>EAT non usa affatto il mel</strong>. Anzi, la sua tesi centrale Ã¨ l'opposto â€” opera sulla forma d'onda grezza e argomenta esplicitamente che Â«the use of mel-spectrogram comes at the cost of having to carefully adjust the parameters for time-frequency resolution and compressionÂ».</p>
-  <p>La conclusione (usare il mel) resta valida, ma poggia su KWT, su AST e sulla comparazione che EAT cita â€” non su EAT. All'orale un'affermazione giusta con la motivazione sbagliata Ã¨ peggio di un dubbio dichiarato.</p>
+  <p>Sarebbe scorretto giustificare il mel dicendo «lo usa l'altro paper assegnato»: <strong>EAT non usa affatto il mel</strong>. Anzi, la sua tesi centrale è l'opposto — opera sulla forma d'onda grezza e argomenta esplicitamente che «the use of mel-spectrogram comes at the cost of having to carefully adjust the parameters for time-frequency resolution and compression».</p>
+  <p>La conclusione (usare il mel) resta valida, ma poggia su KWT, su AST e sulla comparazione che EAT cita — non su EAT. All'orale un'affermazione giusta con la motivazione sbagliata è peggio di un dubbio dichiarato.</p>
 </div>
 
 <h3>2.6 Normalizzazione per-campione <span class="tag t-ass">assunzione</span> <span class="tag t-evi">evidenza</span></h3>
@@ -228,88 +228,88 @@
                                 p99  -12,0 dB
 
 escursione p1-p99 : 28,5 dB  ->  fattore 27x in ampiezza</pre>
-<p>La premessa Ã¨ quindi vera e non di poco: la stessa parola puÃ² arrivare al modello con ampiezze che differiscono di oltre un ordine di grandezza.</p>
+<p>La premessa è quindi vera e non di poco: la stessa parola può arrivare al modello con ampiezze che differiscono di oltre un ordine di grandezza.</p>
 <div class="box warn">
   <p class="box-t">Ma l'evidenza non sostiene la nostra aggiunta</p>
   <p>Ripetendo la sonda lineare a 64 bin con e senza normalizzazione:</p>
   <pre>con normalizzazione   : 42,33 %
 senza normalizzazione : 42,83 %</pre>
-  <p>La normalizzazione <strong>peggiora</strong> di mezzo punto. L'interpretazione plausibile Ã¨ che il livello assoluto porti un po' di segnale utile â€” o correli con condizioni di registrazione che a loro volta correlano con le classi â€” e che azzerarlo distrugga questa informazione.</p>
-  <p><strong>Decisione</strong>: default <code>normalize=False</code>. La variante resta un flag e diventa una delle ablation dichiarate, non un default silenzioso. A rafforzare la scelta: <strong>nÃ© il paper nÃ© i due ancestor</strong> â€” SparseFormer ed EAT, il cui codice abbiamo letto â€” normalizzano lo spettrogramma. Non abbiamo evidenza a favore di un'aggiunta introdotta per convinzione, e la fedeltÃ  alla riproduzione ha la precedenza.</p>
+  <p>La normalizzazione <strong>peggiora</strong> di mezzo punto. L'interpretazione plausibile è che il livello assoluto porti un po' di segnale utile — o correli con condizioni di registrazione che a loro volta correlano con le classi — e che azzerarlo distrugga questa informazione.</p>
+  <p><strong>Decisione</strong>: default <code>normalize=False</code>. La variante resta un flag e diventa una delle ablation dichiarate, non un default silenzioso. A rafforzare la scelta: <strong>né il paper né i due ancestor</strong> — SparseFormer ed EAT, il cui codice abbiamo letto — normalizzano lo spettrogramma. Non abbiamo evidenza a favore di un'aggiunta introdotta per convinzione, e la fedeltà alla riproduzione ha la precedenza.</p>
 </div>
 
 <!-- ================================================================= -->
-<h2>3 Â· Il transformer</h2>
+<h2>3 · Il transformer</h2>
 
 <h3>3.1 L'attenzione come dizionario morbido</h3>
-<p>Un dizionario classico associa a una chiave esatta un valore. L'attenzione generalizza: data una <em>query</em> <span class="mat">q</span>, invece di cercare la chiave identica si calcola una <strong>similaritÃ </strong> con tutte le chiavi <span class="mat">k</span><sub><span class="v">j</span></sub>, la si normalizza a distribuzione di probabilitÃ , e si restituisce la <em>media pesata</em> dei valori:</p>
+<p>Un dizionario classico associa a una chiave esatta un valore. L'attenzione generalizza: data una <em>query</em> <span class="mat">q</span>, invece di cercare la chiave identica si calcola una <strong>similarità</strong> con tutte le chiavi <span class="mat">k</span><sub><span class="v">j</span></sub>, la si normalizza a distribuzione di probabilità, e si restituisce la <em>media pesata</em> dei valori:</p>
 <div class="eq">
   Attn(<span class="mat">q</span>, <span class="mat">K</span>, <span class="mat">V</span>) = Î£<sub><span class="v">j</span></sub> Î±<sub><span class="v">j</span></sub> <span class="mat">v</span><sub><span class="v">j</span></sub>, &nbsp;&nbsp;
-  Î± = softmax( <span class="mat">q</span><sup>âŠ¤</sup><span class="mat">K</span> / âˆš<span class="v">d<sub>k</sub></span> )
+  α = softmax( <span class="mat">q</span><sup>⊤</sup><span class="mat">K</span> / √<span class="v">d<sub>k</sub></span> )
   <span class="n">(3.1)</span>
 </div>
-<p>Nella <em>self</em>-attention query, chiavi e valori derivano tutte dalla stessa sequenza tramite tre proiezioni lineari apprese. In forma matriciale, per una sequenza <span class="mat">X</span> âˆˆ â„<sup><span class="v">n</span>Ã—<span class="v">d</span></sup>:</p>
+<p>Nella <em>self</em>-attention query, chiavi e valori derivano tutte dalla stessa sequenza tramite tre proiezioni lineari apprese. In forma matriciale, per una sequenza <span class="mat">X</span> ∈ ℝ<sup><span class="v">n</span>×<span class="v">d</span></sup>:</p>
 <div class="eq">
   <span class="mat">Q</span> = <span class="mat">X W<sub>Q</sub></span>, &nbsp; <span class="mat">K</span> = <span class="mat">X W<sub>K</sub></span>, &nbsp; <span class="mat">V</span> = <span class="mat">X W<sub>V</sub></span>, &nbsp;&nbsp;
-  <span class="mat">A</span> = softmax( <span class="mat">QK</span><sup>âŠ¤</sup>/âˆš<span class="v">d<sub>k</sub></span> ), &nbsp;&nbsp; out = <span class="mat">AV W<sub>O</sub></span>
+  <span class="mat">A</span> = softmax( <span class="mat">QK</span><sup>⊤</sup>/√<span class="v">d<sub>k</sub></span> ), &nbsp;&nbsp; out = <span class="mat">AV W<sub>O</sub></span>
   <span class="n">(3.2)</span>
 </div>
 
-<h3>3.2 Derivazione dello scaling 1/âˆš<span class="v">d<sub>k</sub></span></h3>
-<p>PerchÃ© proprio quel fattore? Si assuma che le componenti di <span class="mat">q</span> e <span class="mat">k</span> siano indipendenti, a media nulla e varianza unitaria. Il prodotto scalare Ã¨ una somma di <span class="v">d<sub>k</sub></span> termini indipendenti:</p>
+<h3>3.2 Derivazione dello scaling 1/√<span class="v">d<sub>k</sub></span></h3>
+<p>Perché proprio quel fattore? Si assuma che le componenti di <span class="mat">q</span> e <span class="mat">k</span> siano indipendenti, a media nulla e varianza unitaria. Il prodotto scalare è una somma di <span class="v">d<sub>k</sub></span> termini indipendenti:</p>
 <div class="eq">
   Var( <span class="mat">q</span><sup>âŠ¤</sup><span class="mat">k</span> ) = Var( Î£<sub><span class="v">i</span>=1</sub><sup><span class="v">d<sub>k</sub></span></sup> <span class="v">q<sub>i</sub>k<sub>i</sub></span> ) = Î£<sub><span class="v">i</span></sub> Var(<span class="v">q<sub>i</sub>k<sub>i</sub></span>) = <span class="v">d<sub>k</sub></span>
   <span class="n">(3.3)</span>
 </div>
-<p>La deviazione standard dei logit cresce dunque come âˆš<span class="v">d<sub>k</sub></span>. Senza correzione, con <span class="v">d<sub>k</sub></span> = 64 i logit hanno scala Â±8 e la softmax entra in saturazione: una componente si avvicina a 1, tutte le altre a 0. Il gradiente della softmax Ã¨ <span class="v">âˆ‚Î±<sub>i</sub>/âˆ‚z<sub>j</sub></span> = <span class="v">Î±<sub>i</sub></span>(<span class="v">Î´<sub>ij</sub></span> âˆ’ <span class="v">Î±<sub>j</sub></span>), che nei regimi saturi tende a zero: il gradiente svanisce e l'attenzione non impara piÃ¹ a riallocarsi. Dividere per âˆš<span class="v">d<sub>k</sub></span> riporta la varianza a 1 indipendentemente dalla dimensione.</p>
+<p>La deviazione standard dei logit cresce dunque come √<span class="v">d<sub>k</sub></span>. Senza correzione, con <span class="v">d<sub>k</sub></span> = 64 i logit hanno scala ±8 e la softmax entra in saturazione: una componente si avvicina a 1, tutte le altre a 0. Il gradiente della softmax è <span class="v">∂α<sub>i</sub>/∂z<sub>j</sub></span> = <span class="v">α<sub>i</sub></span>(<span class="v">δ<sub>ij</sub></span> − <span class="v">α<sub>j</sub></span>), che nei regimi saturi tende a zero: il gradiente svanisce e l'attenzione non impara più a riallocarsi. Dividere per √<span class="v">d<sub>k</sub></span> riporta la varianza a 1 indipendentemente dalla dimensione.</p>
 
 <h3>3.3 Multi-head</h3>
-<p>Una singola attenzione produce <em>una</em> distribuzione di pesi: il modello Ã¨ costretto a un unico criterio di rilevanza per posizione. Il multi-head suddivide la dimensione <span class="v">d</span> in <span class="v">h</span> sottospazi di dimensione <span class="v">d<sub>h</sub></span> = <span class="v">d</span>/<span class="v">h</span>, esegue l'attenzione in parallelo in ciascuno e concatena:</p>
+<p>Una singola attenzione produce <em>una</em> distribuzione di pesi: il modello è costretto a un unico criterio di rilevanza per posizione. Il multi-head suddivide la dimensione <span class="v">d</span> in <span class="v">h</span> sottospazi di dimensione <span class="v">d<sub>h</sub></span> = <span class="v">d</span>/<span class="v">h</span>, esegue l'attenzione in parallelo in ciascuno e concatena:</p>
 <div class="eq">
-  MHSA(<span class="mat">X</span>) = [ head<sub>1</sub> â€– â€¦ â€– head<sub><span class="v">h</span></sub> ] <span class="mat">W<sub>O</sub></span>, &nbsp;&nbsp;
+  MHSA(<span class="mat">X</span>) = [ head<sub>1</sub> ‖ … ‖ head<sub><span class="v">h</span></sub> ] <span class="mat">W<sub>O</sub></span>, &nbsp;&nbsp;
   head<sub><span class="v">i</span></sub> = Attn(<span class="mat">XW<sub>Q</sub></span><sup>(<span class="v">i</span>)</sup>, <span class="mat">XW<sub>K</sub></span><sup>(<span class="v">i</span>)</sup>, <span class="mat">XW<sub>V</sub></span><sup>(<span class="v">i</span>)</sup>)
   <span class="n">(3.4)</span>
 </div>
-<p>Il costo totale Ã¨ invariato rispetto a una singola testa di dimensione <span class="v">d</span>, perchÃ© le proiezioni per-testa sono piÃ¹ piccole: Ã¨ un guadagno di espressivitÃ  a paritÃ  di calcolo.</p>
+<p>Il costo totale è invariato rispetto a una singola testa di dimensione <span class="v">d</span>, perché le proiezioni per-testa sono più piccole: è un guadagno di espressività a parità di calcolo.</p>
 <div class="box">
-  <p class="box-t">Il numero di teste Ã¨ gratuito <span class="tag t-evi">evidenza</span></p>
-  <p>Misurato sul nostro modello con <span class="v">d</span> = 224: con 4, 7, 8 o 14 teste, <strong>parametri e FLOPs sono identici</strong> (4 899 151 e 0,5742 G in tutti i casi). La scelta Ã¨ dunque libera e non ha costo. Adottiamo <span class="v">h</span> = 7, che dÃ  <span class="v">d<sub>h</sub></span> = 32, la dimensione per testa convenzionale in letteratura (contro i 28 di <span class="v">h</span> = 8).</p>
+  <p class="box-t">Il numero di teste è gratuito <span class="tag t-evi">evidenza</span></p>
+  <p>Misurato sul nostro modello con <span class="v">d</span> = 224: con 4, 7, 8 o 14 teste, <strong>parametri e FLOPs sono identici</strong> (4 899 151 e 0,5742 G in tutti i casi). La scelta è dunque libera e non ha costo. Adottiamo <span class="v">h</span> = 7, che dà <span class="v">d<sub>h</sub></span> = 32, la dimensione per testa convenzionale in letteratura (contro i 28 di <span class="v">h</span> = 8).</p>
 </div>
 
-<h3>3.4 ComplessitÃ  â€” la derivazione centrale del progetto</h3>
-<p>Ãˆ la formula che giustifica l'intero paper. Per un blocco, sequenza di lunghezza <span class="v">n</span> in dimensione <span class="v">d</span>, con rapporto FFN <span class="v">r</span>:</p>
+<h3>3.4 Complessità — la derivazione centrale del progetto</h3>
+<p>È la formula che giustifica l'intero paper. Per un blocco, sequenza di lunghezza <span class="v">n</span> in dimensione <span class="v">d</span>, con rapporto FFN <span class="v">r</span>:</p>
 <table>
   <thead><tr><th style="width:52mm">Operazione</th><th class="c">Costo (MAC)</th><th class="c">In <span class="v">n</span></th></tr></thead>
   <tbody>
-    <tr><td>Proiezioni <span class="mat">Q</span>, <span class="mat">K</span>, <span class="mat">V</span>, <span class="mat">O</span></td><td class="c">4<span class="v">nd</span>Â²</td><td class="c">lineare</td></tr>
-    <tr><td>Punteggi <span class="mat">QK</span><sup>âŠ¤</sup></td><td class="c"><span class="v">n</span>Â²<span class="v">d</span></td><td class="c"><strong>quadratico</strong></td></tr>
-    <tr><td>Aggregazione <span class="mat">AV</span></td><td class="c"><span class="v">n</span>Â²<span class="v">d</span></td><td class="c"><strong>quadratico</strong></td></tr>
-    <tr><td>Feed-forward</td><td class="c">2<span class="v">rnd</span>Â²</td><td class="c">lineare</td></tr>
+    <tr><td>Proiezioni <span class="mat">Q</span>, <span class="mat">K</span>, <span class="mat">V</span>, <span class="mat">O</span></td><td class="c">4<span class="v">nd</span>²</td><td class="c">lineare</td></tr>
+    <tr><td>Punteggi <span class="mat">QK</span><sup>⊤</sup></td><td class="c"><span class="v">n</span>²<span class="v">d</span></td><td class="c"><strong>quadratico</strong></td></tr>
+    <tr><td>Aggregazione <span class="mat">AV</span></td><td class="c"><span class="v">n</span>²<span class="v">d</span></td><td class="c"><strong>quadratico</strong></td></tr>
+    <tr><td>Feed-forward</td><td class="c">2<span class="v">rnd</span>²</td><td class="c">lineare</td></tr>
   </tbody>
 </table>
 <div class="eq">
-  <span class="v">C</span>(<span class="v">n</span>, <span class="v">d</span>) = (4 + 2<span class="v">r</span>)Â·<span class="v">n d</span>Â² + 2Â·<span class="v">n</span>Â²<span class="v">d</span>
+  <span class="v">C</span>(<span class="v">n</span>, <span class="v">d</span>) = (4 + 2<span class="v">r</span>)·<span class="v">n d</span>² + 2·<span class="v">n</span>²<span class="v">d</span>
   <span class="n">(3.5)</span>
 </div>
-<p>Il termine quadratico domina quando <span class="v">n</span> > (2 + <span class="v">r</span>)<span class="v">d</span>, cioÃ¨ per <span class="v">d</span> = 224 e <span class="v">r</span> = 4 quando <span class="v">n</span> > 1344.</p>
+<p>Il termine quadratico domina quando <span class="v">n</span> > (2 + <span class="v">r</span>)<span class="v">d</span>, cioè per <span class="v">d</span> = 224 e <span class="v">r</span> = 4 quando <span class="v">n</span> > 1344.</p>
 <div class="box info">
   <p class="box-t">Una sottigliezza che cambia la lettura del paper</p>
-  <p>Le nostre sequenze sono <strong>molto</strong> piÃ¹ corte di quella soglia: 51 frame per il denso, 4 token per lo sparso. In questo regime <strong>domina il termine lineare</strong>, non quello quadratico. Passare da 51 a 4 riduce il termine quadratico di (51/4)Â² â‰ˆ <strong>163 volte</strong>, ma quello lineare â€” che Ã¨ quello che conta davvero qui â€” Â«soloÂ» di 12,75 volte.</p>
-  <p>Il paper motiva il lavoro con la complessitÃ  <em>O</em>(<span class="v">N</span>Â²) della MHSA, ma sul suo stesso regime operativo il guadagno reale viene soprattutto dal termine lineare. Non Ã¨ un errore, ma Ã¨ una <strong>imprecisione argomentativa</strong> che vale la pena saper discutere all'orale â€” ed Ã¨ la ragione per cui misuriamo i FLOPs invece di dedurli dalla formula.</p>
+  <p>Le nostre sequenze sono <strong>molto</strong> più corte di quella soglia: 51 frame per il denso, 4 token per lo sparso. In questo regime <strong>domina il termine lineare</strong>, non quello quadratico. Passare da 51 a 4 riduce il termine quadratico di (51/4)² ≈ <strong>163 volte</strong>, ma quello lineare — che è quello che conta davvero qui — «solo» di 12,75 volte.</p>
+  <p>Il paper motiva il lavoro con la complessità <em>O</em>(<span class="v">N</span>²) della MHSA, ma sul suo stesso regime operativo il guadagno reale viene soprattutto dal termine lineare. Non è un errore, ma è una <strong>imprecisione argomentativa</strong> che vale la pena saper discutere all'orale — ed è la ragione per cui misuriamo i FLOPs invece di dedurli dalla formula.</p>
 </div>
-<p><strong>Parametri</strong>, invece, indipendenti da <span class="v">n</span>: (4 + 2<span class="v">r</span>)<span class="v">d</span>Â² per blocco, piÃ¹ bias e LayerNorm. Verificato empiricamente: la formula approssima il conteggio reale entro lo 0,4â€“0,9 %.</p>
+<p><strong>Parametri</strong>, invece, indipendenti da <span class="v">n</span>: (4 + 2<span class="v">r</span>)<span class="v">d</span>² per blocco, più bias e LayerNorm. Verificato empiricamente: la formula approssima il conteggio reale entro lo 0,4–0,9 %.</p>
 
 <h3>3.5 Pre-norm contro post-norm <span class="tag t-ass">assunzione</span></h3>
-<p>Vaswani et al. 2017 normalizzano <em>dopo</em> il residuo: <span class="v">x</span> â† LN(<span class="v">x</span> + Sublayer(<span class="v">x</span>)). Questa forma richiede un warmup del learning rate per non divergere nelle prime iterazioni. La variante <strong>pre-norm</strong> â€” <span class="v">x</span> â† <span class="v">x</span> + Sublayer(LN(<span class="v">x</span>)) â€” lascia il ramo residuo come strada <em>pulita</em> dall'ingresso all'uscita: il gradiente vi scorre senza attraversare alcuna normalizzazione, e il modello si addestra stabile anche senza warmup.</p>
-<p>Adottiamo il pre-norm. Il paper non specifica; Ã¨ pratica standard dal 2020 e riduce il rischio di divergenza in una ricetta che non possiamo tarare a fondo.</p>
+<p>Vaswani et al. 2017 normalizzano <em>dopo</em> il residuo: <span class="v">x</span> ← LN(<span class="v">x</span> + Sublayer(<span class="v">x</span>)). Questa forma richiede un warmup del learning rate per non divergere nelle prime iterazioni. La variante <strong>pre-norm</strong> — <span class="v">x</span> ← <span class="v">x</span> + Sublayer(LN(<span class="v">x</span>)) — lascia il ramo residuo come strada <em>pulita</em> dall'ingresso all'uscita: il gradiente vi scorre senza attraversare alcuna normalizzazione, e il modello si addestra stabile anche senza warmup.</p>
+<p>Adottiamo il pre-norm. Il paper non specifica; è pratica standard dal 2020 e riduce il rischio di divergenza in una ricetta che non possiamo tarare a fondo.</p>
 
 <h3>3.6 Codifica posizionale e invarianza a permutazioni <span class="tag t-evi">evidenza</span></h3>
-<p>La self-attention Ã¨ <strong>equivariante alle permutazioni</strong>: permutando le righe di <span class="mat">X</span> si permutano identicamente le righe dell'uscita. Se a valle si applica una media (come facciamo), l'equivarianza diventa <strong>invarianza</strong>: il modello non puÃ² in linea di principio distinguere l'ordine dei suoi token.</p>
-<p>Il paper dichiara che il modello sparso <strong>non usa codifica posizionale</strong>, e la motivazione Ã¨ corretta: i token latenti non hanno un ordine intrinseco â€” sono un insieme, non una sequenza. Sul modello <em>denso</em> perÃ² il paper tace, e lÃ¬ i token sono frame temporali, che un ordine ce l'hanno.</p>
+<p>La self-attention è <strong>equivariante alle permutazioni</strong>: permutando le righe di <span class="mat">X</span> si permutano identicamente le righe dell'uscita. Se a valle si applica una media (come facciamo), l'equivarianza diventa <strong>invarianza</strong>: il modello non può in linea di principio distinguere l'ordine dei suoi token.</p>
+<p>Il paper dichiara che il modello sparso <strong>non usa codifica posizionale</strong>, e la motivazione è corretta: i token latenti non hanno un ordine intrinseco — sono un insieme, non una sequenza. Sul modello <em>denso</em> però il paper tace, e lì i token sono frame temporali, che un ordine ce l'hanno.</p>
 <p>Lo abbiamo verificato invece di darlo per scontato. Permutando l'asse temporale di un ingresso e confrontando l'uscita mediata:</p>
-<pre>senza codifica posizionale :  variazione massima  2,4Â·10â»â·    (rumore di virgola mobile)
-con  codifica posizionale :  variazione massima  8,3Â·10â»Â²</pre>
-<p>Il primo valore Ã¨ <strong>invarianza esatta</strong>. Questo rende l'esperimento Â«con e senzaÂ» legittimo e informativo: la domanda diventa <em>quanto conta l'ordine temporale per riconoscere una parola isolata di un secondo</em>, che Ã¨ una domanda scientifica genuina e non una formalitÃ .</p>
+<pre>senza codifica posizionale :  variazione massima  2,4·10⁻⁷    (rumore di virgola mobile)
+con  codifica posizionale :  variazione massima  8,3·10⁻²</pre>
+<p>Il primo valore è <strong>invarianza esatta</strong>. Questo rende l'esperimento «con e senza» legittimo e informativo: la domanda diventa <em>quanto conta l'ordine temporale per riconoscere una parola isolata di un secondo</em>, che è una domanda scientifica genuina e non una formalità.</p>
 <p>Implementiamo tre varianti: assente, sinusoidale (Vaswani) e appresa. La sinusoidale usa</p>
 <div class="eq">
   PE<sub>(<span class="v">pos</span>, 2<span class="v">i</span>)</sub> = sin(<span class="v">pos</span> / 10000<sup>2<span class="v">i</span>/<span class="v">d</span></sup>), &nbsp;&nbsp;
@@ -318,29 +318,29 @@ con  codifica posizionale :  variazione massima  8,3Â·10â»Â²</pre>
 </div>
 
 <!-- ================================================================= -->
-<h2>4 Â· Convoluzione e early convolution</h2>
+<h2>4 · Convoluzione e early convolution</h2>
 
 <h3>4.1 Aritmetica</h3>
 <p>Per un asse di dimensione <span class="v">S</span>, kernel <span class="v">K</span>, stride <span class="v">s</span>, padding <span class="v">p</span> e dilatazione <span class="v">Î´</span>:</p>
 <div class="eq">
-  <span class="v">S</span><sub>out</sub> = âŒŠ (<span class="v">S</span> + 2<span class="v">p</span> âˆ’ <span class="v">Î´</span>(<span class="v">K</span>âˆ’1) âˆ’ 1) / <span class="v">s</span> âŒ‹ + 1
+  <span class="v">S</span><sub>out</sub> = ⌊ (<span class="v">S</span> + 2<span class="v">p</span> − <span class="v">δ</span>(<span class="v">K</span>−1) − 1) / <span class="v">s</span> ⌋ + 1
   <span class="n">(4.1)</span>
 </div>
-<p>Applicata al nostro stem, partendo da 64 Ã— 101:</p>
+<p>Applicata al nostro stem, partendo da 64 × 101:</p>
 <pre>conv 7x7 stride 2 pad 3   64 -> 32     101 -> 51
 maxpool 3x3 stride (2,1)  32 -> 16      51 -> 51
                           ---------------------------
 feature map               [C, 16, 51]</pre>
-<p>Il <strong>campo recettivo</strong> cresce come <span class="v">R</span><sub><span class="v">l</span></sub> = <span class="v">R</span><sub><span class="v">l</span>âˆ’1</sub> + (<span class="v">K<sub>l</sub></span> âˆ’ 1)Â·Î <sub><span class="v">i</span>&lt;<span class="v">l</span></sub><span class="v">s<sub>i</sub></span>: dopo conv 7Ã—7/2 e maxpool 3Ã—3, ogni cella dell'uscita vede 11 frame originali, cioÃ¨ circa 110 ms di segnale â€” la scala di un fonema.</p>
+<p>Il <strong>campo recettivo</strong> cresce come <span class="v">R</span><sub><span class="v">l</span></sub> = <span class="v">R</span><sub><span class="v">l</span>−1</sub> + (<span class="v">K<sub>l</sub></span> − 1)·Π<sub><span class="v">i</span>&lt;<span class="v">l</span></sub><span class="v">s<sub>i</sub></span>: dopo conv 7×7/2 e maxpool 3×3, ogni cella dell'uscita vede 11 frame originali, cioè circa 110 ms di segnale — la scala di un fonema.</p>
 
-<h3>4.2 PerchÃ© la early convolution Ã¨ indispensabile <span class="tag t-pap">dal paper</span></h3>
-<p>Il paper Ã¨ esplicito e la ragione Ã¨ profonda:</p>
-<p style="margin-left:5mm; font-style:italic; color:var(--muted)">Â«Gradient computation for region adjustment through bilinear interpolation can be very noisy due to local and limited sampling points. Therefore, directly sampling from the spectrogram is not effective.Â»</p>
-<p>Il campionamento sparso Ã¨ differenziabile <em>rispetto alle coordinate</em> attraverso l'interpolazione bilineare (Â§7.3). Ma il gradiente rispetto a una coordinata Ã¨ essenzialmente una <strong>differenza finita locale</strong> della superficie campionata. Su uno spettrogramma grezzo, che ha struttura ad alta frequenza spaziale â€” armoniche, transienti, rumore â€” quella differenza Ã¨ dominata dal rumore locale e non porta informazione utile su <em>dove</em> spostare la regione. Dopo qualche convoluzione la superficie Ã¨ liscia, e il gradiente diventa un segnale di direzione affidabile.</p>
-<p>Non Ã¨ quindi solo una riduzione di risoluzione: Ã¨ ciÃ² che rende <strong>addestrabile</strong> il meccanismo centrale del paper.</p>
+<h3>4.2 Perché la early convolution è indispensabile <span class="tag t-pap">dal paper</span></h3>
+<p>Il paper è esplicito e la ragione è profonda:</p>
+<p style="margin-left:5mm; font-style:italic; color:var(--muted)">«Gradient computation for region adjustment through bilinear interpolation can be very noisy due to local and limited sampling points. Therefore, directly sampling from the spectrogram is not effective.»</p>
+<p>Il campionamento sparso è differenziabile <em>rispetto alle coordinate</em> attraverso l'interpolazione bilineare (§7.3). Ma il gradiente rispetto a una coordinata è essenzialmente una <strong>differenza finita locale</strong> della superficie campionata. Su uno spettrogramma grezzo, che ha struttura ad alta frequenza spaziale — armoniche, transienti, rumore — quella differenza è dominata dal rumore locale e non porta informazione utile su <em>dove</em> spostare la regione. Dopo qualche convoluzione la superficie è liscia, e il gradiente diventa un segnale di direzione affidabile.</p>
+<p>Non è quindi solo una riduzione di risoluzione: è ciò che rende <strong>addestrabile</strong> il meccanismo centrale del paper.</p>
 
 <h3>4.3 La sequenza esatta dello stem <span class="tag t-evi">evidenza</span></h3>
-<p>Il paper descrive Â«conv 7Ã—7 stride 2 â†’ ReLU â†’ max poolingÂ», senza normalizzazione. Il codice di SparseFormer conferma e completa:</p>
+<p>Il paper descrive «conv 7×7 stride 2 → ReLU → max pooling», senza normalizzazione. Il codice di SparseFormer conferma e completa:</p>
 <pre>conv1   = nn.Conv2d(in, C, kernel_size=7, stride=2, padding=3, bias=True)
 relu    = nn.ReLU(inplace=True)
 maxpool = nn.MaxPool2d(3, 2, 1)
@@ -350,356 +350,356 @@ x = layer_norm_by_dim(x, 1)          # LayerNorm sui CANALI, dopo il pooling</pr
 <p>Tre dettagli che contano:</p>
 <ul>
   <li>la convoluzione ha <strong>bias attivo</strong>, coerentemente con l'assenza di una normalizzazione immediatamente successiva;</li>
-  <li>non c'Ã¨ <strong>alcuna BatchNorm</strong>;</li>
-  <li>c'Ã¨ una <strong>LayerNorm sull'asse dei canali</strong>, applicata <em>dopo</em> il max pooling.</li>
+  <li>non c'è <strong>alcuna BatchNorm</strong>;</li>
+  <li>c'è una <strong>LayerNorm sull'asse dei canali</strong>, applicata <em>dopo</em> il max pooling.</li>
 </ul>
 <div class="box warn">
   <p class="box-t">Una nostra deviazione, corretta</p>
   <p>Una versione precedente del nostro <code>EarlyConv</code> inseriva una <code>BatchNorm2d</code> fra convoluzione e ReLU, con <code>bias=False</code> sulla conv. Era una deviazione su <strong>tre punti</strong>: tipo di normalizzazione sbagliato, posizione sbagliata, bias disattivato.</p>
-  <p>La differenza fra le due normalizzazioni non Ã¨ cosmetica. La <strong>BatchNorm</strong> normalizza ciascun canale rispetto al batch e alle posizioni spaziali: le statistiche dipendono dagli altri esempi del batch e vanno congelate in valutazione. La <strong>LayerNorm sui canali</strong> normalizza ogni posizione spaziale rispetto ai propri canali: Ã¨ indipendente dal batch e si comporta identicamente in training e in inferenza. Per un modello che verrÃ  valutato su costo computazionale e latenza, la seconda Ã¨ anche piÃ¹ prevedibile.</p>
+  <p>La differenza fra le due normalizzazioni non è cosmetica. La <strong>BatchNorm</strong> normalizza ciascun canale rispetto al batch e alle posizioni spaziali: le statistiche dipendono dagli altri esempi del batch e vanno congelate in valutazione. La <strong>LayerNorm sui canali</strong> normalizza ogni posizione spaziale rispetto ai propri canali: è indipendente dal batch e si comporta identicamente in training e in inferenza. Per un modello che verrà valutato su costo computazionale e latenza, la seconda è anche più prevedibile.</p>
   <p>Coperto ora da un test di regressione che verifica la sequenza esatta dei moduli e l'assenza di <code>BatchNorm2d</code>.</p>
 </div>
 
 <!-- ================================================================= -->
-<h2>5 Â· Ottimizzazione</h2>
+<h2>5 · Ottimizzazione</h2>
 
 <h3>5.1 Da SGD ad Adam</h3>
-<p>La discesa del gradiente stocastica aggiorna <span class="v">Î¸</span> â† <span class="v">Î¸</span> âˆ’ <span class="v">Î·</span> <span class="v">g<sub>t</sub></span> con <span class="v">g<sub>t</sub></span> stima del gradiente su un minibatch. Il <strong>momento</strong> accumula una media mobile della direzione, smorzando le oscillazioni nelle direzioni a curvatura elevata. I metodi <strong>adattivi</strong> aggiungono un secondo ingrediente: riscalare ogni coordinata in base alla magnitudine storica del suo gradiente, cosÃ¬ che parametri con gradienti tipicamente piccoli ricevano passi relativamente maggiori.</p>
+<p>La discesa del gradiente stocastica aggiorna <span class="v">θ</span> ← <span class="v">θ</span> − <span class="v">η</span> <span class="v">g<sub>t</sub></span> con <span class="v">g<sub>t</sub></span> stima del gradiente su un minibatch. Il <strong>momento</strong> accumula una media mobile della direzione, smorzando le oscillazioni nelle direzioni a curvatura elevata. I metodi <strong>adattivi</strong> aggiungono un secondo ingrediente: riscalare ogni coordinata in base alla magnitudine storica del suo gradiente, così che parametri con gradienti tipicamente piccoli ricevano passi relativamente maggiori.</p>
 <p>Adam combina i due:</p>
 <div class="eq">
-  <span class="v">m<sub>t</sub></span> = Î²â‚<span class="v">m</span><sub><span class="v">t</span>âˆ’1</sub> + (1âˆ’Î²â‚)<span class="v">g<sub>t</sub></span>, &nbsp;&nbsp;
-  <span class="v">v<sub>t</sub></span> = Î²â‚‚<span class="v">v</span><sub><span class="v">t</span>âˆ’1</sub> + (1âˆ’Î²â‚‚)<span class="v">g<sub>t</sub></span>Â²
+  <span class="v">m<sub>t</sub></span> = β₁<span class="v">m</span><sub><span class="v">t</span>−1</sub> + (1−β₁)<span class="v">g<sub>t</sub></span>, &nbsp;&nbsp;
+  <span class="v">v<sub>t</sub></span> = β₂<span class="v">v</span><sub><span class="v">t</span>−1</sub> + (1−β₂)<span class="v">g<sub>t</sub></span>²
   <span class="n">(5.1)</span>
 </div>
 
 <h4>La correzione del bias, derivata</h4>
 <p>Inizializzando <span class="v">m</span><sub>0</sub> = 0, si espande la ricorsione:</p>
 <div class="eq">
-  <span class="v">m<sub>t</sub></span> = (1âˆ’Î²â‚) Î£<sub><span class="v">i</span>=1</sub><sup><span class="v">t</span></sup> Î²â‚<sup><span class="v">t</span>âˆ’<span class="v">i</span></sup> <span class="v">g<sub>i</sub></span>
+  <span class="v">m<sub>t</sub></span> = (1−β₁) Σ<sub><span class="v">i</span>=1</sub><sup><span class="v">t</span></sup> β₁<sup><span class="v">t</span>−<span class="v">i</span></sup> <span class="v">g<sub>i</sub></span>
   <span class="n">(5.2)</span>
 </div>
-<p>Se i gradienti fossero stazionari con media <span class="v">g</span>, si avrebbe ð”¼[<span class="v">m<sub>t</sub></span>] = <span class="v">g</span>(1âˆ’Î²â‚)Î£Î²â‚<sup><span class="v">t</span>âˆ’<span class="v">i</span></sup> = <span class="v">g</span>(1 âˆ’ Î²â‚<sup><span class="v">t</span></sup>). La stima Ã¨ dunque <strong>distorta verso zero</strong> di un fattore (1 âˆ’ Î²â‚<sup><span class="v">t</span></sup>), grave nei primi passi: con Î²â‚ = 0,9 al primo passo il momento vale un decimo del vero. Da cui la correzione:</p>
+<p>Se i gradienti fossero stazionari con media <span class="v">g</span>, si avrebbe 𝔼[<span class="v">m<sub>t</sub></span>] = <span class="v">g</span>(1−β₁)Σβ₁<sup><span class="v">t</span>−<span class="v">i</span></sup> = <span class="v">g</span>(1 − β₁<sup><span class="v">t</span></sup>). La stima è dunque <strong>distorta verso zero</strong> di un fattore (1 − β₁<sup><span class="v">t</span></sup>), grave nei primi passi: con β₁ = 0,9 al primo passo il momento vale un decimo del vero. Da cui la correzione:</p>
 <div class="eq">
-  <span class="v">mÌ‚<sub>t</sub></span> = <span class="v">m<sub>t</sub></span>/(1âˆ’Î²â‚<sup><span class="v">t</span></sup>), &nbsp;
-  <span class="v">vÌ‚<sub>t</sub></span> = <span class="v">v<sub>t</sub></span>/(1âˆ’Î²â‚‚<sup><span class="v">t</span></sup>), &nbsp;&nbsp;
-  <span class="v">Î¸</span> â† <span class="v">Î¸</span> âˆ’ <span class="v">Î·</span> <span class="v">mÌ‚<sub>t</sub></span> / (âˆš<span class="v">vÌ‚<sub>t</sub></span> + Îµ)
+  <span class="v">m̂<sub>t</sub></span> = <span class="v">m<sub>t</sub></span>/(1−β₁<sup><span class="v">t</span></sup>), &nbsp;
+  <span class="v">v̂<sub>t</sub></span> = <span class="v">v<sub>t</sub></span>/(1−β₂<sup><span class="v">t</span></sup>), &nbsp;&nbsp;
+  <span class="v">θ</span> ← <span class="v">θ</span> − <span class="v">η</span> <span class="v">m̂<sub>t</sub></span> / (√<span class="v">v̂<sub>t</sub></span> + ε)
   <span class="n">(5.3)</span>
 </div>
 
-<h3>5.2 AdamW: perchÃ© L2 e weight decay non coincidono</h3>
-<p>Ãˆ la domanda d'esame piÃ¹ probabile su questo blocco.</p>
-<p>Nella discesa del gradiente <em>semplice</em>, aggiungere alla loss il termine <span class="v">Î»</span>/2Â·â€–<span class="v">Î¸</span>â€–Â² produce nel gradiente il contributo <span class="v">Î»Î¸</span>, e quindi l'aggiornamento <span class="v">Î¸</span> â† (1 âˆ’ <span class="v">Î·Î»</span>)<span class="v">Î¸</span> âˆ’ <span class="v">Î·g</span>: un decadimento moltiplicativo uniforme. Regolarizzazione L2 e weight decay <strong>coincidono</strong>.</p>
-<p>In Adam no. Il termine <span class="v">Î»Î¸</span> entra dentro <span class="v">g<sub>t</sub></span>, quindi viene <strong>diviso per âˆš<span class="v">vÌ‚<sub>t</sub></span></strong> come ogni altra componente del gradiente. Il risultato Ã¨ che il decadimento effettivo di ciascun peso diventa <span class="v">Î·Î»Î¸</span>/(âˆš<span class="v">vÌ‚</span>+Îµ): <strong>i parametri con gradienti storicamente grandi vengono regolarizzati di meno</strong>, quelli con gradienti piccoli di piÃ¹. Ãˆ l'opposto di ciÃ² che si vuole, ed Ã¨ un effetto non voluto e difficile da controllare.</p>
+<h3>5.2 AdamW: perché L2 e weight decay non coincidono</h3>
+<p>È la domanda d'esame più probabile su questo blocco.</p>
+<p>Nella discesa del gradiente <em>semplice</em>, aggiungere alla loss il termine <span class="v">λ</span>/2·‖<span class="v">θ</span>‖² produce nel gradiente il contributo <span class="v">λθ</span>, e quindi l'aggiornamento <span class="v">θ</span> ← (1 − <span class="v">ηλ</span>)<span class="v">θ</span> − <span class="v">ηg</span>: un decadimento moltiplicativo uniforme. Regolarizzazione L2 e weight decay <strong>coincidono</strong>.</p>
+<p>In Adam no. Il termine <span class="v">λθ</span> entra dentro <span class="v">g<sub>t</sub></span>, quindi viene <strong>diviso per √<span class="v">v̂<sub>t</sub></span></strong> come ogni altra componente del gradiente. Il risultato è che il decadimento effettivo di ciascun peso diventa <span class="v">ηλθ</span>/(√<span class="v">v̂</span>+ε): <strong>i parametri con gradienti storicamente grandi vengono regolarizzati di meno</strong>, quelli con gradienti piccoli di più. È l'opposto di ciò che si vuole, ed è un effetto non voluto e difficile da controllare.</p>
 <p>Loshchilov &amp; Hutter (2018) propongono di <strong>disaccoppiarlo</strong>: applicare il decadimento direttamente ai pesi, fuori dal percorso adattivo:</p>
 <div class="eq">
-  <span class="v">Î¸</span> â† <span class="v">Î¸</span> âˆ’ <span class="v">Î·</span>( <span class="v">mÌ‚<sub>t</sub></span>/(âˆš<span class="v">vÌ‚<sub>t</sub></span>+Îµ) + <span class="v">Î»Î¸</span> )
+  <span class="v">θ</span> ← <span class="v">θ</span> − <span class="v">η</span>( <span class="v">m̂<sub>t</sub></span>/(√<span class="v">v̂<sub>t</sub></span>+ε) + <span class="v">λθ</span> )
   <span class="n">(5.4)</span>
 </div>
-<p>Entrambi i paper usano AdamW. Noi con Î² = (0,9 Â· 0,99), Îµ = 10â»â¸, <span class="v">Î·</span> = 3Â·10â»â´, <span class="v">Î»</span> = 10â»âµ <span class="tag t-pap">dal paper</span>.</p>
+<p>Entrambi i paper usano AdamW. Noi con β = (0,9 · 0,99), ε = 10⁻⁸, <span class="v">η</span> = 3·10⁻⁴, <span class="v">λ</span> = 10⁻⁵ <span class="tag t-pap">dal paper</span>.</p>
 <div class="box info">
-  <p class="box-t">Weight decay selettivo: non Ã¨ una nostra aggiunta <span class="tag t-evi">evidenza</span></p>
-  <p>Avevamo classificato come <em>nostra deviazione</em> l'esclusione di bias e parametri di normalizzazione dal weight decay. <strong>Era una classificazione sbagliata.</strong> Il <code>trainer.py</code> di EAT costruisce l'ottimizzatore con <code>weight_decay=0</code> e delega la regolarizzazione a gruppi di parametri creati da <code>add_weight_decay</code>, il cui criterio Ã¨:</p>
+  <p class="box-t">Weight decay selettivo: non è una nostra aggiunta <span class="tag t-evi">evidenza</span></p>
+  <p>Avevamo classificato come <em>nostra deviazione</em> l'esclusione di bias e parametri di normalizzazione dal weight decay. <strong>Era una classificazione sbagliata.</strong> Il <code>trainer.py</code> di EAT costruisce l'ottimizzatore con <code>weight_decay=0</code> e delega la regolarizzazione a gruppi di parametri creati da <code>add_weight_decay</code>, il cui criterio è:</p>
   <pre>if len(param.shape) == 1:   # nessun weight decay</pre>
-  <p>Ogni parametro monodimensionale Ã¨ escluso: bias di convoluzioni e linear, pesi e bias di LayerNorm e BatchNorm. Il criterio Ã¨ piÃ¹ semplice e piÃ¹ generale di Â«bias e normÂ», e li cattura tutti.</p>
-  <p>PoichÃ© Kavaki &amp; Mandel riprendono la ricetta di EAT alla lettera â€” stesso lr 3Â·10â»â´, stessi Î², stesso one-cycle, stesso EMA 0,995, stesso weight decay 10â»âµ, stesse augmentation â€” la lettura piÃ¹ difendibile Ã¨ che abbiano ereditato anche questo. Da deviazione a <strong>scelta conforme al riferimento</strong>.</p>
-  <p>La motivazione teorica resta quella di prima: spingere verso zero un parametro di scala di normalizzazione non ha senso statistico, perchÃ© non controlla la complessitÃ  del modello ma la sua parametrizzazione interna.</p>
+  <p>Ogni parametro monodimensionale è escluso: bias di convoluzioni e linear, pesi e bias di LayerNorm e BatchNorm. Il criterio è più semplice e più generale di «bias e norm», e li cattura tutti.</p>
+  <p>Poiché Kavaki &amp; Mandel riprendono la ricetta di EAT alla lettera — stesso lr 3·10⁻⁴, stessi β, stesso one-cycle, stesso EMA 0,995, stesso weight decay 10⁻⁵, stesse augmentation — la lettura più difendibile è che abbiano ereditato anche questo. Da deviazione a <strong>scelta conforme al riferimento</strong>.</p>
+  <p>La motivazione teorica resta quella di prima: spingere verso zero un parametro di scala di normalizzazione non ha senso statistico, perché non controlla la complessità del modello ma la sua parametrizzazione interna.</p>
 </div>
 
 <h3>5.3 One-cycle <span class="tag t-pap">dal paper</span></h3>
 <p>Il learning rate sale da <span class="v">Î·</span><sub>max</sub>/div fino a <span class="v">Î·</span><sub>max</sub> nella prima frazione del training, poi scende fino a un valore molto piccolo. La fase crescente agisce come warmup ed esplora ampiamente il paesaggio; quella decrescente rifinisce. Smith (2018) argomenta che il learning rate elevato in mezzo funge da regolarizzatore, scoraggiando i minimi stretti.</p>
-<p>Il paper cita lo schedule ma non ne dÃ  i parametri. Li abbiamo presi dal <code>trainer.py</code> di EAT <span class="tag t-evi">evidenza</span>:</p>
+<p>Il paper cita lo schedule ma non ne dà i parametri. Li abbiamo presi dal <code>trainer.py</code> di EAT <span class="tag t-evi">evidenza</span>:</p>
 <table>
   <thead><tr><th>Parametro</th><th class="c">Valore</th><th>Fonte</th></tr></thead>
   <tbody>
-    <tr><td><code>max_lr</code></td><td class="c">3Â·10â»â´</td><td>dichiarato da entrambi i paper</td></tr>
-    <tr><td><code>pct_start</code></td><td class="c"><strong>0,1</strong></td><td>esplicito nel trainer di EAT â€” il 10 % del training Ã¨ salita</td></tr>
-    <tr><td><code>div_factor</code></td><td class="c">25</td><td>default PyTorch, non sovrascritto da EAT â†’ lr iniziale 1,2Â·10â»âµ</td></tr>
-    <tr><td><code>final_div_factor</code></td><td class="c">10â´</td><td>default PyTorch â†’ lr finale 1,2Â·10â»â¹</td></tr>
+    <tr><td><code>max_lr</code></td><td class="c">3·10⁻⁴</td><td>dichiarato da entrambi i paper</td></tr>
+    <tr><td><code>pct_start</code></td><td class="c"><strong>0,1</strong></td><td>esplicito nel trainer di EAT — il 10 % del training è salita</td></tr>
+    <tr><td><code>div_factor</code></td><td class="c">25</td><td>default PyTorch, non sovrascritto da EAT → lr iniziale 1,2·10⁻⁵</td></tr>
+    <tr><td><code>final_div_factor</code></td><td class="c">10⁴</td><td>default PyTorch → lr finale 1,2·10⁻⁹</td></tr>
   </tbody>
 </table>
-<p>Restano non fissate da nessuna fonte le <strong>epoche</strong>: Ã¨ l'unico iperparametro di training che dobbiamo scegliere noi.</p>
+<p>Restano non fissate da nessuna fonte le <strong>epoche</strong>: è l'unico iperparametro di training che dobbiamo scegliere noi.</p>
 
 <h3>5.4 Media mobile esponenziale dei pesi <span class="tag t-pap">dal paper</span></h3>
 <div class="eq">
-  <span class="v">Î¸</span><sup>EMA</sup> â† <span class="v">Î³</span> <span class="v">Î¸</span><sup>EMA</sup> + (1âˆ’<span class="v">Î³</span>) <span class="v">Î¸</span>, &nbsp;&nbsp; <span class="v">Î³</span> = 0,995
+  <span class="v">θ</span><sup>EMA</sup> ← <span class="v">γ</span> <span class="v">θ</span><sup>EMA</sup> + (1−<span class="v">γ</span>) <span class="v">θ</span>, &nbsp;&nbsp; <span class="v">γ</span> = 0,995
   <span class="n">(5.5)</span>
 </div>
-<p>Con <span class="v">Î³</span> = 0,995 la costante di tempo Ã¨ circa 1/(1âˆ’<span class="v">Î³</span>) = 200 passi. L'EMA media la traiettoria SGD nelle sue ultime centinaia di iterazioni, riducendo la varianza dovuta al rumore dei minibatch e tendendo a finire in regioni piÃ¹ piatte del paesaggio, che generalizzano meglio. <strong>Il modello che si valuta Ã¨ quello EMA</strong>: dimenticarlo costa tipicamente qualche decimo di punto.</p>
-<p>Verificato nei test: con decay 0,9, spostando i pesi di +1,0 l'EMA si sposta esattamente di 1 âˆ’ <span class="v">Î³</span> = 0,1.</p>
+<p>Con <span class="v">γ</span> = 0,995 la costante di tempo è circa 1/(1−<span class="v">γ</span>) = 200 passi. L'EMA media la traiettoria SGD nelle sue ultime centinaia di iterazioni, riducendo la varianza dovuta al rumore dei minibatch e tendendo a finire in regioni più piatte del paesaggio, che generalizzano meglio. <strong>Il modello che si valuta è quello EMA</strong>: dimenticarlo costa tipicamente qualche decimo di punto.</p>
+<p>Verificato nei test: con decay 0,9, spostando i pesi di +1,0 l'EMA si sposta esattamente di 1 − <span class="v">γ</span> = 0,1.</p>
 
 <!-- ================================================================= -->
-<h2>6 Â· Loss e augmentation</h2>
+<h2>6 · Loss e augmentation</h2>
 
 <h3>6.1 Il gradiente della cross-entropy con softmax</h3>
-<p>Sia <span class="mat">z</span> il vettore dei logit, <span class="v">p<sub>i</sub></span> = <span class="v">e</span><sup><span class="v">z<sub>i</sub></span></sup>/Î£<sub><span class="v">j</span></sub><span class="v">e</span><sup><span class="v">z<sub>j</sub></span></sup> e <span class="v">L</span> = âˆ’Î£<sub><span class="v">i</span></sub> <span class="v">y<sub>i</sub></span> log <span class="v">p<sub>i</sub></span>. Dalla derivata della softmax <span class="v">âˆ‚p<sub>i</sub>/âˆ‚z<sub>j</sub></span> = <span class="v">p<sub>i</sub></span>(<span class="v">Î´<sub>ij</sub></span> âˆ’ <span class="v">p<sub>j</sub></span>):</p>
+<p>Sia <span class="mat">z</span> il vettore dei logit, <span class="v">p<sub>i</sub></span> = <span class="v">e</span><sup><span class="v">z<sub>i</sub></span></sup>/Σ<sub><span class="v">j</span></sub><span class="v">e</span><sup><span class="v">z<sub>j</sub></span></sup> e <span class="v">L</span> = −Σ<sub><span class="v">i</span></sub> <span class="v">y<sub>i</sub></span> log <span class="v">p<sub>i</sub></span>. Dalla derivata della softmax <span class="v">∂p<sub>i</sub>/∂z<sub>j</sub></span> = <span class="v">p<sub>i</sub></span>(<span class="v">δ<sub>ij</sub></span> − <span class="v">p<sub>j</sub></span>):</p>
 <div class="eq">
-  <span class="v">âˆ‚L</span>/<span class="v">âˆ‚z<sub>j</sub></span> = Î£<sub><span class="v">i</span></sub> (âˆ’<span class="v">y<sub>i</sub></span>/<span class="v">p<sub>i</sub></span>)Â·<span class="v">p<sub>i</sub></span>(<span class="v">Î´<sub>ij</sub></span>âˆ’<span class="v">p<sub>j</sub></span>) = <span class="v">p<sub>j</sub></span> Î£<sub><span class="v">i</span></sub><span class="v">y<sub>i</sub></span> âˆ’ <span class="v">y<sub>j</sub></span> = <span class="v">p<sub>j</sub></span> âˆ’ <span class="v">y<sub>j</sub></span>
+  <span class="v">∂L</span>/<span class="v">∂z<sub>j</sub></span> = Σ<sub><span class="v">i</span></sub> (−<span class="v">y<sub>i</sub></span>/<span class="v">p<sub>i</sub></span>)·<span class="v">p<sub>i</sub></span>(<span class="v">δ<sub>ij</sub></span>−<span class="v">p<sub>j</sub></span>) = <span class="v">p<sub>j</sub></span> Σ<sub><span class="v">i</span></sub><span class="v">y<sub>i</sub></span> − <span class="v">y<sub>j</sub></span> = <span class="v">p<sub>j</sub></span> − <span class="v">y<sub>j</sub></span>
   <span class="n">(6.1)</span>
 </div>
-<p>La forma <strong>p âˆ’ y</strong> Ã¨ il motivo per cui softmax e cross-entropy si usano insieme: la composizione dÃ  il gradiente piÃ¹ semplice possibile, e non satura come farebbe una MSE su una sigmoide.</p>
+<p>La forma <strong>p − y</strong> è il motivo per cui softmax e cross-entropy si usano insieme: la composizione dà il gradiente più semplice possibile, e non satura come farebbe una MSE su una sigmoide.</p>
 
 <h4>Il trucco log-sum-exp</h4>
 <p>Calcolare <span class="v">e</span><sup><span class="v">z<sub>i</sub></span></sup> direttamente trabocca per <span class="v">z<sub>i</sub></span> â‰³ 88 in float32. Sfruttando l'invarianza della softmax per traslazione dei logit si sottrae il massimo:</p>
 <div class="eq">
-  log Î£<sub><span class="v">i</span></sub> <span class="v">e</span><sup><span class="v">z<sub>i</sub></span></sup> = <span class="v">z</span><sub>max</sub> + log Î£<sub><span class="v">i</span></sub> <span class="v">e</span><sup><span class="v">z<sub>i</sub></span>âˆ’<span class="v">z</span><sub>max</sub></sup>
+  log Σ<sub><span class="v">i</span></sub> <span class="v">e</span><sup><span class="v">z<sub>i</sub></span></sup> = <span class="v">z</span><sub>max</sub> + log Σ<sub><span class="v">i</span></sub> <span class="v">e</span><sup><span class="v">z<sub>i</sub></span>−<span class="v">z</span><sub>max</sub></sup>
   <span class="n">(6.2)</span>
 </div>
-<p>Tutti gli esponenti sono ora â‰¤ 0 e nessuno trabocca. Ãˆ ciÃ² che fanno internamente <code>log_softmax</code> e <code>BCEWithLogitsLoss</code>: motivo per cui si passa loro i <em>logit</em> e non le probabilitÃ .</p>
+<p>Tutti gli esponenti sono ora ≤ 0 e nessuno trabocca. È ciò che fanno internamente <code>log_softmax</code> e <code>BCEWithLogitsLoss</code>: motivo per cui si passa loro i <em>logit</em> e non le probabilità.</p>
 
-<h3>6.2 PerchÃ© BCE con target mixati</h3>
-<p>Mixing e phasemix producono target del tipo <span class="v">y</span> = <span class="v">Î»</span> <span class="v">y</span><sub>1</sub> + (1âˆ’<span class="v">Î»</span>) <span class="v">y</span><sub>2</sub>, cioÃ¨ distribuzioni con due componenti non nulle. La cross-entropy con softmax su un target del genere <strong>non Ã¨ piÃ¹ il log-likelihood di alcun modello generativo</strong>: la softmax modella una variabile categoriale con esito unico, e l'esempio mixato non ha un esito unico.</p>
+<h3>6.2 Perché BCE con target mixati</h3>
+<p>Mixing e phasemix producono target del tipo <span class="v">y</span> = <span class="v">λ</span> <span class="v">y</span><sub>1</sub> + (1−<span class="v">λ</span>) <span class="v">y</span><sub>2</sub>, cioè distribuzioni con due componenti non nulle. La cross-entropy con softmax su un target del genere <strong>non è più il log-likelihood di alcun modello generativo</strong>: la softmax modella una variabile categoriale con esito unico, e l'esempio mixato non ha un esito unico.</p>
 <p>Entrambi i paper usano quindi la <strong>binary cross-entropy</strong>, che tratta le 35 uscite come 35 problemi binari indipendenti:</p>
 <div class="eq">
-  <span class="v">L</span> = âˆ’(1/<span class="v">C</span>) Î£<sub><span class="v">c</span></sub> [ <span class="v">y<sub>c</sub></span> log <span class="v">Ïƒ</span>(<span class="v">z<sub>c</sub></span>) + (1âˆ’<span class="v">y<sub>c</sub></span>) log(1âˆ’<span class="v">Ïƒ</span>(<span class="v">z<sub>c</sub></span>)) ]
+  <span class="v">L</span> = −(1/<span class="v">C</span>) Σ<sub><span class="v">c</span></sub> [ <span class="v">y<sub>c</sub></span> log <span class="v">σ</span>(<span class="v">z<sub>c</sub></span>) + (1−<span class="v">y<sub>c</sub></span>) log(1−<span class="v">σ</span>(<span class="v">z<sub>c</sub></span>)) ]
   <span class="n">(6.3)</span>
 </div>
-<p>Qui <span class="v">y<sub>c</sub></span> âˆˆ [0,1] Ã¨ perfettamente sensato come <em>probabilitÃ  marginale</em> che la classe <span class="v">c</span> sia presente â€” e nulla obbliga la somma su <span class="v">c</span> a fare 1. Ãˆ proprio questa libertÃ  che permette il target <strong>multi-hot</strong> di Â§6.3.4, dove un esempio mixato dichiara la presenza di due parole.</p>
-<p>Nel nostro codice la BCE Ã¨ il <strong>percorso unico</strong>: anche senza augmentation i target sono one-hot in forma [B, C], cosÃ¬ il ramo di loss non cambia mai. Verificato nei test: i target contengono solo valori 0 o 1, con una o due classi attive per campione.</p>
+<p>Qui <span class="v">y<sub>c</sub></span> ∈ [0,1] è perfettamente sensato come <em>probabilità marginale</em> che la classe <span class="v">c</span> sia presente — e nulla obbliga la somma su <span class="v">c</span> a fare 1. È proprio questa libertà che permette il target <strong>multi-hot</strong> di §6.3.4, dove un esempio mixato dichiara la presenza di due parole.</p>
+<p>Nel nostro codice la BCE è il <strong>percorso unico</strong>: anche senza augmentation i target sono one-hot in forma [B, C], così il ramo di loss non cambia mai. Verificato nei test: i target contengono solo valori 0 o 1, con una o due classi attive per campione.</p>
 
 <h3>6.3 Le due augmentation di Kavaki &amp; Mandel <span class="tag t-evi">evidenza</span></h3>
-<p>Il paper dichiara di usare Â«mixing and phasemix augmentation [1]Â», cioÃ¨ due tecniche di EAT. EAT le descrive con <strong>una riga di testo ciascuna</strong>, senza formule. Le abbiamo ricavate dal codice ufficiale (<code>datasets/batch_augs.py</code>), e nessuna delle due Ã¨ quello che il nome suggerisce.</p>
+<p>Il paper dichiara di usare «mixing and phasemix augmentation [1]», cioè due tecniche di EAT. EAT le descrive con <strong>una riga di testo ciascuna</strong>, senza formule. Le abbiamo ricavate dal codice ufficiale (<code>datasets/batch_augs.py</code>), e nessuna delle due è quello che il nome suggerisce.</p>
 
-<h4>6.3.1 <code>mixing</code> non Ã¨ il mixup di Zhang et al.</h4>
-<p>Ãˆ il <strong>between-class learning</strong> di Tokozume et al. 2017 â€” che EAT cita come [14] e che noi avevamo in bibliografia senza collegarlo. I due segnali non vengono interpolati linearmente: vengono bilanciati in base al loro <strong>livello sonoro</strong>, e il risultato viene rinormalizzato in energia.</p>
+<h4>6.3.1 <code>mixing</code> non è il mixup di Zhang et al.</h4>
+<p>È il <strong>between-class learning</strong> di Tokozume et al. 2017 — che EAT cita come [14] e che noi avevamo in bibliografia senza collegarlo. I due segnali non vengono interpolati linearmente: vengono bilanciati in base al loro <strong>livello sonoro</strong>, e il risultato viene rinormalizzato in energia.</p>
 <div class="eq">
-  <span class="v">G<sub>i</sub></span> = 10 log<sub>10</sub> ð”¼[<span class="v">x<sub>i</sub></span>Â²] &nbsp;&nbsp;<span style="color:var(--muted)">(livello in dB)</span>
+  <span class="v">G<sub>i</sub></span> = 10 log<sub>10</sub> 𝔼[<span class="v">x<sub>i</sub></span>²] &nbsp;&nbsp;<span style="color:var(--muted)">(livello in dB)</span>
   <span class="n">(6.4)</span>
 </div>
 <div class="eq">
-  <span class="v">p</span> = 1 / ( 1 + 10<sup>(<span class="v">G</span><sub>1</sub>âˆ’<span class="v">G</span><sub>2</sub>)/20</sup> Â· (1âˆ’<span class="v">Î»</span>)/<span class="v">Î»</span> )
+  <span class="v">p</span> = 1 / ( 1 + 10<sup>(<span class="v">G</span><sub>1</sub>−<span class="v">G</span><sub>2</sub>)/20</sup> · (1−<span class="v">λ</span>)/<span class="v">λ</span> )
   <span class="n">(6.5)</span>
 </div>
 <div class="eq">
-  <span class="v">x</span> = ( <span class="v">p x</span><sub>1</sub> + (1âˆ’<span class="v">p</span>) <span class="v">x</span><sub>2</sub> ) / âˆš( <span class="v">p</span>Â² + (1âˆ’<span class="v">p</span>)Â² ), &nbsp;&nbsp;
-  <span class="v">y</span> = <span class="v">Î» y</span><sub>1</sub> + (1âˆ’<span class="v">Î»</span>) <span class="v">y</span><sub>2</sub>
+  <span class="v">x</span> = ( <span class="v">p x</span><sub>1</sub> + (1−<span class="v">p</span>) <span class="v">x</span><sub>2</sub> ) / √( <span class="v">p</span>² + (1−<span class="v">p</span>)² ), &nbsp;&nbsp;
+  <span class="v">y</span> = <span class="v">λ y</span><sub>1</sub> + (1−<span class="v">λ</span>) <span class="v">y</span><sub>2</sub>
   <span class="n">(6.6)</span>
 </div>
-<p>Tre osservazioni sul perchÃ© Ã¨ costruito cosÃ¬:</p>
+<p>Tre osservazioni sul perché è costruito così:</p>
 <ul>
-  <li><strong>il peso dei dati non Ã¨ il peso delle etichette</strong>: i campioni si mescolano con <span class="v">p</span>, corretto per il livello, mentre le etichette con <span class="v">Î»</span>, che Ã¨ il rapporto <em>percettivo</em> voluto. Se <span class="v">x</span><sub>1</sub> Ã¨ molto piÃ¹ forte di <span class="v">x</span><sub>2</sub>, servono pesi diseguali per ottenere una miscela percettivamente bilanciata;</li>
-  <li>la divisione per âˆš(<span class="v">p</span>Â²+(1âˆ’<span class="v">p</span>)Â²) <strong>mantiene costante l'energia attesa</strong>. Senza, il volume della miscela diventerebbe un indizio dell'avvenuta augmentation, e il modello potrebbe imparare a sfruttarlo invece che a generalizzare;</li>
-  <li><span class="v">Î»</span> ~ <strong>Uniform[0,1 Â· 1]</strong>, non una Beta.</li>
+  <li><strong>il peso dei dati non è il peso delle etichette</strong>: i campioni si mescolano con <span class="v">p</span>, corretto per il livello, mentre le etichette con <span class="v">λ</span>, che è il rapporto <em>percettivo</em> voluto. Se <span class="v">x</span><sub>1</sub> è molto più forte di <span class="v">x</span><sub>2</sub>, servono pesi diseguali per ottenere una miscela percettivamente bilanciata;</li>
+  <li>la divisione per √(<span class="v">p</span>²+(1−<span class="v">p</span>)²) <strong>mantiene costante l'energia attesa</strong>. Senza, il volume della miscela diventerebbe un indizio dell'avvenuta augmentation, e il modello potrebbe imparare a sfruttarlo invece che a generalizzare;</li>
+  <li><span class="v">λ</span> ~ <strong>Uniform[0,1 · 1]</strong>, non una Beta.</li>
 </ul>
 
 <h4>6.3.2 <code>phasemix</code> preserva l'ampiezza, non la mescola</h4>
-<p>La descrizione di EAT â€” Â«mixes phase components <em>while preserving amplitude</em>Â» â€” va letta alla lettera: l'ampiezza <strong>non si mescola affatto</strong>. Si prende quella di un campione e solo la fase dell'altro.</p>
+<p>La descrizione di EAT — «mixes phase components <em>while preserving amplitude</em>» — va letta alla lettera: l'ampiezza <strong>non si mescola affatto</strong>. Si prende quella di un campione e solo la fase dell'altro.</p>
 <div class="eq">
   <span class="mat">X</span> = STFT(<span class="v">x</span><sub>1</sub>), &nbsp;&nbsp;
-  <span class="v">Ï†</span> = <span class="v">Î»</span> âˆ <span class="mat">X</span><sub>1</sub> + (1âˆ’<span class="v">Î»</span>) âˆ <span class="mat">X</span><sub>2</sub>, &nbsp;&nbsp;
-  <span class="v">x</span> = iSTFT( |<span class="mat">X</span><sub>1</sub>| Â· <span class="v">e</span><sup><span class="v">jÏ†</span></sup> )
+  <span class="v">φ</span> = <span class="v">λ</span> ∠<span class="mat">X</span><sub>1</sub> + (1−<span class="v">λ</span>) ∠<span class="mat">X</span><sub>2</sub>, &nbsp;&nbsp;
+  <span class="v">x</span> = iSTFT( |<span class="mat">X</span><sub>1</sub>| · <span class="v">e</span><sup><span class="v">jφ</span></sup> )
   <span class="n">(6.7)</span>
 </div>
 <div class="eq">
-  peso dell'etichetta = <span class="v">Î»</span>Â·0,5 + 0,5 &nbsp; âˆˆ [0,5 Â· 1], &nbsp;&nbsp; <span class="v">Î»</span> ~ Uniform[0,1]
+  peso dell'etichetta = <span class="v">λ</span>·0,5 + 0,5 &nbsp; ∈ [0,5 · 1], &nbsp;&nbsp; <span class="v">λ</span> ~ Uniform[0,1]
   <span class="n">(6.8)</span>
 </div>
 <div class="box info">
-  <p class="box-t">Il peso dell'etichetta Ã¨ la finezza che non si poteva indovinare</p>
-  <p>Mescolare la sola fase altera il segnale <em>meno</em> di quanto faccia mescolare tutto: Ã¨ giusto che l'etichetta resti piÃ¹ vicina all'originale. Il rimappaggio <span class="v">Î»</span> â†¦ <span class="v">Î»</span>/2 + 1/2 fa esattamente questo, e garantisce che il peso della classe originale <strong>non scenda mai sotto 0,5</strong>. Nessuna descrizione testuale avrebbe potuto suggerirlo.</p>
+  <p class="box-t">Il peso dell'etichetta è la finezza che non si poteva indovinare</p>
+  <p>Mescolare la sola fase altera il segnale <em>meno</em> di quanto faccia mescolare tutto: è giusto che l'etichetta resti più vicina all'originale. Il rimappaggio <span class="v">λ</span> ↦ <span class="v">λ</span>/2 + 1/2 fa esattamente questo, e garantisce che il peso della classe originale <strong>non scenda mai sotto 0,5</strong>. Nessuna descrizione testuale avrebbe potuto suggerirlo.</p>
 </div>
-<p>Le fasi sono interpolate <strong>sugli angoli</strong>, non sui vettori unitari. Ãˆ una scelta discutibile â€” l'interpolazione lineare attraversa la discontinuitÃ  a Â±Ï€ â€” ma qui conta la fedeltÃ  al riferimento, non il miglioramento del metodo. Una nostra prima versione usava i vettori unitari e mescolava anche le ampiezze: era sbagliata su entrambi i fronti.</p>
+<p>Le fasi sono interpolate <strong>sugli angoli</strong>, non sui vettori unitari. È una scelta discutibile — l'interpolazione lineare attraversa la discontinuità a ±π — ma qui conta la fedeltà al riferimento, non il miglioramento del metodo. Una nostra prima versione usava i vettori unitari e mescolava anche le ampiezze: era sbagliata su entrambi i fronti.</p>
 
-<h4>6.3.3 Consistenza della STFT: una proprietÃ  non ovvia <span class="tag t-evi">evidenza</span></h4>
+<h4>6.3.3 Consistenza della STFT: una proprietà non ovvia <span class="tag t-evi">evidenza</span></h4>
 <div class="box">
-  <p class="box-t">Â«Ampiezza preservataÂ» vale sulla matrice, non sul segnale</p>
-  <p>Una matrice complessa arbitraria <strong>non Ã¨, in generale, la STFT di alcun segnale reale</strong>. Con finestre sovrapposte â€” qui al 60 %, finestra 400 e hop 160 â€” i frame adiacenti condividono campioni e quindi si vincolano a vicenda. Alterare le fasi rompe quel vincolo e rende la matrice <em>inconsistente</em>.</p>
+  <p class="box-t">«Ampiezza preservata» vale sulla matrice, non sul segnale</p>
+  <p>Una matrice complessa arbitraria <strong>non è, in generale, la STFT di alcun segnale reale</strong>. Con finestre sovrapposte — qui al 60 %, finestra 400 e hop 160 — i frame adiacenti condividono campioni e quindi si vincolano a vicenda. Alterare le fasi rompe quel vincolo e rende la matrice <em>inconsistente</em>.</p>
   <p>La iSTFT esegue overlap-add, che equivale a <strong>proiettare sul sottospazio delle STFT consistenti</strong>. Quella proiezione cambia anche i moduli: misurato, un errore relativo medio di circa il <strong>34 %</strong> ricalcolando la STFT del segnale ricostruito.</p>
-  <p>Non Ã¨ un difetto dell'implementazione â€” Ã¨ una proprietÃ  del metodo, ed Ã¨ plausibilmente parte di ciÃ² che lo rende efficace come augmentation: il segnale prodotto non Ã¨ una semplice ricombinazione dei due originali. Ãˆ lo stesso fenomeno che rende necessari algoritmi come Griffin-Lim per la ricostruzione da spettrogrammi di sola ampiezza.</p>
-  <p>Due test fissano entrambi i lati: con <span class="v">Î»</span>=1 la funzione Ã¨ l'identitÃ  entro 10â»â´ (correttezza del percorso STFTâ†’iSTFT), e con <span class="v">Î»</span>=0 la deviazione dei moduli Ã¨ misurabile ma limitata.</p>
+  <p>Non è un difetto dell'implementazione — è una proprietà del metodo, ed è plausibilmente parte di ciò che lo rende efficace come augmentation: il segnale prodotto non è una semplice ricombinazione dei due originali. È lo stesso fenomeno che rende necessari algoritmi come Griffin-Lim per la ricostruzione da spettrogrammi di sola ampiezza.</p>
+  <p>Due test fissano entrambi i lati: con <span class="v">λ</span>=1 la funzione è l'identità entro 10⁻⁴ (correttezza del percorso STFT→iSTFT), e con <span class="v">λ</span>=0 la deviazione dei moduli è misurabile ma limitata.</p>
 </div>
 
-<h4>6.3.4 Il target non Ã¨ morbido: Ã¨ multi-hot <span class="tag t-evi">evidenza</span></h4>
-<p>Questa Ã¨ l'ultima e piÃ¹ sottile delle correzioni. Avevamo scritto che i target sono <span class="v">Î»y</span><sub>1</sub> + (1âˆ’<span class="v">Î»</span>)<span class="v">y</span><sub>2</sub>, cioÃ¨ distribuzioni pesate. Il ramo <code>'bce'</code> di <code>mix_loss</code> in EAT fa un'altra cosa:</p>
+<h4>6.3.4 Il target non è morbido: è multi-hot <span class="tag t-evi">evidenza</span></h4>
+<p>Questa è l'ultima e più sottile delle correzioni. Avevamo scritto che i target sono <span class="v">λy</span><sub>1</sub> + (1−<span class="v">λ</span>)<span class="v">y</span><sub>2</sub>, cioè distribuzioni pesate. Il ramo <code>'bce'</code> di <code>mix_loss</code> in EAT fa un'altra cosa:</p>
 <pre>target          = F.one_hot(target, n_classes).float()
 target_shuffled = F.one_hot(target_shuffled, n_classes).float() * (lam &lt; 0.9)
 one_h_mix       = torch.clamp(target + target_shuffled, max=1)
 loss            = self.loss(logits, one_h_mix)</pre>
 <div class="eq">
-  <span class="v">y</span> = min( <span class="v">y</span><sub>1</sub> + <span class="v">y</span><sub>2</sub> Â· ðŸ™[<span class="v">Î»</span> &lt; 0,9] , 1 )
+  <span class="v">y</span> = min( <span class="v">y</span><sub>1</sub> + <span class="v">y</span><sub>2</sub> · 𝟙[<span class="v">λ</span> &lt; 0,9] , 1 )
   <span class="n">(6.9)</span>
 </div>
 <p>Tre osservazioni, tutte importanti:</p>
 <ul>
-  <li><strong><span class="v">Î»</span> non Ã¨ un peso, Ã¨ una soglia.</strong> Non compare nel valore del target ma solo nella decisione se includere o no la seconda etichetta. Se <span class="v">Î»</span> â‰¥ 0,9 il secondo suono Ã¨ troppo debole per essere udibile e la sua etichetta viene scartata.</li>
-  <li><strong>Il target Ã¨ multi-hot</strong>: entrambe le classi valgono 1, non <span class="v">Î»</span> e 1âˆ’<span class="v">Î»</span>. Ãˆ la formulazione naturale per la BCE, che tratta ogni classe come una domanda binaria indipendente â€” Â«questa parola Ã¨ presente?Â» â€” e la risposta per una miscela udibile di due parole Ã¨ sÃ¬ a entrambe.</li>
+  <li><strong><span class="v">λ</span> non è un peso, è una soglia.</strong> Non compare nel valore del target ma solo nella decisione se includere o no la seconda etichetta. Se <span class="v">λ</span> ≥ 0,9 il secondo suono è troppo debole per essere udibile e la sua etichetta viene scartata.</li>
+  <li><strong>Il target è multi-hot</strong>: entrambe le classi valgono 1, non <span class="v">λ</span> e 1−<span class="v">λ</span>. È la formulazione naturale per la BCE, che tratta ogni classe come una domanda binaria indipendente — «questa parola è presente?» — e la risposta per una miscela udibile di due parole è sì a entrambe.</li>
   <li>Il <code>clamp</code> serve al caso in cui i due campioni appartengano alla <strong>stessa classe</strong>, che altrimenti darebbe un target pari a 2.</li>
 </ul>
 <div class="box warn">
-  <p class="box-t">PerchÃ© la nostra prima formulazione era comunque coerente â€” ma con l'altro ramo</p>
-  <p>EAT ha due modalitÃ . Il ramo <code>'ce'</code> combina due loss come <span class="v">Î»L</span><sub>1</sub> + (1âˆ’<span class="v">Î»</span>)<span class="v">L</span><sub>2</sub>, che per linearitÃ  della cross-entropy nel target <em>Ã¨</em> equivalente a un target morbido <span class="v">Î»y</span><sub>1</sub>+(1âˆ’<span class="v">Î»</span>)<span class="v">y</span><sub>2</sub>. Il ramo <code>'bce'</code>, quello che si usa col mixing, fa invece il multi-hot con soglia.</p>
-  <p>Avevamo implementato la semantica del ramo sbagliato. Non Ã¨ un errore di equivalenza matematica ma di scelta del riferimento, ed Ã¨ il tipo di dettaglio che si vede solo leggendo il codice.</p>
+  <p class="box-t">Perché la nostra prima formulazione era comunque coerente — ma con l'altro ramo</p>
+  <p>EAT ha due modalità. Il ramo <code>'ce'</code> combina due loss come <span class="v">λL</span><sub>1</sub> + (1−<span class="v">λ</span>)<span class="v">L</span><sub>2</sub>, che per linearità della cross-entropy nel target <em>è</em> equivalente a un target morbido <span class="v">λy</span><sub>1</sub>+(1−<span class="v">λ</span>)<span class="v">y</span><sub>2</sub>. Il ramo <code>'bce'</code>, quello che si usa col mixing, fa invece il multi-hot con soglia.</p>
+  <p>Avevamo implementato la semantica del ramo sbagliato. Non è un errore di equivalenza matematica ma di scelta del riferimento, ed è il tipo di dettaglio che si vede solo leggendo il codice.</p>
 </div>
-<p>Nota sull'implementazione: <code>randperm</code> ha <strong>punti fissi</strong>, quindi circa 1/<span class="v">B</span> dei campioni per batch viene mixato con sÃ© stesso e il clamp riporta il target a una sola classe. Ãˆ il comportamento del riferimento, non un difetto â€” ma va saputo, perchÃ© fa fallire i test scritti assumendo che tutti i target mixati abbiano due classi attive.</p>
+<p>Nota sull'implementazione: <code>randperm</code> ha <strong>punti fissi</strong>, quindi circa 1/<span class="v">B</span> dei campioni per batch viene mixato con sé stesso e il clamp riporta il target a una sola classe. È il comportamento del riferimento, non un difetto — ma va saputo, perché fa fallire i test scritti assumendo che tutti i target mixati abbiano due classi attive.</p>
 
 <h4>6.3.5 Come sono programmate le augmentation <span class="tag t-evi">evidenza</span></h4>
-<p>Il paper dice solo Â«we also employed data augmentation techniques, including mixing and phasemixÂ». La logica di dispatch viene da <code>BatchAugs.__call__</code>:</p>
+<p>Il paper dice solo «we also employed data augmentation techniques, including mixing and phasemix». La logica di dispatch viene da <code>BatchAugs.__call__</code>:</p>
 <pre>se augs non vuoto  e  rand() &lt;= mix_ratio  e  epoch &gt; epoch_mix:
     scegli UNA augmentation a caso e applicala all'INTERO batch</pre>
 <ul>
-  <li><code>mix_ratio</code> Ã¨ la probabilitÃ  di mescolare, e il <strong>default di EAT Ã¨ 1</strong> â€” cioÃ¨ <em>sempre</em>. Avevamo assunto 0,5: sbagliato;</li>
-  <li><code>epoch_mix</code> Ã¨ una soglia di epoca sotto la quale il mixing Ã¨ disattivato, utile per far partire il training su dati puliti;</li>
-  <li>una sola augmentation per batch, scelta a caso, applicata a <strong>tutto</strong> il batch â€” non a un sottoinsieme di campioni.</li>
+  <li><code>mix_ratio</code> è la probabilità di mescolare, e il <strong>default di EAT è 1</strong> — cioè <em>sempre</em>. Avevamo assunto 0,5: sbagliato;</li>
+  <li><code>epoch_mix</code> è una soglia di epoca sotto la quale il mixing è disattivato, utile per far partire il training su dati puliti;</li>
+  <li>una sola augmentation per batch, scelta a caso, applicata a <strong>tutto</strong> il batch — non a un sottoinsieme di campioni.</li>
 </ul>
 
 <!-- ================================================================= -->
-<h2>7 Â· Il metodo sparso, per intero</h2>
+<h2>7 · Il metodo sparso, per intero</h2>
 
 <h3>7.1 L'idea</h3>
 <p>Invece di dare al transformer tutti i frame temporali, gli si danno <span class="v">N</span> <strong>token latenti</strong>, ciascuno accoppiato a una <strong>regione</strong> del piano tempo-frequenza da cui estrae informazione. Token e regioni iniziali sono <strong>parametri del modello</strong>, appresi: il modello impara <em>dove guardare</em>, non solo <em>cosa farne</em>. Il processo si ripete <span class="v">L</span><sub>rep</sub> volte, raffinando a ogni giro regioni, punti campionati e token.</p>
 <p>Configurazione dichiarata: <span class="v">N</span> = 4 token, <span class="v">P</span> = 36 campioni per token, <span class="v">d</span><sub>token</sub> = 64, <span class="v">d</span><sub>enc</sub> = 128, <span class="v">L</span><sub>rep</sub> = 3, <span class="v">L</span><sub>enc</sub> = 8 <span class="tag t-pap">dal paper</span>.</p>
 
 <h4>Inizializzazione <span class="tag t-evi">evidenza</span></h4>
-<p>Il paper dice: Â«we initialize the center of the regions to a grid and the width and height of them to half of the feature dimensionÂ». Il codice di SparseFormer dÃ  la forma precisa:</p>
+<p>Il paper dice: «we initialize the center of the regions to a grid and the width and height of them to half of the feature dimension». Il codice di SparseFormer dà la forma precisa:</p>
 <pre>nn.init.trunc_normal_(token_embedding.weight, std=1.)
 
 root = sqrt(N)
 grid = arange(root) / (root - 1)                    # [0, 1] uniforme
 token_roi[..., 0:2] = grid * (1 - unit_width)       # angolo in basso a sinistra
 token_roi[..., 2:4] = grid * (1 - unit_width) + unit_width</pre>
-<p>I token si inizializzano da una normale troncata con deviazione 1; le regioni su una griglia regolare in coordinate normalizzate [0, 1], con lato <code>unit_width</code> (0,5 secondo il paper). Le regioni sono memorizzate come <strong>(xâ‚, yâ‚, xâ‚‚, yâ‚‚)</strong> â€” angoli opposti â€” e centro e dimensione si ricavano al volo; le equazioni (7.2) restano identiche.</p>
+<p>I token si inizializzano da una normale troncata con deviazione 1; le regioni su una griglia regolare in coordinate normalizzate [0, 1], con lato <code>unit_width</code> (0,5 secondo il paper). Le regioni sono memorizzate come <strong>(x₁, y₁, x₂, y₂)</strong> — angoli opposti — e centro e dimensione si ricavano al volo; le equazioni (7.2) restano identiche.</p>
 <div class="box info">
   <p class="box-t">Una conseguenza che spiega un dettaglio del paper</p>
-  <p>La griglia Ã¨ <code>root</code> Ã— <code>root</code> con <code>root</code> = âˆš<span class="v">N</span>. Da qui segue che <strong><span class="v">N</span> deve essere un quadrato perfetto</strong> â€” ed Ã¨ esattamente quello che si osserva nella Tabella 3 del paper, la cui ablation usa <span class="v">N</span> âˆˆ {4, 9, 16, 25, 36}. Non Ã¨ una scelta estetica degli autori: Ã¨ un vincolo strutturale ereditato da SparseFormer.</p>
-  <p>Ãˆ il tipo di dettaglio che, notato e spiegato all'orale, dimostra di aver capito il metodo e non solo letto il paper.</p>
+  <p>La griglia è <code>root</code> × <code>root</code> con <code>root</code> = √<span class="v">N</span>. Da qui segue che <strong><span class="v">N</span> deve essere un quadrato perfetto</strong> — ed è esattamente quello che si osserva nella Tabella 3 del paper, la cui ablation usa <span class="v">N</span> ∈ {4, 9, 16, 25, 36}. Non è una scelta estetica degli autori: è un vincolo strutturale ereditato da SparseFormer.</p>
+  <p>È il tipo di dettaglio che, notato e spiegato all'orale, dimostra di aver capito il metodo e non solo letto il paper.</p>
 </div>
 
-<h3>7.2 Passo 1 â€” aggiustamento delle regioni</h3>
-<p>Una regione Ã¨ <span class="v">b</span> = (<span class="v">x</span>, <span class="v">y</span>, <span class="v">w</span>, <span class="v">h</span>). Il token produce quattro numeri tramite uno strato lineare, e questi aggiornano la regione:</p>
+<h3>7.2 Passo 1 — aggiustamento delle regioni</h3>
+<p>Una regione è <span class="v">b</span> = (<span class="v">x</span>, <span class="v">y</span>, <span class="v">w</span>, <span class="v">h</span>). Il token produce quattro numeri tramite uno strato lineare, e questi aggiornano la regione:</p>
 <div class="eq">
   (<span class="v">t<sub>x</sub></span>, <span class="v">t<sub>y</sub></span>, <span class="v">t<sub>w</sub></span>, <span class="v">t<sub>h</sub></span>) = Linear(<span class="v">t</span>)
   <span class="n">(7.1)</span>
 </div>
 <div class="eq">
-  <span class="v">x</span>â€² = <span class="v">x</span> + <span class="v">t<sub>x</sub></span>Â·<span class="v">w</span>, &nbsp;
-  <span class="v">y</span>â€² = <span class="v">y</span> + <span class="v">t<sub>y</sub></span>Â·<span class="v">h</span>, &nbsp;
-  <span class="v">w</span>â€² = <span class="v">w</span>Â·<span class="v">e</span><sup><span class="v">t<sub>w</sub></span></sup>, &nbsp;
-  <span class="v">h</span>â€² = <span class="v">h</span>Â·<span class="v">e</span><sup><span class="v">t<sub>h</sub></span></sup>
+  <span class="v">x</span>′ = <span class="v">x</span> + <span class="v">t<sub>x</sub></span>·<span class="v">w</span>, &nbsp;
+  <span class="v">y</span>′ = <span class="v">y</span> + <span class="v">t<sub>y</sub></span>·<span class="v">h</span>, &nbsp;
+  <span class="v">w</span>′ = <span class="v">w</span>·<span class="v">e</span><sup><span class="v">t<sub>w</sub></span></sup>, &nbsp;
+  <span class="v">h</span>′ = <span class="v">h</span>·<span class="v">e</span><sup><span class="v">t<sub>h</sub></span></sup>
   <span class="n">(7.2)</span>
 </div>
 <div class="box info">
-  <p class="box-t">PerchÃ© l'esponenziale â€” domanda d'esame quasi certa</p>
+  <p class="box-t">Perché l'esponenziale — domanda d'esame quasi certa</p>
   <p>Tre ragioni, tutte necessarie.</p>
-  <p><strong>PositivitÃ .</strong> Larghezza e altezza devono restare positive. <span class="v">w</span>Â·<span class="v">e</span><sup><span class="v">t</span></sup> lo garantisce per costruzione, per qualunque valore reale prodotto dalla rete; una forma additiva <span class="v">w</span> + <span class="v">t</span> richiederebbe un clamp, che azzera il gradiente quando Ã¨ attivo.</p>
-  <p><strong>Invarianza di scala.</strong> L'aggiornamento Ã¨ moltiplicativo: lo stesso <span class="v">t<sub>w</sub></span> raddoppia una regione piccola e una grande. La rete apprende <em>rapporti</em>, non incrementi assoluti, ed Ã¨ la parametrizzazione naturale per una quantitÃ  positiva.</p>
-  <p><strong>Simmetria.</strong> <span class="v">t<sub>w</sub></span> e âˆ’<span class="v">t<sub>w</sub></span> producono fattori reciproci: allargare e restringere costano lo stesso nello spazio dei parametri. Con la forma additiva no.</p>
-  <p>Anche gli spostamenti sono <em>relativi</em> alla dimensione della regione (<span class="v">t<sub>x</sub></span>Â·<span class="v">w</span>): una regione grande si sposta di piÃ¹ a paritÃ  di segnale. Tutto questo viene da Faster R-CNN.</p>
+  <p><strong>Positività.</strong> Larghezza e altezza devono restare positive. <span class="v">w</span>·<span class="v">e</span><sup><span class="v">t</span></sup> lo garantisce per costruzione, per qualunque valore reale prodotto dalla rete; una forma additiva <span class="v">w</span> + <span class="v">t</span> richiederebbe un clamp, che azzera il gradiente quando è attivo.</p>
+  <p><strong>Invarianza di scala.</strong> L'aggiornamento è moltiplicativo: lo stesso <span class="v">t<sub>w</sub></span> raddoppia una regione piccola e una grande. La rete apprende <em>rapporti</em>, non incrementi assoluti, ed è la parametrizzazione naturale per una quantità positiva.</p>
+  <p><strong>Simmetria.</strong> <span class="v">t<sub>w</sub></span> e −<span class="v">t<sub>w</sub></span> producono fattori reciproci: allargare e restringere costano lo stesso nello spazio dei parametri. Con la forma additiva no.</p>
+  <p>Anche gli spostamenti sono <em>relativi</em> alla dimensione della regione (<span class="v">t<sub>x</sub></span>·<span class="v">w</span>): una regione grande si sposta di più a parità di segnale. Tutto questo viene da Faster R-CNN.</p>
 </div>
 
-<h3>7.3 Passo 2 â€” campionamento sparso</h3>
+<h3>7.3 Passo 2 — campionamento sparso</h3>
 <p>Ogni token genera <span class="v">P</span> offset relativi, poi mappati in coordinate assolute dentro la propria regione:</p>
 <div class="eq">
   {(Î”<span class="v">x<sub>i</sub></span>, Î”<span class="v">y<sub>i</sub></span>)}<sub><span class="v">i</span>=1..<span class="v">P</span></sub> = Linear(LayerNorm(<span class="v">t</span>))
   <span class="n">(7.3)</span>
 </div>
 <div class="eq">
-  <span class="v">xÌƒ<sub>i</sub></span> = <span class="v">x</span> + 0,5Â·Î”<span class="v">x<sub>i</sub></span>Â·<span class="v">w</span>, &nbsp;&nbsp;
-  <span class="v">á»¹<sub>i</sub></span> = <span class="v">y</span> + 0,5Â·Î”<span class="v">y<sub>i</sub></span>Â·<span class="v">h</span>
+  <span class="v">x̃<sub>i</sub></span> = <span class="v">x</span> + 0,5·Δ<span class="v">x<sub>i</sub></span>·<span class="v">w</span>, &nbsp;&nbsp;
+  <span class="v">ỹ<sub>i</sub></span> = <span class="v">y</span> + 0,5·Δ<span class="v">y<sub>i</sub></span>·<span class="v">h</span>
   <span class="n">(7.4)</span>
 </div>
-<p>Il fattore 0,5 mappa Î” âˆˆ [âˆ’1, 1] esattamente sull'estensione della regione.</p>
+<p>Il fattore 0,5 mappa Δ ∈ [−1, 1] esattamente sull'estensione della regione.</p>
 
-<h4>La normalizzazione Â«a tre deviazioni standardÂ» <span class="tag t-evi">evidenza</span></h4>
-<p>Il paper scrive: Â«To make sure that most of the sampled points fall inside of the region, we need to do normalization over the relative offsets by three standard deviationsÂ», senza formula. Il codice di SparseFormer la fornisce:</p>
+<h4>La normalizzazione «a tre deviazioni standard» <span class="tag t-evi">evidenza</span></h4>
+<p>Il paper scrive: «To make sure that most of the sampled points fall inside of the region, we need to do normalization over the relative offsets by three standard deviations», senza formula. Il codice di SparseFormer la fornisce:</p>
 <pre>offset_mean = relative_offset_xy.mean(-2, keepdim=True)
 offset_std  = relative_offset_xy.std(-2, keepdim=True) + 1e-7
 relative_offset_xy = (relative_offset_xy - offset_mean) / (3 * offset_std)</pre>
-<p>Media e deviazione sono calcolate <strong>sull'asse dei <span class="v">P</span> punti</strong>, cioÃ¨ fra i campioni di uno stesso token, non sul batch. L'operazione Ã¨ quindi una standardizzazione dell'<em>insieme</em> di offset generati, seguita da una divisione per 3.</p>
-<p>Il senso Ã¨ geometrico: dopo la standardizzazione gli offset hanno media 0 e deviazione 1; dividendo per 3 la deviazione diventa 1/3, e per una distribuzione approssimativamente normale circa il <strong>99,7 %</strong> della massa cade in [âˆ’1, 1] â€” cioÃ¨, dopo il riscalamento di (7.4), dentro la regione. Ãˆ la regola dei tre sigma, applicata per costruzione invece che sperando che accada.</p>
-<p>Nota implementativa: standardizzare fra i punti significa che il modello controlla la <em>forma</em> della nuvola di campionamento, mentre la sua posizione e dimensione restano governate dalla regione. I due meccanismi sono disaccoppiati, il che spiega perchÃ© servano entrambi.</p>
+<p>Media e deviazione sono calcolate <strong>sull'asse dei <span class="v">P</span> punti</strong>, cioè fra i campioni di uno stesso token, non sul batch. L'operazione è quindi una standardizzazione dell'<em>insieme</em> di offset generati, seguita da una divisione per 3.</p>
+<p>Il senso è geometrico: dopo la standardizzazione gli offset hanno media 0 e deviazione 1; dividendo per 3 la deviazione diventa 1/3, e per una distribuzione approssimativamente normale circa il <strong>99,7 %</strong> della massa cade in [−1, 1] — cioè, dopo il riscalamento di (7.4), dentro la regione. È la regola dei tre sigma, applicata per costruzione invece che sperando che accada.</p>
+<p>Nota implementativa: standardizzare fra i punti significa che il modello controlla la <em>forma</em> della nuvola di campionamento, mentre la sua posizione e dimensione restano governate dalla regione. I due meccanismi sono disaccoppiati, il che spiega perché servano entrambi.</p>
 
 <h4>Interpolazione bilineare e suo gradiente</h4>
-<p>Le coordinate sono continue, la feature map Ã¨ discreta. Detto (<span class="v">xÌƒ</span>, <span class="v">á»¹</span>) con parte intera (<span class="v">x</span><sub>0</sub>, <span class="v">y</span><sub>0</sub>) e frazionaria (<span class="v">a</span>, <span class="v">b</span>):</p>
+<p>Le coordinate sono continue, la feature map è discreta. Detto (<span class="v">x̃</span>, <span class="v">ỹ</span>) con parte intera (<span class="v">x</span><sub>0</sub>, <span class="v">y</span><sub>0</sub>) e frazionaria (<span class="v">a</span>, <span class="v">b</span>):</p>
 <div class="eq">
-  <span class="v">F</span>(<span class="v">xÌƒ</span>,<span class="v">á»¹</span>) = (1âˆ’<span class="v">a</span>)(1âˆ’<span class="v">b</span>)<span class="v">F</span><sub>00</sub> + <span class="v">a</span>(1âˆ’<span class="v">b</span>)<span class="v">F</span><sub>10</sub> + (1âˆ’<span class="v">a</span>)<span class="v">b</span> <span class="v">F</span><sub>01</sub> + <span class="v">ab</span> <span class="v">F</span><sub>11</sub>
+  <span class="v">F</span>(<span class="v">x̃</span>,<span class="v">ỹ</span>) = (1−<span class="v">a</span>)(1−<span class="v">b</span>)<span class="v">F</span><sub>00</sub> + <span class="v">a</span>(1−<span class="v">b</span>)<span class="v">F</span><sub>10</sub> + (1−<span class="v">a</span>)<span class="v">b</span> <span class="v">F</span><sub>01</sub> + <span class="v">ab</span> <span class="v">F</span><sub>11</sub>
   <span class="n">(7.5)</span>
 </div>
-<p>Ãˆ il meccanismo che rende <strong>differenziabile la selezione</strong>. Derivando rispetto alla coordinata:</p>
+<p>È il meccanismo che rende <strong>differenziabile la selezione</strong>. Derivando rispetto alla coordinata:</p>
 <div class="eq">
-  <span class="v">âˆ‚F</span>/<span class="v">âˆ‚xÌƒ</span> = (1âˆ’<span class="v">b</span>)(<span class="v">F</span><sub>10</sub> âˆ’ <span class="v">F</span><sub>00</sub>) + <span class="v">b</span>(<span class="v">F</span><sub>11</sub> âˆ’ <span class="v">F</span><sub>01</sub>)
+  <span class="v">∂F</span>/<span class="v">∂x̃</span> = (1−<span class="v">b</span>)(<span class="v">F</span><sub>10</sub> − <span class="v">F</span><sub>00</sub>) + <span class="v">b</span>(<span class="v">F</span><sub>11</sub> − <span class="v">F</span><sub>01</sub>)
   <span class="n">(7.6)</span>
 </div>
-<p>cioÃ¨ una <strong>differenza finita locale</strong> fra celle adiacenti. Da qui discendono due fatti fondamentali:</p>
+<p>cioè una <strong>differenza finita locale</strong> fra celle adiacenti. Da qui discendono due fatti fondamentali:</p>
 <ul>
-  <li>il gradiente vede solo le <strong>4 celle adiacenti</strong>: Ã¨ cieco a tutto ciÃ² che sta oltre un pixel di distanza, quindi la regione puÃ² muoversi solo per piccoli passi seguendo la pendenza locale;</li>
-  <li>se la superficie Ã¨ ruvida, quella differenza Ã¨ <strong>rumore</strong>. Ãˆ esattamente la ragione per cui serve la early convolution (Â§4.2). Il legame fra i due paragrafi Ã¨ il cuore tecnico del paper.</li>
+  <li>il gradiente vede solo le <strong>4 celle adiacenti</strong>: è cieco a tutto ciò che sta oltre un pixel di distanza, quindi la regione può muoversi solo per piccoli passi seguendo la pendenza locale;</li>
+  <li>se la superficie è ruvida, quella differenza è <strong>rumore</strong>. È esattamente la ragione per cui serve la early convolution (§4.2). Il legame fra i due paragrafi è il cuore tecnico del paper.</li>
 </ul>
 
-<h3>7.4 Passo 3 â€” decoding adattivo</h3>
-<p>Ora si hanno <span class="v">P</span> vettori di feature campionati, <span class="v">x</span><sup>(0)</sup> âˆˆ â„<sup><span class="v">P</span>Ã—<span class="v">C</span></sup>, e vanno compressi nel token. Il paper nota che Â«simply using a linear layer for this encoding is not effectiveÂ». La soluzione, ereditata da AdaMixer, Ã¨ generare i pesi di mixing <strong>dal token stesso</strong>:</p>
+<h3>7.4 Passo 3 — decoding adattivo</h3>
+<p>Ora si hanno <span class="v">P</span> vettori di feature campionati, <span class="v">x</span><sup>(0)</sup> ∈ ℝ<sup><span class="v">P</span>×<span class="v">C</span></sup>, e vanno compressi nel token. Il paper nota che «simply using a linear layer for this encoding is not effective». La soluzione, ereditata da AdaMixer, è generare i pesi di mixing <strong>dal token stesso</strong>:</p>
 <div class="eq">
   [ <span class="mat">M<sub>c</sub></span> | <span class="mat">M<sub>s</sub></span> ] = <span class="v">F</span>(<span class="v">t</span>), &nbsp;&nbsp;
-  <span class="mat">M<sub>c</sub></span> âˆˆ â„<sup><span class="v">C</span>Ã—<span class="v">C</span></sup>, &nbsp; <span class="mat">M<sub>s</sub></span> âˆˆ â„<sup><span class="v">P</span>Ã—<span class="v">P</span></sup>
+  <span class="mat">M<sub>c</sub></span> ∈ ℝ<sup><span class="v">C</span>×<span class="v">C</span></sup>, &nbsp; <span class="mat">M<sub>s</sub></span> ∈ ℝ<sup><span class="v">P</span>×<span class="v">P</span></sup>
   <span class="n">(7.7)</span>
 </div>
 <div class="eq">
   <span class="v">x</span><sup>(1)</sup> = GELU(<span class="v">x</span><sup>(0)</sup><span class="mat">M<sub>c</sub></span>), &nbsp;&nbsp;
   <span class="v">x</span><sup>(2)</sup> = GELU(<span class="mat">M<sub>s</sub></span> <span class="v">x</span><sup>(1)</sup>), &nbsp;&nbsp;
-  <span class="v">t</span>â€² = <span class="v">t</span> + Linear(<span class="v">x</span><sup>(2)</sup>)
+  <span class="v">t</span>′ = <span class="v">t</span> + Linear(<span class="v">x</span><sup>(2)</sup>)
   <span class="n">(7.8)</span>
 </div>
 <div class="box info">
   <p class="box-t">La differenza concettuale fra pesi fissi e pesi condizionati</p>
-  <p>Uno strato lineare ordinario applica <strong>gli stessi pesi</strong> a tutti gli input: impara una trasformazione media, buona in media per tutti i token. Qui invece <span class="mat">M<sub>c</sub></span> e <span class="mat">M<sub>s</sub></span> sono <strong>funzioni del token</strong>: ogni token specifica come vuole mescolare i propri campioni. Un token che sta seguendo una regione di bassa frequenza puÃ² pesare i canali diversamente da uno su un transiente.</p>
-  <p>Ãˆ lo stesso principio delle <em>hypernetwork</em> e dei meccanismi di attenzione: la rete genera parte dei propri pesi in funzione del contesto. Il costo si vede nel conteggio dei parametri, perchÃ© <span class="v">F</span> deve produrre <span class="v">C</span>Â² + <span class="v">P</span>Â² valori.</p>
+  <p>Uno strato lineare ordinario applica <strong>gli stessi pesi</strong> a tutti gli input: impara una trasformazione media, buona in media per tutti i token. Qui invece <span class="mat">M<sub>c</sub></span> e <span class="mat">M<sub>s</sub></span> sono <strong>funzioni del token</strong>: ogni token specifica come vuole mescolare i propri campioni. Un token che sta seguendo una regione di bassa frequenza può pesare i canali diversamente da uno su un transiente.</p>
+  <p>È lo stesso principio delle <em>hypernetwork</em> e dei meccanismi di attenzione: la rete genera parte dei propri pesi in funzione del contesto. Il costo si vede nel conteggio dei parametri, perché <span class="v">F</span> deve produrre <span class="v">C</span>² + <span class="v">P</span>² valori.</p>
 </div>
-<p>L'aggiornamento del token Ã¨ <strong>residuo</strong> (<span class="v">t</span>â€² = <span class="v">t</span> + â€¦), come nei blocchi transformer: il token accumula informazione a ogni ripetizione invece di essere riscritto, e il gradiente ha un percorso diretto verso i parametri iniziali.</p>
+<p>L'aggiornamento del token è <strong>residuo</strong> (<span class="v">t</span>′ = <span class="v">t</span> + …), come nei blocchi transformer: il token accumula informazione a ogni ripetizione invece di essere riscritto, e il gradiente ha un percorso diretto verso i parametri iniziali.</p>
 
 <h3>7.5 Il transformer di classificazione</h3>
-<p>Gli <span class="v">N</span> token finali entrano in 8 blocchi encoder, <strong>senza codifica posizionale</strong>, poi media e classificatore lineare. Con <span class="v">N</span> = 4 la matrice di attenzione Ã¨ 4Ã—4: praticamente gratuita.</p>
+<p>Gli <span class="v">N</span> token finali entrano in 8 blocchi encoder, <strong>senza codifica posizionale</strong>, poi media e classificatore lineare. Con <span class="v">N</span> = 4 la matrice di attenzione è 4×4: praticamente gratuita.</p>
 
 <h3>7.6 Contare i FLOPs di questo modello</h3>
 <div class="box warn">
   <p class="box-t">Attenzione: <code>grid_sample</code> non viene contato</p>
-  <p>L'interpolazione bilineare Ã¨ un'operazione di <em>gather</em> piÃ¹ combinazione lineare: non contiene alcun prodotto matriciale, quindi <strong>nÃ© il contatore nativo di torch nÃ© fvcore la vedono</strong>. Sul modello sparso questo significa sottostimare proprio il meccanismo che si vuole difendere.</p>
-  <p>Va aggiunta a mano. Per punto e canale servono 4 letture pesate e 3 somme, piÃ¹ circa 4 operazioni per i pesi condivisi fra canali: <code>grid_sample_flops(P, C) = PÂ·(4 + 7C)</code>. Ãˆ implementata in <code>src/flops.py</code>.</p>
+  <p>L'interpolazione bilineare è un'operazione di <em>gather</em> più combinazione lineare: non contiene alcun prodotto matriciale, quindi <strong>né il contatore nativo di torch né fvcore la vedono</strong>. Sul modello sparso questo significa sottostimare proprio il meccanismo che si vuole difendere.</p>
+  <p>Va aggiunta a mano. Per punto e canale servono 4 letture pesate e 3 somme, più circa 4 operazioni per i pesi condivisi fra canali: <code>grid_sample_flops(P, C) = P·(4 + 7C)</code>. È implementata in <code>src/flops.py</code>.</p>
 </div>
 
 <!-- ================================================================= -->
-<h2>8 Â· La ricostruzione del modello denso</h2>
+<h2>8 · La ricostruzione del modello denso</h2>
 
 <h3>8.1 Il problema</h3>
-<p>Del dense-transformer il paper fornisce <strong>due soli numeri</strong>: 4,80 M parametri e 0,645 G FLOPs. Nessun iperparametro. Assemblare secondo la Tabella 1 â€” che descrive lo <em>sparso</em> â€” dÃ  circa 1,8 M: un fattore 2,7 di scarto.</p>
+<p>Del dense-transformer il paper fornisce <strong>due soli numeri</strong>: 4,80 M parametri e 0,645 G FLOPs. Nessun iperparametro. Assemblare secondo la Tabella 1 — che descrive lo <em>sparso</em> — dà circa 1,8 M: un fattore 2,7 di scarto.</p>
 
 <h3>8.2 Il metodo: i numeri come vincoli</h3>
-<p>Quei due numeri sono <strong>vincoli</strong>. Non tutte le combinazioni delle scelte libere li soddisfano, quindi si puÃ² cercare nello spazio delle configurazioni e tenere quelle compatibili â€” un lavoro di minuti di CPU, senza addestrare nulla. I gradi di libertÃ  considerati:</p>
+<p>Quei due numeri sono <strong>vincoli</strong>. Non tutte le combinazioni delle scelte libere li soddisfano, quindi si può cercare nello spazio delle configurazioni e tenere quelle compatibili — un lavoro di minuti di CPU, senza addestrare nulla. I gradi di libertà considerati:</p>
 <table>
-  <thead><tr><th style="width:44mm">Grado di libertÃ </th><th>Valori esplorati</th></tr></thead>
+  <thead><tr><th style="width:44mm">Grado di libertà</th><th>Valori esplorati</th></tr></thead>
   <tbody>
-    <tr><td>Lettura dei canali</td><td><code>c96</code> Â· <code>c196</code> Â· <code>c196_proj96</code> (196 kernel poi proiezione a 96)</td></tr>
-    <tr><td>Stem</td><td><code>paper</code> (conv 7Ã—7 singola) Â· <code>xiao</code> (stack 3Ã—3)</td></tr>
-    <tr><td>Stride del pooling</td><td>(2,2) â†’ <span class="v">N</span>=26 Â· (2,1) â†’ <span class="v">N</span>=51</td></tr>
-    <tr><td>Formazione della sequenza</td><td><code>flatten</code> Â· <code>pool_freq</code> Â· <code>patches2d</code></td></tr>
-    <tr><td>Dimensione <span class="v">d</span></td><td>128 â€¦ 288</td></tr>
-    <tr><td>ProfonditÃ </td><td>6 Â· 8 Â· 12</td></tr>
+    <tr><td>Lettura dei canali</td><td><code>c96</code> · <code>c196</code> · <code>c196_proj96</code> (196 kernel poi proiezione a 96)</td></tr>
+    <tr><td>Stem</td><td><code>paper</code> (conv 7×7 singola) · <code>xiao</code> (stack 3×3)</td></tr>
+    <tr><td>Stride del pooling</td><td>(2,2) → <span class="v">N</span>=26 · (2,1) → <span class="v">N</span>=51</td></tr>
+    <tr><td>Formazione della sequenza</td><td><code>flatten</code> · <code>pool_freq</code> · <code>patches2d</code></td></tr>
+    <tr><td>Dimensione <span class="v">d</span></td><td>128 … 288</td></tr>
+    <tr><td>Profondità</td><td>6 · 8 · 12</td></tr>
   </tbody>
 </table>
 
-<h3>8.3 Risultato 1 â€” il pooling agisce solo sulla frequenza <span class="tag t-evi">evidenza</span></h3>
-<p>Su 432 configurazioni, <strong>tutte quelle vicine al costo dichiarato hanno <span class="v">N</span> = 51</strong>. La famiglia <span class="v">N</span> = 26 si ferma a 0,451 G contro 0,645, uno scarto del 30 % che nemmeno lo stem convolutivo piÃ¹ pesante recupera.</p>
-<p>Il paper dice solo Â«max poolingÂ», senza stride. Ne deduciamo che <strong>deve preservare la risoluzione temporale</strong> â€” un dettaglio non scritto da nessuna parte, ricavato da due numeri.</p>
+<h3>8.3 Risultato 1 — il pooling agisce solo sulla frequenza <span class="tag t-evi">evidenza</span></h3>
+<p>Su 432 configurazioni, <strong>tutte quelle vicine al costo dichiarato hanno <span class="v">N</span> = 51</strong>. La famiglia <span class="v">N</span> = 26 si ferma a 0,451 G contro 0,645, uno scarto del 30 % che nemmeno lo stem convolutivo più pesante recupera.</p>
+<p>Il paper dice solo «max pooling», senza stride. Ne deduciamo che <strong>deve preservare la risoluzione temporale</strong> — un dettaglio non scritto da nessuna parte, ricavato da due numeri.</p>
 
-<h3>8.4 Risultato 2 â€” il paper riporta FLOPs, non MAC <span class="tag t-evi">evidenza</span></h3>
-<p>Ogni configurazione che si avvicina a 0,645 lo fa nella colonna <em>FLOP</em> (0,53â€“0,66); i MAC corrispondenti stanno a 0,26â€“0,33, cioÃ¨ metÃ . Il paper usa dunque la convenzione del contatore nativo di torch.</p>
-<p>Il rapporto esatto di 2 fra le due convenzioni Ã¨ verificato da un test dedicato: su un <code>Linear(100â†’200)</code> senza bias, fvcore riporta 20 000 e torch 40 000. Questa calibrazione rende legittimi tutti i confronti successivi con i numeri pubblicati.</p>
+<h3>8.4 Risultato 2 — il paper riporta FLOPs, non MAC <span class="tag t-evi">evidenza</span></h3>
+<p>Ogni configurazione che si avvicina a 0,645 lo fa nella colonna <em>FLOP</em> (0,53–0,66); i MAC corrispondenti stanno a 0,26–0,33, cioè metà. Il paper usa dunque la convenzione del contatore nativo di torch.</p>
+<p>Il rapporto esatto di 2 fra le due convenzioni è verificato da un test dedicato: su un <code>Linear(100→200)</code> senza bias, fvcore riporta 20 000 e torch 40 000. Questa calibrazione rende legittimi tutti i confronti successivi con i numeri pubblicati.</p>
 
 <h3>8.5 Un errore di metodo, e la sua correzione</h3>
 <div class="box warn">
-  <p class="box-t">Avevamo lasciato libera la profonditÃ </p>
-  <p>La prima ricerca trattava <span class="v">L</span> come incognita e sceglieva <span class="v">L</span> = 6, che fitta i parametri a +0,0 %. Ma il paper dichiara <strong>8 transformer-encoder</strong> per lo sparso e descrive il denso come <em>Â«the same architecture but processes a sequence of time framesÂ»</em>: la profonditÃ  <strong>era data</strong>.</p>
-  <p>Ottimizzare un parametro giÃ  vincolato Ã¨ l'errore classico del fitting. Imponendo <span class="v">L</span> = 8 si perdono due punti percentuali sui parametri e si guadagna coerenza col testo â€” che all'esame vale incomparabilmente di piÃ¹.</p>
+  <p class="box-t">Avevamo lasciato libera la profondità</p>
+  <p>La prima ricerca trattava <span class="v">L</span> come incognita e sceglieva <span class="v">L</span> = 6, che fitta i parametri a +0,0 %. Ma il paper dichiara <strong>8 transformer-encoder</strong> per lo sparso e descrive il denso come <em>«the same architecture but processes a sequence of time frames»</em>: la profondità <strong>era data</strong>.</p>
+  <p>Ottimizzare un parametro già vincolato è l'errore classico del fitting. Imponendo <span class="v">L</span> = 8 si perdono due punti percentuali sui parametri e si guadagna coerenza col testo — che all'esame vale incomparabilmente di più.</p>
 </div>
 
 <h3>8.6 Un'ipotesi formulata e confutata <span class="tag t-evi">evidenza</span></h3>
-<p>Restava uno scarto di circa l'11 % sul costo. Ipotesi: il paper scrive Â«convolutional layer<em>s</em>Â» al plurale, quindi gli strati sono piÃ¹ di uno e il costo mancante viene da lÃ¬. <strong>Testata:</strong></p>
+<p>Restava uno scarto di circa l'11 % sul costo. Ipotesi: il paper scrive «convolutional layer<em>s</em>» al plurale, quindi gli strati sono più di uno e il costo mancante viene da lì. <strong>Testata:</strong></p>
 <table>
   <thead><tr><th class="c">n. conv</th><th class="c">parametri</th><th class="c">errore</th><th class="c">GFLOP</th><th class="c">errore</th></tr></thead>
   <tbody>
-    <tr><td class="c">1</td><td class="c">4 899 151</td><td class="c">+2,1 %</td><td class="c">0,574</td><td class="c">âˆ’11,0 %</td></tr>
+    <tr><td class="c">1</td><td class="c">4 899 151</td><td class="c">+2,1 %</td><td class="c">0,574</td><td class="c">−11,0 %</td></tr>
     <tr><td class="c">2</td><td class="c">5 245 287</td><td class="c">+9,3 %</td><td class="c">1,703</td><td class="c"><strong>+164 %</strong></td></tr>
     <tr><td class="c">3</td><td class="c">5 591 423</td><td class="c">+16,5 %</td><td class="c">2,831</td><td class="c">+339 %</td></tr>
   </tbody>
 </table>
-<p><strong>Ipotesi confutata, e nettamente.</strong> Una convoluzione 3Ã—3 con 196 canali alla risoluzione piena (32Ã—51) costa da sola piÃ¹ di 1 GFLOP: aggiungere strati non colma lo scarto, lo travolge. Lo scarto dell'11 % resta <strong>non spiegato</strong>, e va riportato come tale.</p>
+<p><strong>Ipotesi confutata, e nettamente.</strong> Una convoluzione 3×3 con 196 canali alla risoluzione piena (32×51) costa da sola più di 1 GFLOP: aggiungere strati non colma lo scarto, lo travolge. Lo scarto dell'11 % resta <strong>non spiegato</strong>, e va riportato come tale.</p>
 
 <h3>8.7 La configurazione adottata</h3>
 <pre>lettura canali    c196_proj96     196 kernel poi proiezione 1x1 a 96
@@ -712,108 +712,120 @@ teste             h = 7           d_h = 32
 ---------------------------------------------------------------------
 parametri         4.899.147       dichiarati 4,80 M   ->  +2,1 %
 costo             0,574 GFLOP     dichiarati 0,645    ->  -11,0 %</pre>
-<p>Si addestra <strong>anche</strong> la variante <code>flatten</code>, che fitta meglio il costo (âˆ’5,9 %) ma peggio i parametri: le due bracketizzano l'incertezza. <code>pool_freq</code> resta la scelta meno sicura di tutte, perchÃ© media via la struttura in frequenza proprio nel baseline che verrÃ  confrontato con un modello che campiona nel piano tempo-frequenza.</p>
+<p>Si addestra <strong>anche</strong> la variante <code>flatten</code>, che fitta meglio il costo (−5,9 %) ma peggio i parametri: le due bracketizzano l'incertezza. <code>pool_freq</code> resta la scelta meno sicura di tutte, perché media via la struttura in frequenza proprio nel baseline che verrà confrontato con un modello che campiona nel piano tempo-frequenza.</p>
 
 <div class="box">
-  <p class="box-t">PerchÃ© ci fermiamo qui</p>
-  <p>Nessuna configurazione soddisfa <em>entrambi</em> i vincoli, e i due tirano in direzioni opposte. Continuare ad aggiungere gradi di libertÃ  finchÃ© i numeri combaciano significherebbe fare <strong>overfitting su una cifra riportata senza convenzione dichiarata</strong>, in un paper che nello stesso paragrafo si contraddice. Un accordo ottenuto cosÃ¬ non sarebbe una verifica ma una tautologia.</p>
-  <p>La posizione difendibile Ã¨: parametri entro il 2 %, costo entro l'11 %, un'ipotesi sul residuo formulata e confutata, tutto dichiarato.</p>
+  <p class="box-t">Perché ci fermiamo qui</p>
+  <p>Nessuna configurazione soddisfa <em>entrambi</em> i vincoli, e i due tirano in direzioni opposte. Continuare ad aggiungere gradi di libertà finché i numeri combaciano significherebbe fare <strong>overfitting su una cifra riportata senza convenzione dichiarata</strong>, in un paper che nello stesso paragrafo si contraddice. Un accordo ottenuto così non sarebbe una verifica ma una tautologia.</p>
+  <p>La posizione difendibile è: parametri entro il 2 %, costo entro l'11 %, un'ipotesi sul residuo formulata e confutata, tutto dichiarato.</p>
 </div>
 
 <!-- ================================================================= -->
-<h2>9 Â· Catalogo delle assunzioni</h2>
-<p>Ogni riga Ã¨ un punto su cui il paper tace o si contraddice. La colonna Â«statoÂ» dice se abbiamo evidenza a supporto.</p>
+<h2>9 · Catalogo delle assunzioni</h2>
+<p>Ogni riga è un punto su cui il paper tace o si contraddice. La colonna «stato» dice se abbiamo evidenza a supporto.</p>
 <table>
   <thead><tr><th style="width:40mm">Punto</th><th style="width:34mm">Scelta</th><th>Stato</th></tr></thead>
   <tbody>
     <tr><td>Parametri spettrogramma</td><td>log-mel, 25/10 ms, 64 bin</td><td><span class="tag t-evi">evidenza</span> sonda lineare: escursione di 0,8 punti su un fattore 4 di risoluzione, curva non monotona. 64 bin sono a 0,22 punti dal migliore e danno <span class="v">F</span>=16 dopo lo stem.</td></tr>
-    <tr><td>Normalizzazione per-campione</td><td><strong>disattivata</strong>; flag per ablation</td><td><span class="tag t-evi">evidenza</span> <strong>contraria</strong>: la sonda peggiora di 0,5 punti, benchÃ© l'escursione di livello nei dati sia di 28,5 dB. NÃ© il paper nÃ© i due ancestor la usano.</td></tr>
+    <tr><td>Normalizzazione per-campione</td><td><strong>disattivata</strong>; flag per ablation</td><td><span class="tag t-evi">evidenza</span> <strong>contraria</strong>: la sonda peggiora di 0,5 punti, benché l'escursione di livello nei dati sia di 28,5 dB. Né il paper né i due ancestor la usano.</td></tr>
     <tr><td>Normalizzazione nello stem</td><td><strong>LayerNorm sui canali dopo il pooling</strong></td><td><span class="tag t-evi">evidenza</span> sequenza esatta dal codice di SparseFormer. La BatchNorm che avevamo inserito era una deviazione su tre punti: layer, posizione e bias della conv.</td></tr>
-    <tr><td>Formula di <code>mixing</code></td><td>between-class con correzione di potenza</td><td><span class="tag t-evi">evidenza</span> dal codice di EAT. Non Ã¨ il mixup di Zhang et al., come il nome faceva supporre.</td></tr>
+    <tr><td>Formula di <code>mixing</code></td><td>between-class con correzione di potenza</td><td><span class="tag t-evi">evidenza</span> dal codice di EAT. Non è il mixup di Zhang et al., come il nome faceva supporre.</td></tr>
     <tr><td>Formula di <code>phasemix</code></td><td>STFT, ampiezza preservata, fasi sugli angoli, peso Î»/2+1/2</td><td><span class="tag t-evi">evidenza</span> dal codice di EAT. La nostra prima versione, dedotta dal testo, era sbagliata su cinque dettagli su cinque.</td></tr>
     <tr><td>Parametri STFT di <code>phasemix</code></td><td>400 / 160, come il front-end</td><td><span class="tag t-ass">assunzione</span> EAT non li dichiara.</td></tr>
-    <tr><td>Normalizzazione degli offset Â«a tre deviazioni standardÂ»</td><td>standardizzazione sull'asse dei punti, poi divisione per 3</td><td><span class="tag t-evi">evidenza</span> formula esatta dal codice di SparseFormer.</td></tr>
-    <tr><td>Inizializzazione di token e regioni</td><td>trunc-normal std 1; griglia âˆšN Ã— âˆšN</td><td><span class="tag t-evi">evidenza</span> dal codice di SparseFormer. Spiega perchÃ© nel paper N Ã¨ sempre un quadrato perfetto.</td></tr>
-    <tr><td>Contraddizione 96 / 196</td><td><code>c196_proj96</code></td><td><span class="tag t-evi">evidenza</span> Ã¨ la lettura in cui entrambe le cifre sono vere, ed Ã¨ in testa alla ricerca.</td></tr>
-    <tr><td>Stride del max pooling</td><td>(2, 1) â†’ <span class="v">N</span> = 51</td><td><span class="tag t-evi">evidenza</span> forzato dal vincolo di costo; la famiglia <span class="v">N</span>=26 sbaglia del 30 %.</td></tr>
+    <tr><td>Normalizzazione degli offset «a tre deviazioni standard»</td><td>standardizzazione sull'asse dei punti, poi divisione per 3</td><td><span class="tag t-evi">evidenza</span> formula esatta dal codice di SparseFormer.</td></tr>
+    <tr><td>Inizializzazione di token e regioni</td><td>trunc-normal std 1; griglia √N × √N</td><td><span class="tag t-evi">evidenza</span> dal codice di SparseFormer. Spiega perché nel paper N è sempre un quadrato perfetto.</td></tr>
+    <tr><td>Contraddizione 96 / 196</td><td><code>c196_proj96</code></td><td><span class="tag t-evi">evidenza</span> è la lettura in cui entrambe le cifre sono vere, ed è in testa alla ricerca.</td></tr>
+    <tr><td>Stride del max pooling</td><td>(2, 1) → <span class="v">N</span> = 51</td><td><span class="tag t-evi">evidenza</span> forzato dal vincolo di costo; la famiglia <span class="v">N</span>=26 sbaglia del 30 %.</td></tr>
     <tr><td>Formazione della sequenza</td><td><code>pool_freq</code> + <code>flatten</code></td><td><span class="tag t-ass">assunzione</span> la meno sicura. Si addestrano entrambe.</td></tr>
     <tr><td>Numero di teste</td><td><span class="v">h</span> = 7, <span class="v">d<sub>h</sub></span> = 32</td><td><span class="tag t-evi">evidenza</span> parametri e FLOPs identici per 4/7/8/14 teste: scelta libera, si prende la convenzionale.</td></tr>
     <tr><td>Pre-norm</td><td>pre-norm</td><td><span class="tag t-ass">assunzione</span> standard dal 2020; evita il warmup.</td></tr>
-    <tr><td>Codifica posizionale nel denso</td><td>da ablare</td><td><span class="tag t-evi">evidenza</span> l'invarianza a permutazioni Ã¨ verificata: la domanda Ã¨ ben posta.</td></tr>
+    <tr><td>Codifica posizionale nel denso</td><td>da ablare</td><td><span class="tag t-evi">evidenza</span> l'invarianza a permutazioni è verificata: la domanda è ben posta.</td></tr>
     <tr><td>Weight decay su parametri 1D</td><td>escluso</td><td><span class="tag t-evi">evidenza</span> criterio <code>len(shape)==1</code> dal trainer di EAT. <strong>Non</strong> una nostra aggiunta, come avevamo classificato.</td></tr>
     <tr><td>Parametri di one-cycle</td><td>pct_start 0,1; div 25; final_div 10â´</td><td><span class="tag t-evi">evidenza</span> dal trainer di EAT (gli ultimi due sono i default PyTorch, non sovrascritti).</td></tr>
-    <tr><td>Programmazione delle augmentation</td><td><code>mix_ratio</code>=1, una a caso su tutto il batch</td><td><span class="tag t-evi">evidenza</span> da <code>BatchAugs.__call__</code>. Avevamo assunto probabilitÃ  0,5: il default Ã¨ <em>sempre</em>.</td></tr>
+    <tr><td>Programmazione delle augmentation</td><td><code>mix_ratio</code>=1, una a caso su tutto il batch</td><td><span class="tag t-evi">evidenza</span> da <code>BatchAugs.__call__</code>. Avevamo assunto probabilità 0,5: il default è <em>sempre</em>.</td></tr>
     <tr><td>Costruzione del target mixato</td><td>multi-hot con soglia Î»&lt;0,9</td><td><span class="tag t-evi">evidenza</span> ramo <code>'bce'</code> di <code>mix_loss</code>. Avevamo implementato la semantica del ramo <code>'ce'</code>.</td></tr>
-    <tr><td>Mel o spettrogramma lineare</td><td>mel</td><td><span class="tag t-evi">evidenza</span> KWT e AST, piÃ¹ la comparazione citata da EAT. <em>Non</em> giustificato da EAT, che usa la forma d'onda grezza.</td></tr>
+    <tr><td>Mel o spettrogramma lineare</td><td>mel</td><td><span class="tag t-evi">evidenza</span> KWT e AST, più la comparazione citata da EAT. <em>Non</em> giustificato da EAT, che usa la forma d'onda grezza.</td></tr>
     <tr><td>Label smoothing</td><td>assente</td><td><span class="tag t-ass">assunzione</span> EAT usa 0,1 nel ramo CE; con la BCE multi-hot non si applica e Kavaki tace.</td></tr>
     <tr><td><strong>Numero di epoche</strong></td><td>da fissare</td><td><span class="tag t-ass">assunzione</span> <strong>l'unico iperparametro di training che nessuna fonte fissa.</strong></td></tr>
   </tbody>
 </table>
 <div class="box info">
-  <p class="box-t">Come Ã¨ cambiato questo catalogo</p>
+  <p class="box-t">Come è cambiato questo catalogo</p>
   <p>Prima di leggere il codice degli ancestor questa tabella era quasi tutta <span class="tag t-ass">assunzione</span>, e tre delle nostre scelte erano deviazioni non riconosciute. Le due letture successive di SparseFormer, <code>batch_augs.py</code>, <code>trainer.py</code> e <code>helper_funcs.py</code> hanno <strong>convertito nove assunzioni in evidenze</strong>, corretto quattro implementazioni sbagliate e <strong>riabilitato una scelta</strong> che avevamo erroneamente classificato come deviazione.</p>
-  <p>Resta una sola assunzione senza appiglio in nessuna fonte: <strong>il numero di epoche</strong>. Tutto il resto Ã¨ o dichiarato dal paper, o documentato nel codice di riferimento, o supportato da una nostra misura.</p>
+  <p>Resta una sola assunzione senza appiglio in nessuna fonte: <strong>il numero di epoche</strong>. Tutto il resto è o dichiarato dal paper, o documentato nel codice di riferimento, o supportato da una nostra misura.</p>
 </div>
 
 <h3>9.1 Che cosa non sappiamo, e non sapremo</h3>
-<p>OnestÃ  intellettuale richiede di separare ciÃ² che abbiamo risolto da ciÃ² che resta genuinamente aperto.</p>
+<p>Onestà intellettuale richiede di separare ciò che abbiamo risolto da ciò che resta genuinamente aperto.</p>
 <table>
   <thead><tr><th style="width:44mm">Questione aperta</th><th>Stato</th></tr></thead>
   <tbody>
     <tr><td><strong>Lo scarto dell'11 % sui FLOPs</strong></td><td>Non spiegato. Eliminati due candidati: strati convolutivi aggiuntivi (danno +164 %) e il front-end tempo-frequenza (vale lo 0,8 % del modello). Restano combinazioni di <span class="v">d</span> e <span class="v">L</span> diverse o una formazione della sequenza diversa. <strong>Si riporta come tale.</strong></td></tr>
     <tr><td><code>pool_freq</code> contro <code>flatten</code></td><td>Indecidibile dai vincoli: la prima fitta meglio i parametri, la seconda il costo. <strong>Si addestrano entrambe</strong> e si riportano affiancate.</td></tr>
-    <tr><td>Pre-norm contro post-norm</td><td>Il paper non descrive l'interno degli encoder. Cita Vaswani, che Ã¨ post-norm; noi usiamo pre-norm. Reso configurabile, da ablare.</td></tr>
+    <tr><td>Pre-norm contro post-norm</td><td>Il paper non descrive l'interno degli encoder. Cita Vaswani, che è post-norm; noi usiamo pre-norm. Reso configurabile, da ablare.</td></tr>
     <tr><td>Numero di epoche</td><td>Nessuna fonte. Si fissa un budget, si dichiara, si verifica la convergenza sulle curve.</td></tr>
-    <tr><td>Consistenza dei numeri dello sparso</td><td>Il conteggio dei parametri torna a âˆ’0,8 %, ma i <strong>FLOPs</strong> dello sparso (0,055 G) non sono ancora stati verificati: Ã¨ il terzo vincolo indipendente e testerebbe la deduzione <code>pool_stride=(2,1)</code>, che il conteggio dei parametri non tocca. Rimandato alla Fase 4.</td></tr>
+    <tr><td>Consistenza dei numeri dello sparso</td><td>Il conteggio dei parametri torna a −0,8 %, ma i <strong>FLOPs</strong> dello sparso (0,055 G) non sono ancora stati verificati: è il terzo vincolo indipendente e testerebbe la deduzione <code>pool_stride=(2,1)</code>, che il conteggio dei parametri non tocca. Rimandato alla Fase 4.</td></tr>
   </tbody>
 </table>
 
 <!-- ================================================================= -->
-<h2>10 Â· Il codice, file per file</h2>
+<h2>10 · Il codice, file per file</h2>
 
 <h3>10.1 <code>src/data/speech_commands.py</code></h3>
 <p>Download, verifica MD5, estrazione, costruzione degli split ufficiali e della cache.</p>
-<p>La funzione centrale Ã¨ <code>build_splits()</code>, che <strong>solleva un'eccezione</strong> se i conteggi non sono esattamente 84 843 / 9 981 / 11 005. Non Ã¨ pedanteria: sono i numeri dichiarati dal paper e coincidono con gli elenchi ufficiali <code>validation_list.txt</code> e <code>testing_list.txt</code>, costruiti sull'hash dello speaker ID e quindi <strong>speaker-disjoint</strong>. Uno split casuale mette lo stesso parlante in train e test e gonfia l'accuratezza di punti interi. PoichÃ© il paper dichiara i tre numeri, abbiamo un test di correttezza gratuito e lo rendiamo bloccante.</p>
-<p><code>build_cache()</code> materializza ogni split in un <code>.npy</code> <code>int16</code> di forma [<span class="v">N</span>, 16000]: 2,72 GB per il training, ~3,4 GB in totale. Le clip piÃ¹ corte di un secondo (l'<strong>11,6 %</strong> del dataset) vengono zero-paddate a destra.</p>
+<p>La funzione centrale è <code>build_splits()</code>, che <strong>solleva un'eccezione</strong> se i conteggi non sono esattamente 84 843 / 9 981 / 11 005. Non è pedanteria: sono i numeri dichiarati dal paper e coincidono con gli elenchi ufficiali <code>validation_list.txt</code> e <code>testing_list.txt</code>, costruiti sull'hash dello speaker ID e quindi <strong>speaker-disjoint</strong>. Uno split casuale mette lo stesso parlante in train e test e gonfia l'accuratezza di punti interi. Poiché il paper dichiara i tre numeri, abbiamo un test di correttezza gratuito e lo rendiamo bloccante.</p>
+<p><code>build_cache()</code> materializza ogni split in un <code>.npy</code> <code>int16</code> di forma [<span class="v">N</span>, 16000]: 2,72 GB per il training, ~3,4 GB in totale. Le clip più corte di un secondo (l'<strong>11,6 %</strong> del dataset) vengono zero-paddate a destra.</p>
 
 <h3>10.2 <code>src/data/dataset.py</code></h3>
-<p>Dataset e DataLoader sulla cache. Restituisce forme d'onda float32 in [âˆ’1, 1]; spettrogramma e augmentation avvengono sul batch <em>in GPU</em>.</p>
+<p>Dataset e DataLoader sulla cache. Restituisce forme d'onda float32 in [−1, 1]; spettrogramma e augmentation avvengono sul batch <em>in GPU</em>.</p>
 <div class="box warn">
   <p class="box-t">La memmap non attraversa il confine di processo</p>
   <p>Su Windows il DataLoader crea i worker con <em>spawn</em>, che <strong>pickla l'oggetto Dataset</strong> per inviarlo a ogni processo. Con la memmap come attributo dell'istanza, pickle tenta di serializzare 2,7 GB dentro una pipe e fallisce con <code>OSError: [Errno 22] Invalid argument</code>.</p>
-  <p>Soluzione: apertura pigra tramite <code>@property</code> e <code>__getstate__</code> che rimuove l'handle dallo stato serializzato. Ogni worker riapre la propria vista sullo stesso file, e il sistema operativo condivide le pagine fisiche â€” che Ã¨ il comportamento voluto. Coperto da un test di regressione che verifica che il blob pickle resti sotto i 100 KB.</p>
+  <p>Soluzione: apertura pigra tramite <code>@property</code> e <code>__getstate__</code> che rimuove l'handle dallo stato serializzato. Ogni worker riapre la propria vista sullo stesso file, e il sistema operativo condivide le pagine fisiche — che è il comportamento voluto. Coperto da un test di regressione che verifica che il blob pickle resti sotto i 100 KB.</p>
 </div>
-<p><strong>Da ricordare</strong>: la cache Ã¨ scritta <strong>in ordine di classe</strong> (34 cambi di etichetta su 84 843 campioni). Ogni iterazione senza shuffle produce quindi batch a classe singola â€” innocuo in valutazione, disastroso in training.</p>
+<p><strong>Da ricordare</strong>: la cache è scritta <strong>in ordine di classe</strong> (34 cambi di etichetta su 84 843 campioni). Ogni iterazione senza shuffle produce quindi batch a classe singola — innocuo in valutazione, disastroso in training.</p>
 
 <h3>10.3 <code>src/data/features.py</code></h3>
-<p><code>LogMelSpectrogram</code>: waveform [B, 16000] â†’ [B, 1, 64, 101]. Vive sul device del modello. Normalizzazione per-campione opzionale (Â§2.6).</p>
+<p><code>LogMelSpectrogram</code>: waveform [B, 16000] → [B, 1, 64, 101]. Vive sul device del modello. Normalizzazione per-campione opzionale (§2.6).</p>
 
 <h3>10.4 <code>src/data/augment.py</code></h3>
-<p><code>mixing</code> e <code>phasemix</code> a livello di batch, su GPU, implementate seguendo <code>datasets/batch_augs.py</code> di EAT (Â§6.3). Entrambe accettano un <code>lam</code> opzionale per rendere deterministici i test.</p>
-<p><code>apply_augmentations()</code> restituisce <strong>sempre</strong> target morbidi [B, C], anche quando non applica nulla: cosÃ¬ il percorso di loss Ã¨ unico e la BCE non ha rami condizionali.</p>
+<p><code>mixing</code> e <code>phasemix</code> a livello di batch, su GPU, implementate seguendo <code>datasets/batch_augs.py</code> di EAT (§6.3). Entrambe accettano un <code>lam</code> opzionale per rendere deterministici i test.</p>
+<p><code>apply_augmentations()</code> restituisce <strong>sempre</strong> target morbidi [B, C], anche quando non applica nulla: così il percorso di loss è unico e la BCE non ha rami condizionali.</p>
 
 <h3>10.5 <code>src/models/frontend.py</code></h3>
-<p><code>EarlyConv</code>, parametrico su tutte le ambiguitÃ : <code>channel_reading</code>, <code>stem</code>, <code>num_conv_layers</code>, <code>norm</code>, <code>pool_stride</code>. Espone <code>output_shape()</code>, che calcola la geometria dell'uscita <em>senza eseguire il forward</em> â€” usato dalla ricerca sulle configurazioni.</p>
-<p>Contiene <code>ChannelLayerNorm</code>, che normalizza un tensore [B, C, H, W] sull'asse dei canali: equivale al <code>layer_norm_by_dim(x, 1)</code> di SparseFormer. Il default <code>norm="layernorm"</code> riproduce la sequenza del riferimento; <code>"batchnorm"</code> Ã¨ la nostra variante e <code>"none"</code> la lettura piÃ¹ letterale del paper.</p>
+<p><code>EarlyConv</code>, parametrico su tutte le ambiguità: <code>channel_reading</code>, <code>stem</code>, <code>num_conv_layers</code>, <code>norm</code>, <code>pool_stride</code>. Espone <code>output_shape()</code>, che calcola la geometria dell'uscita <em>senza eseguire il forward</em> — usato dalla ricerca sulle configurazioni.</p>
+<p>Contiene <code>ChannelLayerNorm</code>, che normalizza un tensore [B, C, H, W] sull'asse dei canali: equivale al <code>layer_norm_by_dim(x, 1)</code> di SparseFormer. Il default <code>norm="layernorm"</code> riproduce la sequenza del riferimento; <code>"batchnorm"</code> è la nostra variante e <code>"none"</code> la lettura più letterale del paper.</p>
 
 <h3>10.6 <code>src/models/transformer.py</code></h3>
 <p>MHSA, feed-forward, blocco pre-norm, codifica posizionale, stack. Scritto per esteso con <code>einops</code>.</p>
-<p><strong>Verifica di correttezza</strong>: copiando i nostri pesi dentro <code>nn.MultiheadAttention</code> di PyTorch, la differenza massima delle uscite Ã¨ <strong>esattamente 0,0</strong>. Non plausibilitÃ : equivalenza.</p>
+<p><strong>Verifica di correttezza</strong>: copiando i nostri pesi dentro <code>nn.MultiheadAttention</code> di PyTorch, la differenza massima delle uscite è <strong>esattamente 0,0</strong>. Non plausibilità: equivalenza.</p>
 
 <h3>10.7 <code>src/models/dense.py</code></h3>
-<p>Assembla front-end, formazione della sequenza, codifica posizionale, encoder e testa. Tutti i gradi di libertÃ  passano dal costruttore, perchÃ© sono oggetto di ricerca e non scelte fatte.</p>
+<p>Assembla front-end, formazione della sequenza, codifica posizionale, encoder e testa. Tutti i gradi di libertà passano dal costruttore, perché sono oggetto di ricerca e non scelte fatte.</p>
 
 <h3>10.8 <code>src/flops.py</code></h3>
-<p>Due contatori indipendenti â€” <code>torch.utils.flop_counter</code> e <code>fvcore</code> â€” piÃ¹ gli extra manuali per <code>grid_sample</code> e la misura di latenza. Le tre avvertenze (FLOPs â‰  MAC, <code>grid_sample</code> invisibile, misurare in inferenza con batch 1) sono documentate nel file.</p>
+<p>Due contatori indipendenti — <code>torch.utils.flop_counter</code> e <code>fvcore</code> — più gli extra manuali per <code>grid_sample</code> e la misura di latenza. Le tre avvertenze (FLOPs ≠ MAC, <code>grid_sample</code> invisibile, misurare in inferenza con batch 1) sono documentate nel file.</p>
 
 <h3>10.9 <code>src/utils.py</code></h3>
-<p><code>seed_everything</code>, caricamento configurazione, <code>ModelEMA</code>.</p>
+<p><code>seed_everything</code>, <code>ModelEMA</code>, <code>load_config</code> con risoluzione della chiave <code>defaults:</code> (ereditarietà fra configurazioni), e <code>param_groups</code> per il weight decay selettivo (criterio <code>ndim == 1</code>, §5.2).</p>
+
+<h3>10.10 <code>src/train.py</code></h3>
+<p>Il training loop. Ogni run è determinato dal solo file di configurazione più il seed; la config viene archiviata accanto ai risultati, così è riproducibile senza dover ricordare quali flag erano stati passati.</p>
+<p>Struttura di un'epoca: si carica la forma d'onda, si applicano le augmentation <em>sul batch in GPU</em>, si calcola il log-mel, si passa al modello, BCE sui target multi-hot, passo di ottimizzazione, passo dello scheduler, aggiornamento EMA. Poi due valutazioni su validation, una sul modello EMA e una sui pesi correnti.</p>
+<div class="box info">
+  <p class="box-t">Perché si valutano entrambi i modelli</p>
+  <p>Il numero che conta è quello EMA — è ciò che i paper riportano. Ma valutare anche i pesi correnti costa poco e dice qualcosa: se il divario fra i due si allarga, l'ottimizzazione sta oscillando e l'EMA sta facendo un lavoro di stabilizzazione consistente; se coincidono, la traiettoria è già liscia. È una diagnostica gratuita sul comportamento dell'ottimizzatore.</p>
+</div>
+<p>Scrive in <code>results/&lt;tag&gt;/</code>: <code>metrics.csv</code> per epoca, <code>best.pt</code> e <code>last.pt</code>, <code>summary.json</code>, log TensorBoard. I checkpoint si salvano in modo <strong>atomico</strong> (scrittura su file temporaneo e rinomina), così un'interruzione — su un portatile, per surriscaldamento o chiusura del coperchio — non lascia mai un checkpoint corrotto. <code>--resume</code> riparte da <code>last.pt</code> ripristinando anche stato dell'ottimizzatore e dello scheduler.</p>
+
+<h3>10.11 <code>scripts/evaluate.py</code></h3>
+<p>Valutazione finale sul test set, con <strong>guardia contro l'uso ripetuto</strong>. Vedi §11.4.</p>
 
 <h3>10.10 <code>tests/test_pipeline.py</code></h3>
-<p>19 test, nessuno dei quali richiede il dataset. Coprono: costanti del protocollo, forme del front-end, normalizzazione per-campione, invarianti delle augmentation, picklabilitÃ  del Dataset, rapporto 2Ã— fra i contatori, comportamento dell'EMA, riproducibilitÃ  dei seed.</p>
+<p>19 test, nessuno dei quali richiede il dataset. Coprono: costanti del protocollo, forme del front-end, normalizzazione per-campione, invarianti delle augmentation, picklabilità del Dataset, rapporto 2× fra i contatori, comportamento dell'EMA, riproducibilità dei seed.</p>
 
 <!-- ================================================================= -->
-<h2>11 Â· Protocollo sperimentale</h2>
+<h2>11 · Protocollo sperimentale</h2>
 
 <h3>11.1 Dataset e split</h3>
 <table>
@@ -824,12 +836,12 @@ costo             0,574 GFLOP     dichiarati 0,645    ->  -11,0 %</pre>
     <tr><td>test</td><td class="c">11 005</td><td>valutazione finale, <strong>una sola volta</strong></td></tr>
   </tbody>
 </table>
-<p>35 classi, 16 kHz, clip zero-paddate a un secondo. Sbilanciamento fra classi nel training: da 1 256 a 3 250 campioni, cioÃ¨ un fattore 2,6 â€” non estremo, coerente con l'uso dell'accuratezza semplice come metrica, che Ã¨ quella riportata dal paper.</p>
+<p>35 classi, 16 kHz, clip zero-paddate a un secondo. Sbilanciamento fra classi nel training: da 1 256 a 3 250 campioni, cioè un fattore 2,6 — non estremo, coerente con l'uso dell'accuratezza semplice come metrica, che è quella riportata dal paper.</p>
 
 <h3>11.2 Prestazioni della pipeline dati</h3>
 <pre>throughput          ~24 600 campioni/s   ->  ~3,5 s per epoca di soli dati
 picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
-<p>La pipeline dati <strong>non sarÃ  mai il collo di bottiglia</strong>: il costo di un'epoca Ã¨ interamente il modello.</p>
+<p>La pipeline dati <strong>non sarà mai il collo di bottiglia</strong>: il costo di un'epoca è interamente il modello.</p>
 
 <h3>11.3 Costo del training misurato</h3>
 <table>
@@ -840,15 +852,15 @@ picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
     <tr><td>d=128 L=24</td><td class="c">4,96 M</td><td class="c">43,8</td><td class="c">73,0 min</td></tr>
   </tbody>
 </table>
-<p>Le ultime due righe hanno capacitÃ  quasi identica ma tempi in rapporto 1,85. A queste dimensioni la GPU Ã¨ limitata dal <strong>lancio dei kernel</strong>, non dal calcolo: 24 layer significano tre volte le chiamate CUDA su matrici troppo piccole per saturare gli SM. Ãˆ la dimostrazione misurata, sul nostro hardware, che <strong>i FLOPs non predicono la latenza</strong> â€” e la ragione per cui, a paritÃ  di parametri, preferiamo la larghezza alla profonditÃ .</p>
+<p>Le ultime due righe hanno capacità quasi identica ma tempi in rapporto 1,85. A queste dimensioni la GPU è limitata dal <strong>lancio dei kernel</strong>, non dal calcolo: 24 layer significano tre volte le chiamate CUDA su matrici troppo piccole per saturare gli SM. È la dimostrazione misurata, sul nostro hardware, che <strong>i FLOPs non predicono la latenza</strong> — e la ragione per cui, a parità di parametri, preferiamo la larghezza alla profondità.</p>
 
 <h3>11.4 Disciplina sperimentale</h3>
 <ul>
-  <li><strong>â‰¥ 3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Motivazione empirica: nella Tabella 3 del paper l'ablation sui token non Ã¨ monotona (16 â†’ 97,53 %, 25 â†’ 97,20 %, 36 â†’ 97,94 %) su singolo seed, il che suggerisce un rumore di 0,3â€“0,4 punti, paragonabile a diverse delle differenze discusse.</li>
-  <li><strong>Il test set si tocca una volta sola</strong>, alla fine, sul modello selezionato in validation. Guardia esplicita nel codice.</li>
+  <li><strong>≥ 3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Motivazione empirica: nella Tabella 3 del paper l'ablation sui token non è monotona (16 → 97,53 %, 25 → 97,20 %, 36 → 97,94 %) su singolo seed, il che suggerisce un rumore di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse.</li>
+  <li><strong>Il test set si tocca una volta sola</strong>, alla fine, sul modello selezionato in validation. La guardia non è un promemoria ma un meccanismo: <code>scripts/evaluate.py</code> scrive <code>TEST_EVALUATED.json</code> nella cartella del run al primo utilizzo e si rifiuta di ripartire. Con <code>--force</code> si può insistere, ma l'evento viene registrato nello storico del file, così resta traccia di quante volte è successo. Motivazione: valutare ripetutamente il test cambiando qualcosa in mezzo equivale a selezionare su di esso, e l'errore <em>non produce alcun sintomo visibile</em> — il numero sembra buono, semplicemente non è più una stima onesta della generalizzazione.</li>
   <li>Si valuta il <strong>modello EMA</strong>.</li>
-  <li>Con mixing e phasemix sempre attive, <strong>l'accuratezza di training non Ã¨ interpretabile</strong>: il segnale utile Ã¨ solo la validation.</li>
-  <li>Ogni run Ã¨ riproducibile dal solo file di configurazione, che viene archiviato accanto ai risultati.</li>
+  <li>Con mixing e phasemix sempre attive, <strong>l'accuratezza di training non è interpretabile</strong>: il segnale utile è solo la validation.</li>
+  <li>Ogni run è riproducibile dal solo file di configurazione, che viene archiviato accanto ai risultati.</li>
 </ul>
 
 <h3>11.5 Target di riproduzione</h3>
@@ -864,17 +876,17 @@ picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
 </table>
 
 <!-- ================================================================= -->
-<h2>12 Â· Riferimenti</h2>
+<h2>12 · Riferimenti</h2>
 
 <h4>Paper del progetto</h4>
 <ul>
-  <li>Kavaki, H. S., &amp; Mandel, M. I. (2025). <em>Audio Sparse-Transformer for Speech Classification.</em> ICASSP 2025, 1â€“5.</li>
-  <li>Gazneli, A., Zimerman, G., Ridnik, T., Sharir, G., &amp; Noy, A. (2022). <em>End-to-End Audio Strikes Back.</em> arXiv:2204.11479. Codice: <code>github.com/Alibaba-MIIL/AudioClassfication</code> â€” file <code>datasets/batch_augs.py</code> per le augmentation di label-mixing.</li>
+  <li>Kavaki, H. S., &amp; Mandel, M. I. (2025). <em>Audio Sparse-Transformer for Speech Classification.</em> ICASSP 2025, 1–5.</li>
+  <li>Gazneli, A., Zimerman, G., Ridnik, T., Sharir, G., &amp; Noy, A. (2022). <em>End-to-End Audio Strikes Back.</em> arXiv:2204.11479. Codice: <code>github.com/Alibaba-MIIL/AudioClassfication</code> — file <code>datasets/batch_augs.py</code> per le augmentation di label-mixing.</li>
 </ul>
 
 <h4>Ancestors del metodo</h4>
 <ul>
-  <li>Gao, Z., Tong, Z., Wang, L., &amp; Shou, M. Z. (2023). <em>SparseFormer: Sparse Visual Recognition via Limited Latent Tokens.</em> arXiv:2304.03768. Codice: <code>github.com/showlab/sparseformer</code> â€” file <code>imagenet/models/sparseformer.py</code> per la v1.</li>
+  <li>Gao, Z., Tong, Z., Wang, L., &amp; Shou, M. Z. (2023). <em>SparseFormer: Sparse Visual Recognition via Limited Latent Tokens.</em> arXiv:2304.03768. Codice: <code>github.com/showlab/sparseformer</code> — file <code>imagenet/models/sparseformer.py</code> per la v1.</li>
   <li>Gao, Z., Wang, L., Han, B., &amp; Guo, S. (2022). <em>AdaMixer.</em> CVPR 2022.</li>
   <li>Ren, S., He, K., Girshick, R., &amp; Sun, J. (2015). <em>Faster R-CNN.</em> NeurIPS 28.</li>
   <li>Xiao, T., et al. (2021). <em>Early Convolutions Help Transformers See Better.</em> NeurIPS 34.</li>
@@ -883,7 +895,7 @@ picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
 <h4>Fondamenti</h4>
 <ul>
   <li>Vaswani, A., et al. (2017). <em>Attention Is All You Need.</em> NeurIPS 30.</li>
-  <li>Dosovitskiy, A., et al. (2020). <em>An Image Is Worth 16Ã—16 Words.</em> ICLR 2021.</li>
+  <li>Dosovitskiy, A., et al. (2020). <em>An Image Is Worth 16×16 Words.</em> ICLR 2021.</li>
   <li>Kingma, D., &amp; Ba, J. (2014). <em>Adam.</em> arXiv:1412.6980.</li>
   <li>Loshchilov, I., &amp; Hutter, F. (2018). <em>Decoupled Weight Decay Regularization.</em> ICLR 2019.</li>
   <li>Smith, L. N. (2018). <em>A Disciplined Approach to Neural Network Hyper-Parameters.</em> arXiv:1803.09820.</li>
@@ -902,7 +914,7 @@ picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
   <li>Chen, K., et al. (2022). <em>HTS-AT.</em> ICASSP 2022.</li>
 </ul>
 
-<p class="foot">Manuale tecnico del progetto d'esame B031278 â€” Deep Learning, Fall 2025, UniversitÃ  di Firenze. Documento vivo: sorgente in <code>docs/manuale_tecnico.html</code>, rigenerabile con <code>scripts\build_docs.ps1</code>. Le formule di Â§7 sono trascritte dal paper originale; le derivazioni sono nostre. I marcatori distinguono ciÃ² che il paper dichiara, ciÃ² che assumiamo e ciÃ² per cui abbiamo evidenza sperimentale.</p>
+<p class="foot">Manuale tecnico del progetto d'esame B031278 — Deep Learning, Fall 2025, Università di Firenze. Documento vivo: sorgente in <code>docs/manuale_tecnico.html</code>, rigenerabile con <code>scripts\build_docs.ps1</code>. Le formule di §7 sono trascritte dal paper originale; le derivazioni sono nostre. I marcatori distinguono ciò che il paper dichiara, ciò che assumiamo e ciò per cui abbiamo evidenza sperimentale.</p>
 
 </body>
 </html>

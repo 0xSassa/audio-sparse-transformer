@@ -89,7 +89,32 @@ non confrontabili.
 
 ### 2. Training
 
-*(Fasi 3–4, in sviluppo.)*
+```bash
+python -m src.train --config configs/dense.yaml --seed 0
+```
+
+Opzioni utili: `--epochs N` (sovrascrive la config), `--tag nome` (cartella del
+run), `--resume` (riprende da `last.pt`), `--deterministic`.
+
+Ogni run scrive in `results/<tag>/`: `config.yaml` e `resolved_config.json`
+archiviati, `metrics.csv` per epoca, `best.pt` e `last.pt`, `summary.json`,
+e i log TensorBoard in `tb/`.
+
+Tempi misurati sulla RTX 5050 Laptop: **~80 s per epoca**, quindi circa
+**2,2 ore** per un run da 100 epoche.
+
+### 3. Valutazione finale
+
+```bash
+python scripts/evaluate.py --run dense_seed0
+```
+
+Il test set si tocca **una volta sola**. Lo script scrive
+`TEST_EVALUATED.json` nella cartella del run e si rifiuta di ripartire, a
+meno di `--force` — che però registra l'accaduto. Il checkpoint si seleziona
+sul validation set, durante il training.
+
+Si valuta sempre il **modello EMA**, non i pesi correnti.
 
 ---
 
