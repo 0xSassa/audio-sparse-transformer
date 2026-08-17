@@ -11,18 +11,18 @@ from .speech_commands import (
 )
 
 __all__ = [
-    "LABELS",
     "EXPECTED_COUNTS",
-    "download_and_extract",
-    "build_splits",
-    "build_cache",
-    "load_cache",
-    "SpeechCommandsCached",
-    "make_loader",
-    "sanity_check",
+    "LABELS",
     "LogMelSpectrogram",
+    "SpeechCommandsCached",
     "apply_augmentations",
+    "build_cache",
+    "build_splits",
+    "download_and_extract",
+    "load_cache",
+    "make_loader",
     "mixing",
-    "phasemix",
     "one_hot",
+    "phasemix",
+    "sanity_check",
 ]

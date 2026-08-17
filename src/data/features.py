@@ -2,20 +2,37 @@
 
 >>> ASSUNZIONE DOCUMENTATA <<<
 Kavaki & Mandel NON dichiarano alcun parametro dello spettrogramma: ne'
-il tipo (mel o lineare), ne' n_fft, hop, numero di bin. E' il parametro
-libero piu' impattante dell'intera riproduzione.
+il tipo (mel o lineare), ne' n_fft, hop, numero di bin.
 
-I default qui sotto sono la configurazione standard per keyword spotting
-su Speech Commands (finestra 25 ms, hop 10 ms, 64 bin mel), che produce
-101 frame per una clip da 1 s. Vanno DICHIARATI nel README e trattati
-come iperparametro, non come dato di fatto.
+Temevamo fosse il grado di liberta' piu' impattante della riproduzione.
+Misurato con una sonda lineare (regressione logistica su log-mel mediati
+su 8 finestre, 12k train / 4k val) il parametro risulta quasi PIATTO:
+
+    32 bin 41.60%   40 bin 41.93%   64 bin 42.18%   80 bin 42.40%   128 bin 42.03%
+
+0.8 punti di escursione su un fattore 4 di risoluzione, e curva non
+monotona. Adottiamo 64 bin: a 0.22 punti dal migliore (dentro il rumore)
+ed e' l'unico valore che dopo lo stem da' F=16, potenza di due, utile alla
+geometria del campionamento sparso.
+
+>>> NORMALIZZAZIONE PER-CAMPIONE: DEFAULT DISATTIVO <<<
+`normalize=True` porta ogni spettrogramma a media 0 e deviazione 1. Era
+una NOSTRA aggiunta, motivata dal fatto che il livello di registrazione in
+SC-V2 varia di 28.5 dB fra 1o e 99o percentile (fattore 27 in ampiezza).
+La premessa e' vera, ma la stessa sonda lineare da' 42.83% SENZA
+normalizzazione contro 42.33% CON: il livello assoluto porta un po' di
+segnale utile e azzerarlo lo distrugge.
+
+Ne' il paper ne' gli ancestor (SparseFormer, EAT) normalizzano lo
+spettrogramma. Il default e' quindi False, e la variante resta come
+ablation dichiarata.
 """
 
 from __future__ import annotations
 
 import torch
-import torch.nn as nn
 import torchaudio.transforms as T
+from torch import nn
 
 
 class LogMelSpectrogram(nn.Module):
@@ -33,7 +50,7 @@ class LogMelSpectrogram(nn.Module):
         f_min: float = 20.0,
         f_max: float = 7_600.0,
         top_db: float = 80.0,
-        normalize: bool = True,
+        normalize: bool = False,
     ) -> None:
         super().__init__()
         self.mel = T.MelSpectrogram(

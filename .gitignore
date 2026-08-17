@@ -29,6 +29,7 @@ optuna*.db
 *.pdf
 !Pipeline_progetto_DL.pdf
 !Diario_di_bordo.pdf
+!Manuale_tecnico.pdf
 
 # Materiale di riferimento, non artefatti del progetto: restano sul disco
 # ma fuori dal repository. La pagina del corso e' reperibile online e il

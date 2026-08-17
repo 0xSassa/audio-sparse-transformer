@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<title>Diario di bordo — Progetto Audio Sparse-Transformer</title>
+<title>Diario di bordo â€” Progetto Audio Sparse-Transformer</title>
 <style>
   @page { size: A4; margin: 17mm 15mm 15mm 15mm; }
   :root{
@@ -78,82 +78,82 @@
 
 <header>
   <h1>Diario di bordo</h1>
-  <p class="sub">Progetto d'esame — riproduzione di <em>Audio Sparse-Transformer</em> (Kavaki &amp; Mandel, ICASSP 2025)</p>
-  <p class="sub" style="font-size:9.6pt">B031278 Deep Learning, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Ultimo aggiornamento: 17 agosto 2026</p>
+  <p class="sub">Progetto d'esame â€” riproduzione di <em>Audio Sparse-Transformer</em> (Kavaki &amp; Mandel, ICASSP 2025)</p>
+  <p class="sub" style="font-size:9.6pt">B031278 Deep Learning, Fall 2025 â€” MSc in Artificial Intelligence, UniversitÃ  di Firenze</p>
+  <p class="meta">Ultimo aggiornamento: 18 agosto 2026</p>
 </header>
 
 <div class="box info">
   <p class="box-t">A cosa serve questo documento</p>
-  <p>Registro cronologico di <strong>tutto</strong> ciò che viene fatto sul progetto: decisioni e loro motivazione, verifiche eseguite, <strong>errori commessi</strong> e cambi di direzione. Serve per ripassare, per ricostruire <em>perché</em> una scelta è stata fatta mesi dopo, e per rispondere all'orale a domande del tipo «perché hai fatto così e non cosà».</p>
-  <p>Il piano di lavoro sta invece in <code>Pipeline_progetto_DL.pdf</code>: quello dice <em>cosa</em> fare, questo dice <em>cosa è stato fatto</em>.</p>
+  <p>Registro cronologico di <strong>tutto</strong> ciÃ² che viene fatto sul progetto: decisioni e loro motivazione, verifiche eseguite, <strong>errori commessi</strong> e cambi di direzione. Serve per ripassare, per ricostruire <em>perchÃ©</em> una scelta Ã¨ stata fatta mesi dopo, e per rispondere all'orale a domande del tipo Â«perchÃ© hai fatto cosÃ¬ e non cosÃ Â».</p>
+  <p>Il piano di lavoro sta invece in <code>Pipeline_progetto_DL.pdf</code>: quello dice <em>cosa</em> fare, questo dice <em>cosa Ã¨ stato fatto</em>.</p>
 </div>
 
 <h4>Legenda</h4>
 <p>
-  <span class="tag t-dec">decisione</span> scelta presa, con motivazione ·
-  <span class="tag t-ver">verifica</span> qualcosa controllato o misurato ·
-  <span class="tag t-err">errore</span> sbaglio commesso ·
-  <span class="tag t-fix">correzione</span> rettifica di qualcosa detto o fatto prima ·
+  <span class="tag t-dec">decisione</span> scelta presa, con motivazione Â·
+  <span class="tag t-ver">verifica</span> qualcosa controllato o misurato Â·
+  <span class="tag t-err">errore</span> sbaglio commesso Â·
+  <span class="tag t-fix">correzione</span> rettifica di qualcosa detto o fatto prima Â·
   <span class="tag t-doc">artefatto</span> file prodotto
 </p>
 
 <h4>Come si aggiorna</h4>
-<p>Il sorgente è <code>docs/diario_di_bordo.html</code>. Dopo averlo modificato:</p>
+<p>Il sorgente Ã¨ <code>docs/diario_di_bordo.html</code>. Dopo averlo modificato:</p>
 <pre>powershell -File scripts\build_docs.ps1</pre>
-<p>rigenera <code>Diario_di_bordo.pdf</code> e <code>Pipeline_progetto_DL.pdf</code> nella cartella di progetto, usando Edge in modalità headless (nessuna dipendenza da installare).</p>
+<p>rigenera <code>Diario_di_bordo.pdf</code> e <code>Pipeline_progetto_DL.pdf</code> nella cartella di progetto, usando Edge in modalitÃ  headless (nessuna dipendenza da installare).</p>
 
 <!-- ==================================================================== -->
-<h2 class="brk">Giorno 1 — mercoledì 12 agosto 2026</h2>
+<h2 class="brk">Giorno 1 â€” mercoledÃ¬ 12 agosto 2026</h2>
 <p class="meta" style="margin-bottom:4mm">Obiettivo della sessione: capire cosa chiede l'esame, cosa dicono i due paper, e definire un metodo di lavoro.</p>
 
 <div class="entry ver">
   <p class="entry-h"><span class="tag t-ver">verifica</span>Analisi della pagina del corso</p>
   <p>Letta integralmente la pagina ufficiale (<code>ai.dinfo.unifi.it/teaching/dl_2025.html</code>), salvata in locale. Estratti i vincoli d'esame che condizionano ogni scelta tecnica:</p>
   <ul>
-    <li>progetto da <strong>concordare a ricevimento</strong> (lunedì 10:45–12:45, S. Marta): il docente dà i dettagli operativi;</li>
-    <li><strong>nessuna relazione scritta</strong> — si consegna solo codice più istruzioni di riproduzione, quindi il <code>README.md</code> è l'unico documento valutato;</li>
+    <li>progetto da <strong>concordare a ricevimento</strong> (lunedÃ¬ 10:45â€“12:45, S. Marta): il docente dÃ  i dettagli operativi;</li>
+    <li><strong>nessuna relazione scritta</strong> â€” si consegna solo codice piÃ¹ istruzioni di riproduzione, quindi il <code>README.md</code> Ã¨ l'unico documento valutato;</li>
     <li>consegna su <strong>repository privato Codeberg</strong> con l'utente <code>dl.unifi</code> invitato; <strong>mai i dati</strong>, solo un link;</li>
     <li>presentazione di <strong>30 minuti</strong> con letteratura, derivazione tecnica ed esperimenti; domande individuali su tutto il programma;</li>
     <li>riduzione di dataset e modelli <strong>esplicitamente autorizzata</strong> se le risorse non bastano;</li>
     <li>esiste un <strong>form Google per richiedere risorse di calcolo</strong>.</li>
   </ul>
-  <p>Annotato l'avvertimento del docente sul leggere «other ancestors in the citation graph»: si rivelerà centrale il giorno 2.</p>
+  <p>Annotato l'avvertimento del docente sul leggere Â«other ancestors in the citation graphÂ»: si rivelerÃ  centrale il giorno 2.</p>
 </div>
 
 <div class="entry ver">
   <p class="entry-h"><span class="tag t-ver">verifica</span>Ricerca sui due paper assegnati</p>
   <p><strong>Gazneli et al. 2022 (EAT)</strong>: arXiv ad accesso libero, codice ufficiale su <code>github.com/Alibaba-MIIL/AudioClassfication</code>. Estratti architettura (conv 1D depthwise su waveform grezza + transformer), varianti EAT-S 5,3 M / EAT-M 25,5 M, le augmentation proposte (Mixup, FreqMix, PhaseMix, TimeMix/CutMix) e la ricetta di training (AdamW, one-cycle, EMA 0,995, label smoothing, BCE).</p>
-  <p><strong>Kavaki &amp; Mandel 2025</strong>: risultato <strong>closed access</strong>, nessun preprint arXiv, nessun codice pubblico. Semantic Scholar riporta <code>openAccessPdf: CLOSED</code> e reference list elisa dall'editore. Disponibile solo l'abstract: 96,88 % su Speech Commands V2 con −85,25 % di FLOPs rispetto a EAT-S.</p>
+  <p><strong>Kavaki &amp; Mandel 2025</strong>: risultato <strong>closed access</strong>, nessun preprint arXiv, nessun codice pubblico. Semantic Scholar riporta <code>openAccessPdf: CLOSED</code> e reference list elisa dall'editore. Disponibile solo l'abstract: 96,88 % su Speech Commands V2 con âˆ’85,25 % di FLOPs rispetto a EAT-S.</p>
 </div>
 
 <div class="entry err">
   <p class="entry-h"><span class="tag t-err">errore</span>Ipotesi sbagliata sull'origine del metodo</p>
-  <p>Non potendo leggere il paper, è stata formulata l'ipotesi che le «regioni significative» dello spettrogramma derivassero dalla linea di ricerca precedente di Mandel sulle <em>importance map</em> — <em>Identifying Important Time-Frequency Locations</em> (Interspeech 2020) e <em>ImportantAug</em> (ICASSP 2022) — e che il decoding fosse un embedding di punti con encoding posizionale continuo, cioè lo spettrogramma trattato come point cloud.</p>
-  <p><strong>L'ipotesi era sbagliata</strong> ed è stata smentita il giorno 2 leggendo il PDF. Il vero ancestor è SparseFormer. Vedi la voce del 17/08. L'ipotesi era stata comunque marcata come «da confermare, non da dare per buona»: la lezione è che un'ipotesi plausibile su un metodo non letto resta una congettura, e va tenuta separata dai fatti.</p>
+  <p>Non potendo leggere il paper, Ã¨ stata formulata l'ipotesi che le Â«regioni significativeÂ» dello spettrogramma derivassero dalla linea di ricerca precedente di Mandel sulle <em>importance map</em> â€” <em>Identifying Important Time-Frequency Locations</em> (Interspeech 2020) e <em>ImportantAug</em> (ICASSP 2022) â€” e che il decoding fosse un embedding di punti con encoding posizionale continuo, cioÃ¨ lo spettrogramma trattato come point cloud.</p>
+  <p><strong>L'ipotesi era sbagliata</strong> ed Ã¨ stata smentita il giorno 2 leggendo il PDF. Il vero ancestor Ã¨ SparseFormer. Vedi la voce del 17/08. L'ipotesi era stata comunque marcata come Â«da confermare, non da dare per buonaÂ»: la lezione Ã¨ che un'ipotesi plausibile su un metodo non letto resta una congettura, e va tenuta separata dai fatti.</p>
 </div>
 
 <div class="entry dec">
   <p class="entry-h"><span class="tag t-dec">decisione</span>Struttura del lavoro in sei fasi</p>
-  <p>Definito un piano che mette <strong>l'infrastruttura di misura prima del modello</strong>. Motivazione: il claim da riprodurre è un <em>rapporto</em> accuratezza/FLOPs, non un'accuratezza; un contatore di FLOPs scritto dopo il modello tende a essere costruito per confermare il risultato atteso.</p>
+  <p>Definito un piano che mette <strong>l'infrastruttura di misura prima del modello</strong>. Motivazione: il claim da riprodurre Ã¨ un <em>rapporto</em> accuratezza/FLOPs, non un'accuratezza; un contatore di FLOPs scritto dopo il modello tende a essere costruito per confermare il risultato atteso.</p>
   <p>Definiti anche i <strong>criteri di successo in anticipo</strong>, per non poterli riscrivere a posteriori in base a quello che esce.</p>
 </div>
 
 <div class="entry ver">
   <p class="entry-h"><span class="tag t-ver">verifica</span>Ricognizione della macchina</p>
   <table class="kv">
-    <tr><td>GPU</td><td>NVIDIA GeForce RTX 5050 Laptop, 8151 MiB, driver 592.82 — <strong>Blackwell, sm_120</strong></td></tr>
+    <tr><td>GPU</td><td>NVIDIA GeForce RTX 5050 Laptop, 8151 MiB, driver 592.82 â€” <strong>Blackwell, sm_120</strong></td></tr>
     <tr><td>Python di sistema</td><td>3.12.4</td></tr>
-    <tr><td>Disponibili</td><td>miniconda, git — <code>uv</code> assente, PyTorch non installato</td></tr>
+    <tr><td>Disponibili</td><td>miniconda, git â€” <code>uv</code> assente, PyTorch non installato</td></tr>
   </table>
-  <p>Verificati i due ambienti DL esistenti: <code>C:\ai\pytorch_env</code> (torch 2.9.1+cu128, Python 3.12.4) e conda <code>DLA2026</code> (torch 2.10.0, CUDA 13, Python 3.14.3). <strong>Entrambi già compatibili con sm_120.</strong> In entrambi mancavano però <code>soundfile</code> e <code>numba</code>, e <code>torchaudio</code> era nella variante <code>+cpu</code>.</p>
+  <p>Verificati i due ambienti DL esistenti: <code>C:\ai\pytorch_env</code> (torch 2.9.1+cu128, Python 3.12.4) e conda <code>DLA2026</code> (torch 2.10.0, CUDA 13, Python 3.14.3). <strong>Entrambi giÃ  compatibili con sm_120.</strong> In entrambi mancavano perÃ² <code>soundfile</code> e <code>numba</code>, e <code>torchaudio</code> era nella variante <code>+cpu</code>.</p>
 </div>
 
 <div class="entry dec">
   <p class="entry-h"><span class="tag t-dec">decisione</span>Ambiente dedicato invece di riusare quelli esistenti</p>
-  <p>Scelto di creare un venv nuovo su Python 3.12 anziché usare <code>pytorch_env</code> o <code>DLA2026</code>. Tre motivi:</p>
+  <p>Scelto di creare un venv nuovo su Python 3.12 anzichÃ© usare <code>pytorch_env</code> o <code>DLA2026</code>. Tre motivi:</p>
   <ul>
-    <li><strong>riproducibilità</strong>: un <code>pip freeze</code> da un ambiente generalista con JAX, OpenCV, mediapipe e pyautogui produce un <code>requirements.txt</code> inutilizzabile, e l'ambiente <em>è</em> parte del deliverable;</li>
+    <li><strong>riproducibilitÃ </strong>: un <code>pip freeze</code> da un ambiente generalista con JAX, OpenCV, mediapipe e pyautogui produce un <code>requirements.txt</code> inutilizzabile, e l'ambiente <em>Ã¨</em> parte del deliverable;</li>
     <li><code>DLA2026</code> appartiene a <strong>un altro corso</strong>: modificarlo rischia di romperne il lavoro;</li>
     <li>Python 3.14 di <code>DLA2026</code> taglierebbe fuori numba/librosa se dovessero servire.</li>
   </ul>
@@ -161,19 +161,19 @@
 
 <div class="entry err">
   <p class="entry-h"><span class="tag t-err">errore</span>Generazione del PDF fallita al primo tentativo</p>
-  <p>Il primo tentativo di conversione HTML→PDF con Edge headless non ha prodotto alcun file. Causa: un flag inesistente (<code>--print-to-pdf-no-header</code>) e il profilo utente di Edge bloccato da un'istanza attiva. <strong>Risolto</strong> passando un <code>--user-data-dir</code> dedicato e terminando i processi <code>msedge</code> residui. La ricetta funzionante è ora in <code>scripts/build_docs.ps1</code>.</p>
+  <p>Il primo tentativo di conversione HTMLâ†’PDF con Edge headless non ha prodotto alcun file. Causa: un flag inesistente (<code>--print-to-pdf-no-header</code>) e il profilo utente di Edge bloccato da un'istanza attiva. <strong>Risolto</strong> passando un <code>--user-data-dir</code> dedicato e terminando i processi <code>msedge</code> residui. La ricetta funzionante Ã¨ ora in <code>scripts/build_docs.ps1</code>.</p>
 </div>
 
 <div class="entry doc">
   <p class="entry-h"><span class="tag t-doc">artefatto</span>Prodotti i primi due file</p>
   <ul>
-    <li><code>Pipeline_progetto_DL.pdf</code> <strong>v1.0</strong> — 14 pagine: vincoli d'esame, analisi dei paper, pipeline in 6 fasi, protocollo sperimentale, piano di studio a 10 settimane, programma del corso come checklist, derivazioni da saper fare, struttura del repo;</li>
-    <li><code>requirements.txt</code> — installazione in due passi, con la motivazione di ogni pacchetto non ovvio.</li>
+    <li><code>Pipeline_progetto_DL.pdf</code> <strong>v1.0</strong> â€” 14 pagine: vincoli d'esame, analisi dei paper, pipeline in 6 fasi, protocollo sperimentale, piano di studio a 10 settimane, programma del corso come checklist, derivazioni da saper fare, struttura del repo;</li>
+    <li><code>requirements.txt</code> â€” installazione in due passi, con la motivazione di ogni pacchetto non ovvio.</li>
   </ul>
 </div>
 
 <!-- ==================================================================== -->
-<h2 class="brk">Giorno 2 — lunedì 17 agosto 2026</h2>
+<h2 class="brk">Giorno 2 â€” lunedÃ¬ 17 agosto 2026</h2>
 <p class="meta" style="margin-bottom:4mm">Obiettivo: leggere il paper vero, correggere il piano, costruire l'infrastruttura della Fase 2.</p>
 
 <div class="entry ver">
@@ -183,19 +183,19 @@
 
 <div class="entry fix">
   <p class="entry-h"><span class="tag t-fix">correzione</span>Ostacolo tecnico: lettura dei PDF</p>
-  <p>Lo strumento di lettura PDF richiedeva <code>poppler</code>, non installato e non installabile sul momento. <strong>Aggirato</strong> usando <strong>PyMuPDF</strong>, già presente nell'ambiente conda <code>DLA2026</code>, per estrarre il testo in un file temporaneo. Utile ricordarlo: gli ambienti esistenti sono una risorsa anche quando non li si usa per il progetto.</p>
+  <p>Lo strumento di lettura PDF richiedeva <code>poppler</code>, non installato e non installabile sul momento. <strong>Aggirato</strong> usando <strong>PyMuPDF</strong>, giÃ  presente nell'ambiente conda <code>DLA2026</code>, per estrarre il testo in un file temporaneo. Utile ricordarlo: gli ambienti esistenti sono una risorsa anche quando non li si usa per il progetto.</p>
 </div>
 
 <div class="entry fix">
-  <p class="entry-h"><span class="tag t-fix">correzione</span>L'ancestor era un altro — ipotesi del giorno 1 smentita</p>
-  <p>Letto il paper per intero. Il metodo <strong>non</strong> deriva dalla linea importance-map di Mandel. L'origine è <strong>SparseFormer</strong> (Gao et al. 2023, <strong>arXiv:2304.03768</strong>, <em>Sparse visual recognition via limited latent tokens</em>), un modello per ImageNet di cui questo lavoro è la trasposizione all'audio. Gli altri due riferimenti strutturali sono <strong>Faster R-CNN</strong> (parametrizzazione delle regioni) e <strong>AdaMixer</strong> (pesi di decoding adattivi).</p>
-  <p>Differenza sostanziale rispetto all'ipotesi: <strong>le regioni non sono selezionate per saliency o energia — sono parametri appresi</strong>, aggiustati iterativamente dai token stessi. E il transformer <strong>non usa positional encoding</strong>, perché i token non hanno ordine.</p>
-  <p>Nota: <code>2304.03768</code> era <em>già</em> nella cartella <code>paper pre progetto/</code>. L'ancestor giusto era a disposizione fin dall'inizio.</p>
+  <p class="entry-h"><span class="tag t-fix">correzione</span>L'ancestor era un altro â€” ipotesi del giorno 1 smentita</p>
+  <p>Letto il paper per intero. Il metodo <strong>non</strong> deriva dalla linea importance-map di Mandel. L'origine Ã¨ <strong>SparseFormer</strong> (Gao et al. 2023, <strong>arXiv:2304.03768</strong>, <em>Sparse visual recognition via limited latent tokens</em>), un modello per ImageNet di cui questo lavoro Ã¨ la trasposizione all'audio. Gli altri due riferimenti strutturali sono <strong>Faster R-CNN</strong> (parametrizzazione delle regioni) e <strong>AdaMixer</strong> (pesi di decoding adattivi).</p>
+  <p>Differenza sostanziale rispetto all'ipotesi: <strong>le regioni non sono selezionate per saliency o energia â€” sono parametri appresi</strong>, aggiustati iterativamente dai token stessi. E il transformer <strong>non usa positional encoding</strong>, perchÃ© i token non hanno ordine.</p>
+  <p>Nota: <code>2304.03768</code> era <em>giÃ </em> nella cartella <code>paper pre progetto/</code>. L'ancestor giusto era a disposizione fin dall'inizio.</p>
 </div>
 
 <div class="entry dec">
-  <p class="entry-h"><span class="tag t-dec">decisione</span>Cambio di direzione: il baseline non è EAT-S</p>
-  <p>Dalla Tabella 2 del paper emerge che il confronto <em>controllato</em> non è contro EAT-S ma contro il <strong>dense-transformer</strong> degli autori: stessa architettura che processa i frame temporali invece dei token latenti. Il numero di EAT-S è <strong>citato dalla letteratura</strong>, non rimisurato dagli autori.</p>
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Cambio di direzione: il baseline non Ã¨ EAT-S</p>
+  <p>Dalla Tabella 2 del paper emerge che il confronto <em>controllato</em> non Ã¨ contro EAT-S ma contro il <strong>dense-transformer</strong> degli autori: stessa architettura che processa i frame temporali invece dei token latenti. Il numero di EAT-S Ã¨ <strong>citato dalla letteratura</strong>, non rimisurato dagli autori.</p>
   <table>
     <thead><tr><th>Modello</th><th class="c">Params</th><th class="c">FLOPs</th><th class="c">Accuracy</th></tr></thead>
     <tbody>
@@ -204,38 +204,38 @@
       <tr><td>EAT-S <em>(citato)</em></td><td class="c">5,30 M</td><td class="c">0,373 G</td><td class="c">98,15 %</td></tr>
     </tbody>
   </table>
-  <p><strong>Conseguenza sul piano</strong>: la Fase 3 diventa «early convolution + dense transformer», che condivide tutto il codice a valle col modello sparso; la reimplementazione completa di EAT-S scende a <strong>Fase 4-bis, opzionale</strong>. Semplificazione netta e riduzione del rischio.</p>
+  <p><strong>Conseguenza sul piano</strong>: la Fase 3 diventa Â«early convolution + dense transformerÂ», che condivide tutto il codice a valle col modello sparso; la reimplementazione completa di EAT-S scende a <strong>Fase 4-bis, opzionale</strong>. Semplificazione netta e riduzione del rischio.</p>
 </div>
 
 <div class="entry ver">
   <p class="entry-h"><span class="tag t-ver">verifica</span>Il metodo, ricavato dal paper</p>
-  <p><em>N</em> token latenti e <em>N</em> regioni <em>b</em>=(x,y,w,h), <strong>entrambi parametri appresi</strong>; centri inizializzati su griglia, larghezze a metà della dimensione della feature map. Per <em>L<sub>rep</sub></em>=3 volte: aggiustamento della regione via <code>Linear(t)</code> con parametrizzazione esponenziale → campionamento di <em>P</em> punti con offset appresi e interpolazione bilineare → decoding adattivo con M<sub>c</sub> e M<sub>s</sub> generati da <em>t</em>, GELU, update residuo del token. Poi 8 transformer-encoder, average pooling, classificatore lineare.</p>
-  <p>Configurazione: N=4, P=36, d<sub>token</sub>=64, d<sub>encoder</sub>=128, L<sub>enc</sub>=8. Training: AdamW lr 3·10⁻⁴, β=(0,9 · 0,99), one-cycle, wd 10⁻⁵, EMA 0,995, batch 64, augmentation <em>mixing</em> e <em>phasemix</em>.</p>
-  <p><strong>Dettaglio critico</strong>: non si campiona dallo spettrogramma diretto — il gradiente attraverso l'interpolazione bilineare è troppo rumoroso con pochi punti. Si applica prima una <em>early convolution</em> e si campiona sul suo output.</p>
+  <p><em>N</em> token latenti e <em>N</em> regioni <em>b</em>=(x,y,w,h), <strong>entrambi parametri appresi</strong>; centri inizializzati su griglia, larghezze a metÃ  della dimensione della feature map. Per <em>L<sub>rep</sub></em>=3 volte: aggiustamento della regione via <code>Linear(t)</code> con parametrizzazione esponenziale â†’ campionamento di <em>P</em> punti con offset appresi e interpolazione bilineare â†’ decoding adattivo con M<sub>c</sub> e M<sub>s</sub> generati da <em>t</em>, GELU, update residuo del token. Poi 8 transformer-encoder, average pooling, classificatore lineare.</p>
+  <p>Configurazione: N=4, P=36, d<sub>token</sub>=64, d<sub>encoder</sub>=128, L<sub>enc</sub>=8. Training: AdamW lr 3Â·10â»â´, Î²=(0,9 Â· 0,99), one-cycle, wd 10â»âµ, EMA 0,995, batch 64, augmentation <em>mixing</em> e <em>phasemix</em>.</p>
+  <p><strong>Dettaglio critico</strong>: non si campiona dallo spettrogramma diretto â€” il gradiente attraverso l'interpolazione bilineare Ã¨ troppo rumoroso con pochi punti. Si applica prima una <em>early convolution</em> e si campiona sul suo output.</p>
 </div>
 
 <div class="entry ver">
-  <p class="entry-h"><span class="tag t-ver">verifica</span>Ambiguità trovate nel paper</p>
+  <p class="entry-h"><span class="tag t-ver">verifica</span>AmbiguitÃ  trovate nel paper</p>
   <p>Sei punti su cui il paper tace o si contraddice, tutti da dichiarare come assunzioni:</p>
   <ul>
-    <li><strong>parametri dello spettrogramma mai dichiarati</strong> (mel o lineare? n_fft? hop? bin?) — il parametro libero più impattante;</li>
-    <li><strong>contraddizione interna in §3.2</strong>: feature «96 dimensional» ma «196 kernels» 7×7 stride 2;</li>
+    <li><strong>parametri dello spettrogramma mai dichiarati</strong> (mel o lineare? n_fft? hop? bin?) â€” il parametro libero piÃ¹ impattante;</li>
+    <li><strong>contraddizione interna in Â§3.2</strong>: feature Â«96 dimensionalÂ» ma Â«196 kernelsÂ» 7Ã—7 stride 2;</li>
     <li>numero di layer della early convolution non dichiarato;</li>
     <li>numero di epoche non dichiarato;</li>
     <li>come il dense-transformer costruisce i frame dall'output della early conv;</li>
     <li>convenzione FLOPs vs MAC non dichiarata.</li>
   </ul>
-  <p>Osservazione critica aggiuntiva: nella Tabella 3 l'ablation sui token <strong>non è monotona</strong> (16 token → 97,53 %, 25 token → 97,20 %, 36 → 97,94 %) e i risultati sono su <strong>singolo seed</strong>. Suggerisce un rumore da seed di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse nel paper. È la giustificazione sperimentale dei ≥3 seed.</p>
+  <p>Osservazione critica aggiuntiva: nella Tabella 3 l'ablation sui token <strong>non Ã¨ monotona</strong> (16 token â†’ 97,53 %, 25 token â†’ 97,20 %, 36 â†’ 97,94 %) e i risultati sono su <strong>singolo seed</strong>. Suggerisce un rumore da seed di 0,3â€“0,4 punti, paragonabile a diverse delle differenze discusse nel paper. Ãˆ la giustificazione sperimentale dei â‰¥3 seed.</p>
 </div>
 
 <div class="entry fix">
   <p class="entry-h"><span class="tag t-fix">correzione</span>Stima sbagliata della dimensione della cache</p>
-  <p>Nella v1.0 del PDF la cache del training set era stimata «≈1,7 GB». Valore corretto: <strong>2,72 GB</strong> (84 843 × 16 000 campioni × 2 byte). Con validation e test si arriva a ~3,4 GB. Corretto nel PDF e nel codice.</p>
+  <p>Nella v1.0 del PDF la cache del training set era stimata Â«â‰ˆ1,7 GBÂ». Valore corretto: <strong>2,72 GB</strong> (84 843 Ã— 16 000 campioni Ã— 2 byte). Con validation e test si arriva a ~3,4 GB. Corretto nel PDF e nel codice.</p>
 </div>
 
 <div class="entry doc">
-  <p class="entry-h"><span class="tag t-doc">artefatto</span><code>Pipeline_progetto_DL.pdf</code> v2.0 — 16 pagine</p>
-  <p>§3 riscritta col metodo reale e le formule; §3.4 nuova con le ambiguità; Fase 3 riscritta e Fase 4-bis aggiunta; §5.1 con gli split esatti e i target di riproduzione; §8 con tre derivazioni in più; §12 con la bibliografia corretta.</p>
+  <p class="entry-h"><span class="tag t-doc">artefatto</span><code>Pipeline_progetto_DL.pdf</code> v2.0 â€” 16 pagine</p>
+  <p>Â§3 riscritta col metodo reale e le formule; Â§3.4 nuova con le ambiguitÃ ; Fase 3 riscritta e Fase 4-bis aggiunta; Â§5.1 con gli split esatti e i target di riproduzione; Â§8 con tre derivazioni in piÃ¹; Â§12 con la bibliografia corretta.</p>
 </div>
 
 <div class="entry doc">
@@ -250,14 +250,14 @@ scripts/check_env.py          verifica ambiente
 scripts/prepare_data.py       Fase 2 completa
 configs/base.yaml             assunzioni marcate [ASSUNZIONE]
 README.md  .gitignore</pre>
-  <p>Scelta di progettazione: <code>build_splits()</code> <strong>fallisce di proposito</strong> se i conteggi non danno esattamente 84 843 / 9 981 / 11 005. Sono i numeri dichiarati dal paper e coincidono con gli elenchi ufficiali speaker-disjoint: è un test di correttezza gratuito.</p>
+  <p>Scelta di progettazione: <code>build_splits()</code> <strong>fallisce di proposito</strong> se i conteggi non danno esattamente 84 843 / 9 981 / 11 005. Sono i numeri dichiarati dal paper e coincidono con gli elenchi ufficiali speaker-disjoint: Ã¨ un test di correttezza gratuito.</p>
 </div>
 
 <div class="entry err">
   <p class="entry-h"><span class="tag t-err">errore</span>Cancellazione accidentale di <code>src/</code> e <code>scripts/</code></p>
-  <p>Alle <strong>16:54</strong>, contestualmente alla creazione del venv <code>DL_F</code>, le cartelle <code>src/</code> e <code>scripts/</code> sono state eliminate insieme a un primo <code>.venv</code> — presumibilmente una multi-selezione sfuggita durante la pulizia del primo tentativo di ambiente. Metà del codice del progetto è sparita senza che ci fosse ancora un repository git.</p>
+  <p>Alle <strong>16:54</strong>, contestualmente alla creazione del venv <code>DL_F</code>, le cartelle <code>src/</code> e <code>scripts/</code> sono state eliminate insieme a un primo <code>.venv</code> â€” presumibilmente una multi-selezione sfuggita durante la pulizia del primo tentativo di ambiente. MetÃ  del codice del progetto Ã¨ sparita senza che ci fosse ancora un repository git.</p>
   <p><strong>Recuperate dal cestino</strong> e riverificate: tutti i file alle dimensioni originali, tutti ricompilano.</p>
-  <p><strong>Lezione</strong>: il repository git va inizializzato <em>subito</em>, non «quando il codice sarà pronto». Un <code>git init</code> più un commit avrebbero reso l'incidente un non-evento.</p>
+  <p><strong>Lezione</strong>: il repository git va inizializzato <em>subito</em>, non Â«quando il codice sarÃ  prontoÂ». Un <code>git init</code> piÃ¹ un commit avrebbero reso l'incidente un non-evento.</p>
 </div>
 
 <div class="entry fix">
@@ -267,24 +267,24 @@ README.md  .gitignore</pre>
 
 <div class="entry ver">
   <p class="entry-h"><span class="tag t-ver">verifica</span>Installazione dell'ambiente</p>
-  <p>Verificata la raggiungibilità di <strong>entrambi</strong> gli indici pacchetti — <code>pypi.org</code> e <code>download.pytorch.org/whl/cu128</code> — prima di iniziare: se il secondo non risponde, pip ripiega silenziosamente sulla build CPU-only. Aggiornati pip (24.0 → 26.2.1), setuptools e wheel.</p>
-  <p>Installazione di torch avviata in background e <strong>interrotta su richiesta</strong>, ma il pacchetto era già stato installato per intero e funzionante. L'installazione è stata poi completata manualmente.</p>
+  <p>Verificata la raggiungibilitÃ  di <strong>entrambi</strong> gli indici pacchetti â€” <code>pypi.org</code> e <code>download.pytorch.org/whl/cu128</code> â€” prima di iniziare: se il secondo non risponde, pip ripiega silenziosamente sulla build CPU-only. Aggiornati pip (24.0 â†’ 26.2.1), setuptools e wheel.</p>
+  <p>Installazione di torch avviata in background e <strong>interrotta su richiesta</strong>, ma il pacchetto era giÃ  stato installato per intero e funzionante. L'installazione Ã¨ stata poi completata manualmente.</p>
   <p>Esito di <code>scripts/check_env.py</code>:</p>
-  <pre>torch 2.9.1+cu128 · CUDA 12.8 · capability (12, 0) · kernel di prova OK
-arch compilate: sm_70 … sm_100, <strong>sm_120</strong>
-torchaudio 2.9.1+cu128 · soundfile 0.14.0 · numpy 2.5.2
-yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
+  <pre>torch 2.9.1+cu128 Â· CUDA 12.8 Â· capability (12, 0) Â· kernel di prova OK
+arch compilate: sm_70 â€¦ sm_100, <strong>sm_120</strong>
+torchaudio 2.9.1+cu128 Â· soundfile 0.14.0 Â· numpy 2.5.2
+yaml 6.0.3 Â· fvcore 0.1.5 Â· einops 0.8.2 Â· optuna 4.9.0
 => ambiente pronto</pre>
 </div>
 
 <div class="entry ver">
   <p class="entry-h"><span class="tag t-ver">verifica</span>Suite di test: 18 su 18 passati</p>
-  <p>Scritta <code>tests/test_pipeline.py</code>, eseguibile <strong>senza dataset</strong>: forme del front-end, invarianti delle augmentation, contatore di FLOPs, EMA, riproducibilità dei seed. Eseguita prima del download di 2,3 GB, per separare i bug dell'infrastruttura da quelli del modello.</p>
+  <p>Scritta <code>tests/test_pipeline.py</code>, eseguibile <strong>senza dataset</strong>: forme del front-end, invarianti delle augmentation, contatore di FLOPs, EMA, riproducibilitÃ  dei seed. Eseguita prima del download di 2,3 GB, per separare i bug dell'infrastruttura da quelli del modello.</p>
   <p>Risultati notevoli:</p>
   <ul>
-    <li>front-end conferma la forma <code>[B, 1, 64, 101]</code> — quel <strong>101</strong> è la <em>T</em> del modello denso, che il modello sparso riduce a <strong>N=4</strong> token: il fattore ~25 da cui viene il guadagno;</li>
-    <li><strong>rapporto FLOPs/MAC verificato empiricamente</strong>: su un <code>Linear(100→200)</code> senza bias, fvcore riporta 20 000 e il contatore nativo di torch 40 000 — <strong>esattamente 2,000000</strong>. L'avvertenza di <code>src/flops.py</code> non è più un'ipotesi;</li>
-    <li>EMA con decay 0,9 si sposta di esattamente 1 − decay = 0,1: la media mobile insegue, non copia.</li>
+    <li>front-end conferma la forma <code>[B, 1, 64, 101]</code> â€” quel <strong>101</strong> Ã¨ la <em>T</em> del modello denso, che il modello sparso riduce a <strong>N=4</strong> token: il fattore ~25 da cui viene il guadagno;</li>
+    <li><strong>rapporto FLOPs/MAC verificato empiricamente</strong>: su un <code>Linear(100â†’200)</code> senza bias, fvcore riporta 20 000 e il contatore nativo di torch 40 000 â€” <strong>esattamente 2,000000</strong>. L'avvertenza di <code>src/flops.py</code> non Ã¨ piÃ¹ un'ipotesi;</li>
+    <li>EMA con decay 0,9 si sposta di esattamente 1 âˆ’ decay = 0,1: la media mobile insegue, non copia.</li>
   </ul>
 </div>
 
@@ -295,13 +295,13 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
 
 <div class="entry err">
   <p class="entry-h"><span class="tag t-err">errore</span><code>.gitignore</code>: <code>data/</code> nascondeva <code>src/data/</code></p>
-  <p>Al primo <code>git add --dry-run</code> risultavano <strong>18 file</strong> invece dei 23 attesi: mancava tutto <code>src/data/</code>. Causa: in gitignore un pattern <strong>senza barra iniziale matcha a qualsiasi profondità dell'albero</strong>, quindi <code>data/</code> escludeva anche <code>src/data/</code> — cioè la pipeline dati completa, in silenzio.</p>
+  <p>Al primo <code>git add --dry-run</code> risultavano <strong>18 file</strong> invece dei 23 attesi: mancava tutto <code>src/data/</code>. Causa: in gitignore un pattern <strong>senza barra iniziale matcha a qualsiasi profonditÃ  dell'albero</strong>, quindi <code>data/</code> escludeva anche <code>src/data/</code> â€” cioÃ¨ la pipeline dati completa, in silenzio.</p>
   <p>Corretto in <code>/data/</code>, ancorato alla radice. Senza il controllo preventivo si sarebbe ottenuto un repository che <em>sembra</em> completo e che al primo clone su un'altra macchina non funziona. Stesso codice perso due volte nella stessa giornata, per cause diverse.</p>
 </div>
 
 <div class="entry dec">
   <p class="entry-h"><span class="tag t-dec">decisione</span>Repository git locale, e solo il necessario dentro</p>
-  <p>Inizializzato il repository (<strong>locale, nessun remote, nessun invito</strong>). Esclusi dal versionamento la pagina del corso salvata e i suoi asset — il solo <code>semantic.css</code> era il 90 % delle righe versionate — e la cartella <code>paper pre progetto/</code>, che contiene PDF altrui non ridistribuibili. Restano sul disco, fuori dal repo. Da 44 519 a poco più di 4 000 righe versionate.</p>
+  <p>Inizializzato il repository (<strong>locale, nessun remote, nessun invito</strong>). Esclusi dal versionamento la pagina del corso salvata e i suoi asset â€” il solo <code>semantic.css</code> era il 90 % delle righe versionate â€” e la cartella <code>paper pre progetto/</code>, che contiene PDF altrui non ridistribuibili. Restano sul disco, fuori dal repo. Da 44 519 a poco piÃ¹ di 4 000 righe versionate.</p>
   <p>Rimosso anche il trailer di co-autoria dai messaggi di commit: la cronologia riporta solo l'autore.</p>
 </div>
 
@@ -311,22 +311,22 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
   <pre>[split] train       84843  (atteso  84843)  OK
 [split] validation   9981  (atteso   9981)  OK
 [split] test        11005  (atteso  11005)  OK</pre>
-  <p>Cache memmap costruita per tutti e tre gli split. Distribuzione delle classi nel training set: da 1 256 a 3 250 campioni per classe, cioè uno sbilanciamento di ~2,6× — non estremo, coerente con l'uso dell'accuratezza semplice come metrica.</p>
+  <p>Cache memmap costruita per tutti e tre gli split. Distribuzione delle classi nel training set: da 1 256 a 3 250 campioni per classe, cioÃ¨ uno sbilanciamento di ~2,6Ã— â€” non estremo, coerente con l'uso dell'accuratezza semplice come metrica.</p>
 </div>
 
 <div class="entry err">
-  <p class="entry-h"><span class="tag t-err">errore</span>La memmap non si può picklare: <code>num_workers&gt;0</code> andava in crash</p>
+  <p class="entry-h"><span class="tag t-err">errore</span>La memmap non si puÃ² picklare: <code>num_workers&gt;0</code> andava in crash</p>
   <p>Primo smoke test su dati veri: con <code>num_workers=0</code> tutto bene, con <code>num_workers&gt;0</code> crash immediato con <code>OSError: [Errno 22] Invalid argument</code> e <code>UnpicklingError: pickle data was truncated</code>.</p>
   <p><strong>Causa</strong>: su Windows il DataLoader usa il metodo <em>spawn</em>, che <strong>pickla l'oggetto Dataset</strong> per inviarlo a ogni worker. La memmap era un attributo dell'istanza, quindi pickle tentava di serializzare l'intero array da 2,7 GB.</p>
-  <p><strong>Correzione</strong>: apertura pigra della memmap tramite property e <code>__getstate__</code> che la rimuove dallo stato serializzato. Ogni worker riapre la propria vista sullo stesso file — che è il comportamento voluto, perché il sistema operativo condivide le pagine fra processi. Aggiunto un <strong>test di regressione</strong> che pickla il Dataset e verifica che il blob resti sotto i 100 KB.</p>
+  <p><strong>Correzione</strong>: apertura pigra della memmap tramite property e <code>__getstate__</code> che la rimuove dallo stato serializzato. Ogni worker riapre la propria vista sullo stesso file â€” che Ã¨ il comportamento voluto, perchÃ© il sistema operativo condivide le pagine fra processi. Aggiunto un <strong>test di regressione</strong> che pickla il Dataset e verifica che il blob resti sotto i 100 KB.</p>
   <p>Nota: il default di <code>configs/base.yaml</code> era <code>num_workers: 4</code>, quindi il bug sarebbe esploso al primo training.</p>
 </div>
 
 <div class="entry err">
   <p class="entry-h"><span class="tag t-err">errore</span>Smoke test scritto male: le augmentation sembravano rotte</p>
-  <p>Il primo smoke test prendeva i primi 64 campioni della cache e riportava «classi attive per campione: 1,00», come se mixing e phasemix non mescolassero nulla.</p>
-  <p><strong>Non era un bug delle augmentation ma del test</strong>: la cache è scritta <strong>in ordine di classe</strong> (34 cambi di etichetta su 84 843 campioni), quindi i primi 64 elementi sono tutti <em>backward</em> e mescolarli fra loro produce un target a una sola classe. Rifatto il test con indici casuali: <strong>1,83 classi attive in media, massimo 2</strong> — esattamente il comportamento atteso.</p>
-  <p><strong>Conseguenza operativa</strong> da ricordare: la cache è ordinata per classe, quindi qualsiasi iterazione <em>senza shuffle</em> produce batch a classe singola. Va bene per la valutazione, sarebbe disastroso per il training.</p>
+  <p>Il primo smoke test prendeva i primi 64 campioni della cache e riportava Â«classi attive per campione: 1,00Â», come se mixing e phasemix non mescolassero nulla.</p>
+  <p><strong>Non era un bug delle augmentation ma del test</strong>: la cache Ã¨ scritta <strong>in ordine di classe</strong> (34 cambi di etichetta su 84 843 campioni), quindi i primi 64 elementi sono tutti <em>backward</em> e mescolarli fra loro produce un target a una sola classe. Rifatto il test con indici casuali: <strong>1,83 classi attive in media, massimo 2</strong> â€” esattamente il comportamento atteso.</p>
+  <p><strong>Conseguenza operativa</strong> da ricordare: la cache Ã¨ ordinata per classe, quindi qualsiasi iterazione <em>senza shuffle</em> produce batch a classe singola. Va bene per la valutazione, sarebbe disastroso per il training.</p>
 </div>
 
 <div class="entry ver">
@@ -334,13 +334,262 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
   <table>
     <thead><tr><th>Misura</th><th class="c">Valore</th><th>Commento</th></tr></thead>
     <tbody>
-      <tr><td>Front-end</td><td class="c">[64, 16000] → [64, 1, 64, 101]</td><td>media 0,000 · std 0,9999 · tutti finiti</td></tr>
+      <tr><td>Front-end</td><td class="c">[64, 16000] â†’ [64, 1, 64, 101]</td><td>media 0,000 Â· std 0,9999 Â· tutti finiti</td></tr>
       <tr><td>Throughput dati</td><td class="c">~24 600 campioni/s</td><td><strong>~3,5 s per epoca</strong> di soli dati</td></tr>
       <tr><td>Picco memoria GPU</td><td class="c">59 MB</td><td>su 8 GB: margine enorme</td></tr>
-      <tr><td>Clip zero-paddate</td><td class="c">11,6 %</td><td>registrazioni più corte di 1 s</td></tr>
+      <tr><td>Clip zero-paddate</td><td class="c">11,6 %</td><td>registrazioni piÃ¹ corte di 1 s</td></tr>
     </tbody>
   </table>
-  <p>Conclusione: <strong>la pipeline dati non sarà mai il collo di bottiglia</strong>. Il costo di un'epoca sarà interamente il modello. Suite di test a <strong>19/19</strong>.</p>
+  <p>Conclusione: <strong>la pipeline dati non sarÃ  mai il collo di bottiglia</strong>. Il costo di un'epoca sarÃ  interamente il modello. Suite di test a <strong>19/19</strong>.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Fase 3, moduli 1â€“3: front-end, encoder, modello denso</p>
+  <p>Scritti <code>src/models/frontend.py</code> (early convolution), <code>transformer.py</code> (encoder reimplementato con einops) e <code>dense.py</code> (baseline). Tutti parametrici sulle ambiguitÃ  del paper, cosÃ¬ le scelte si fanno per misura e non per intuizione.</p>
+  <p>L'encoder Ã¨ scritto per esteso invece di usare <code>nn.MultiheadAttention</code>: la consegna chiede una reimplementazione autonoma e all'orale va spiegato ogni passaggio. <strong>Verificato copiando i nostri pesi dentro l'implementazione di PyTorch: differenza massima delle uscite esattamente 0.0</strong> â€” non plausibilitÃ , equivalenza.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Invarianza a permutazioni dimostrata sperimentalmente</p>
+  <pre>senza positional encoding:  permutando il tempo, l'uscita cambia di  2.4e-07
+con  positional encoding:   permutando il tempo, l'uscita cambia di  0.083</pre>
+  <p>Il 2,4Â·10â»â· Ã¨ rumore di virgola mobile: <strong>senza codifica posizionale il transformer Ã¨ esattamente invariante all'ordine</strong>. Ãˆ la giustificazione formale dell'esperimento Â«con e senza pos. encodingÂ» sul modello denso, e la risposta da dare all'orale alla domanda Â«perchÃ© serve il positional encodingÂ»: non Â«aiutaÂ», Ã¨ che senza il modello non puÃ² in linea di principio distinguere l'ordine.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Costo di training misurato: la profonditÃ  costa piÃ¹ della larghezza</p>
+  <table>
+    <thead><tr><th>configurazione</th><th class="c">param</th><th class="c">s/epoca</th><th class="c">100 epoche</th></tr></thead>
+    <tbody>
+      <tr><td>d=128 L=8</td><td class="c">1,79 M</td><td class="c">15,6</td><td class="c">26,0 min</td></tr>
+      <tr><td>d=224 L=8</td><td class="c">5,19 M</td><td class="c">23,7</td><td class="c">39,5 min</td></tr>
+      <tr><td>d=256 L=8</td><td class="c">6,72 M</td><td class="c">26,3</td><td class="c">43,8 min</td></tr>
+      <tr><td><strong>d=128 L=24</strong></td><td class="c">4,96 M</td><td class="c">43,8</td><td class="c"><strong>73,0 min</strong></td></tr>
+    </tbody>
+  </table>
+  <p>Le ultime due righe hanno praticamente gli stessi parametri, ma quella profonda impiega <strong>1,85Ã— il tempo</strong>. A queste dimensioni la GPU Ã¨ limitata dal <em>lancio dei kernel</em>, non dal calcolo: 24 layer significano tre volte le chiamate CUDA, ciascuna su matrici troppo piccole per saturare gli SM.</p>
+  <p>Ãˆ la dimostrazione concreta, sul nostro hardware, che <strong>i FLOPs non predicono la latenza</strong> â€” osservazione da portare in presentazione. Conseguenza operativa: nella ricerca della configurazione si preferisce la larghezza alla profonditÃ .</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Ricostruire la configurazione del denso usando i numeri come vincoli</p>
+  <p>Il paper non dichiara <strong>alcun</strong> iperparametro del dense-transformer: solo 4,80 M parametri e 0,645 G FLOPs. Assemblare secondo la Tabella 1 (che descrive lo <em>sparso</em>) dÃ  ~1,8 M, cioÃ¨ un fattore 2,7 di scarto.</p>
+  <p>Scelto di trattare i due numeri come <strong>vincoli</strong> e cercare le configurazioni che li soddisfano entrambe. Costo aggiuntivo misurato: +13 minuti per run da 100 epoche. In cambio i nostri FLOPs diventano confrontabili con quelli del paper, che Ã¨ l'intero punto della riproduzione.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Ricerca su 270 configurazioni â€” due deduzioni</p>
+  <p>Enumerate lettura dei canali Ã— stride del pooling Ã— formazione della sequenza Ã— <em>d</em> Ã— profonditÃ , contando parametri e costo con entrambi i contatori.</p>
+  <p><strong>Deduzione 1 â€” il pooling agisce solo sull'asse frequenza.</strong> Tutte le configurazioni vicine al costo dichiarato hanno <code>pool_stride=(2,1)</code>, cioÃ¨ <strong>N = 51 frame</strong>. Con il pooling su entrambi gli assi (N = 26) il costo si ferma a ~0,30 G contro gli 0,645 richiesti: il fattore 2 non Ã¨ recuperabile con altri gradi di libertÃ .</p>
+  <p><strong>Deduzione 2 â€” il paper riporta FLOPs, non MAC.</strong> Tutte le configurazioni che si avvicinano a 0,645 lo fanno nella colonna FLOP (0,53â€“0,66), mentre i corrispondenti MAC stanno a 0,26â€“0,33, cioÃ¨ metÃ . <strong>Ãˆ la calibrazione della convenzione che serviva</strong>, ottenuta senza addestrare nulla.</p>
+  <p>Miglior candidato congiunto:</p>
+  <pre>c196_proj96 Â· pool (2,1) Â· pool_freq Â· d=256 Â· L=6 Â· N=51
+  4.801.807 parametri   (dichiarati 4,80 M -> scarto +0,0%)
+  0,562 GFLOP           (dichiarati 0,645  -> scarto -12,9%)</pre>
+  <p>I parametri combaciano quasi esattamente; resta uno scarto del 13 % sul costo. <strong>Ipotesi</strong>: il paper dice Â«convolutional layer<em>s</em>Â» al plurale, mentre il nostro stem ne ha uno solo; un secondo strato convolutivo aggiungerebbe circa l'ordine di grandezza mancante. Da verificare â€” ma senza inseguire il numero: aggiustare l'architettura finchÃ© il valore combacia significherebbe fare overfitting su una cifra riportata senza convenzione dichiarata.</p>
+</div>
+
+<!-- ==================================================================== -->
+<h2 class="brk">Giorno 3 â€” martedÃ¬ 18 agosto 2026</h2>
+<p class="meta" style="margin-bottom:4mm">Obiettivo: chiudere con evidenze i punti deboli emersi dalla revisione critica, prima di scrivere il training loop.</p>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Nella prima ricerca avevo escluso lo stem dalla griglia</p>
+  <p>Le 270 configurazioni del 17/08 avevano tutte lo stem a una sola convoluzione: <code>stem</code> non era fra i gradi di libertÃ . La deduzione Â«il pooling agisce solo sulla frequenzaÂ» poteva quindi essere un artefatto di quella omissione.</p>
+  <p><strong>Rifatta la ricerca su 432 configurazioni includendo lo stem alla Xiao. La deduzione regge</strong>: la famiglia <em>N</em>=26 si ferma a 0,451 GFLOP contro i 0,645 richiesti, e nemmeno lo stem piÃ¹ pesante recupera il fattore 2. Un test che avrebbe potuto smentire il risultato lo ha invece rafforzato.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Avevo ottimizzato un parametro che il paper aveva giÃ  dato</p>
+  <p>La ricerca trattava la profonditÃ  <em>L</em> come incognita e sceglieva <em>L</em>=6, che fitta i parametri a +0,0 %. Ma il paper dichiara <strong>8 transformer-encoder</strong> e descrive il denso come Â«the same architecture but processes a sequence of time framesÂ»: la profonditÃ  era vincolata.</p>
+  <p>Ãˆ l'errore classico del fitting: ottimizzare su ciÃ² che Ã¨ giÃ  noto. Imponendo <em>L</em>=8 si perdono 2 punti percentuali sui parametri e si guadagna coerenza col testo, che all'esame vale molto di piÃ¹.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>E1 â€” quanto varia il livello di registrazione</p>
+  <pre>percentili RMS su 20.000 clip:  p1 -40,6 dB   p50 -24,4 dB   p99 -12,0 dB
+escursione p1-p99: 28,5 dB  ->  fattore 27x in ampiezza</pre>
+  <p>La premessa della normalizzazione per-campione Ã¨ vera e non di poco: la stessa parola arriva al modello con ampiezze che differiscono di oltre un ordine di grandezza.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>E2 â€” quanti bin mel? Il parametro Â«piÃ¹ impattanteÂ» Ã¨ quasi piatto</p>
+  <p>Sonda lineare (regressione logistica su log-mel mediati su 8 finestre, 12 000 train / 4 000 val):</p>
+  <pre>32 bin  41,60%      40 bin  41,93%      64 bin  42,18%
+80 bin  42,40%     128 bin  42,03%</pre>
+  <p><strong>0,8 punti di escursione su un fattore 4 di risoluzione, e curva non monotona</strong> (128 fa peggio di 80). Il grado di libertÃ  che avevamo dichiarato come il piÃ¹ impattante dell'intera riproduzione Ã¨ in realtÃ  quasi irrilevante â€” almeno per l'informazione linearmente decodificabile.</p>
+  <p>Confermati i <strong>64 bin</strong>: a 0,22 punti dal migliore, differenza dentro il rumore, e unico valore che dopo lo stem dÃ  <em>F</em>=16, potenza di due, utile alla geometria del campionamento sparso.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>E3 â€” la normalizzazione che avevo aggiunto non Ã¨ supportata dai dati</p>
+  <pre>sonda lineare CON normalizzazione   : 42,33%
+sonda lineare SENZA normalizzazione : 42,83%</pre>
+  <p>Avevo introdotto la normalizzazione per-campione dello spettrogramma convinto che aiutasse, motivandola con la grande escursione di livello. L'escursione c'Ã¨ (E1), ma la normalizzazione <strong>peggiora</strong> la sonda di mezzo punto: il livello assoluto porta evidentemente un po' di segnale utile.</p>
+  <p><strong>Declassata da default silenzioso a flag di configurazione e ablation dichiarata.</strong> Nessuna delle due misure Ã¨ decisiva per un modello profondo con normalizzazioni interne, ma non abbiamo evidenza a favore di una scelta introdotta per convinzione â€” e questo va detto.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>E4 â€” ipotesi sullo scarto dei FLOPs formulata e confutata</p>
+  <p>Ipotesi del 17/08: il paper scrive Â«convolutional layer<em>s</em>Â» al plurale, quindi lo scarto dell'11 % sul costo viene da strati convolutivi aggiuntivi. Testata aggiungendo strati 3Ã—3 a stride 1:</p>
+  <pre>1 conv:  0,574 GFLOP   (-11,0%)
+2 conv:  1,703 GFLOP  (+164,0%)
+3 conv:  2,831 GFLOP  (+339,0%)</pre>
+  <p><strong>Confutata, e nettamente.</strong> Una conv 3Ã—3 con 196 canali alla risoluzione piena costa da sola piÃ¹ di 1 GFLOP: aggiungere strati non colma lo scarto, lo travolge. Lo scarto dell'11 % resta <strong>non spiegato</strong> e verrÃ  riportato come tale.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>E5 â€” il numero di teste Ã¨ gratuito</p>
+  <p>Con <em>d</em>=224, le configurazioni a 4, 7, 8 e 14 teste hanno <strong>parametri e FLOPs identici</strong> (4 899 151 e 0,5742 G). La scelta Ã¨ libera: si adotta <em>h</em>=7, che dÃ  dimensione per testa 32, il valore convenzionale in letteratura, invece dei 28 di <em>h</em>=8.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span><code>Manuale_tecnico.pdf</code></p>
+  <p>Nuovo documento: manuale tecnico completo in 12 capitoli â€” matematica (STFT, scala mel, attenzione, complessitÃ , Adam/AdamW, cross-entropy, interpolazione bilineare), architettura dei due modelli, metodo di ricostruzione dai vincoli numerici, catalogo delle assunzioni con lo stato dell'evidenza, documentazione del codice file per file, protocollo sperimentale.</p>
+  <p>Tre marcatori distinguono <em>dal paper</em> / <em>assunzione</em> / <em>evidenza</em>, cosÃ¬ a colpo d'occhio si vede cosa Ã¨ dichiarato dagli autori, cosa abbiamo deciso noi e cosa abbiamo misurato. Documento vivo, aggiornato come il diario.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Configurazione adottata per il dense-transformer</p>
+  <pre>c196_proj96 Â· stem paper Â· pool (2,1) Â· pool_freq Â· d=224 Â· L=8 Â· h=7
+  4.899.147 parametri   (+2,1% sui 4,80 M dichiarati)
+  0,574 GFLOP           (-11,0% sugli 0,645 dichiarati)</pre>
+  <p>Si addestra anche la variante <code>flatten</code>, che fitta meglio il costo (âˆ’5,9 %) e peggio i parametri: le due bracketizzano l'incertezza. <code>pool_freq</code> resta la scelta meno sicura, perchÃ© media via la struttura in frequenza proprio nel baseline che verrÃ  confrontato con un modello che campiona nel piano tempo-frequenza.</p>
+  <p><strong>Ci fermiamo qui deliberatamente</strong>: nessuna configurazione soddisfa entrambi i vincoli, e continuare ad aggiungere gradi di libertÃ  finchÃ© i numeri combaciano sarebbe overfitting su una cifra riportata senza convenzione dichiarata.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Chiarito l'obiettivo: riprodurre, non migliorare</p>
+  <p>Verificato sulle fonti. Pagina del corso: Â«you will be asked to work at home to <strong>reproduce some (simplified) experimental results</strong>Â». Testo dell'assegnazione: Â«riprodurre i risultati sperimentali, <strong>reimplementando il metodo di apprendimento in modo autonomo</strong>Â», con la semplificazione autorizzata riferita alla <em>scala</em> (dataset, dimensione del modello).</p>
+  <p>Ne segue la regola operativa: <strong>il default Ã¨ la lettura letterale del paper; le nostre aggiunte sono varianti opt-in valutate come ablation</strong>. Non il contrario, com'era finora. Distinzione introdotta fra <em>colmature</em> (il paper tace, qualcosa dobbiamo mettere) e <em>deviazioni</em> (il paper descrive e noi facciamo diverso): solo le seconde sono un problema.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Cercate le repository dei paper</p>
+  <table>
+    <thead><tr><th>Paper</th><th>Repo</th></tr></thead>
+    <tbody>
+      <tr><td>Kavaki &amp; Mandel 2025</td><td><strong>nessuna</strong> â€” cercato in tutte e 5 le pagine, nessun link nÃ© menzione</td></tr>
+      <tr><td>EAT</td><td><code>github.com/Alibaba-MIIL/AudioClassfication</code>, dichiarata nell'abstract</td></tr>
+      <tr><td>SparseFormer</td><td><code>github.com/showlab/sparseformer</code>, Â«code will be publicly available atÂ»</td></tr>
+    </tbody>
+  </table>
+  <p>Nota: il grep su SparseFormer non trovava nulla â€” ripgrep aveva classificato il testo estratto come binario per via dei simboli matematici. Il link si Ã¨ trovato leggendo la prima pagina. Piccolo promemoria a non fidarsi di un Â«nessun risultatoÂ».</p>
+  <p>Attenzione alla versione: la repo di SparseFormer contiene anche una libreria corrispondente alle versioni ICLR 2024 e CVPR 2024, successive. Il file giusto Ã¨ <code>imagenet/models/sparseformer.py</code>, la v1 dell'arXiv 2304.03768 che Kavaki &amp; Mandel citano.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>La mia PhaseMix era sbagliata su cinque dettagli su cinque</p>
+  <p>L'avevo dedotta dalla frase di EAT Â«mixes phase components while preserving amplitudeÂ». Il codice ufficiale dice altro su ogni punto:</p>
+  <table>
+    <thead><tr><th></th><th>EAT (reale)</th><th>La nostra versione</th></tr></thead>
+    <tbody>
+      <tr><td>Trasformata</td><td><strong>STFT</strong>, finestra di Hann</td><td>FFT dell'intero segnale</td></tr>
+      <tr><td>Ampiezza</td><td><strong>preservata</strong>, non mescolata</td><td>mescolata linearmente</td></tr>
+      <tr><td>Fase</td><td>interpolata sugli <strong>angoli</strong></td><td>sui vettori unitari</td></tr>
+      <tr><td>Î»</td><td><strong>Uniform[0,1]</strong></td><td>Beta(0,2 Â· 0,2)</td></tr>
+      <tr><td>Peso etichetta</td><td><strong>Î»Â·0,5 + 0,5</strong></td><td>Î»</td></tr>
+    </tbody>
+  </table>
+  <p>Â«Preserving amplitudeÂ» significava letteralmente <em>non mescolare affatto l'ampiezza</em>: si prende quella di un campione e solo la fase dell'altro. E il peso dell'etichetta che non scende mai sotto 0,5 â€” perchÃ© mescolare la sola fase altera il segnale meno â€” Ã¨ una finezza che nessuna descrizione testuale poteva suggerire.</p>
+  <p><strong>Lezione</strong>: dedurre un metodo da una riga di prosa Ã¨ un esercizio di immaginazione, non di riproduzione. Dove esiste codice di riferimento, va letto.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Anche <code>mixing</code> non era quello che pensavo</p>
+  <p>Non Ã¨ il mixup di Zhang et al. ma il <strong>between-class learning</strong> di Tokozume et al. 2017 â€” che EAT cita come [14] e che avevamo in bibliografia senza collegarlo. I due segnali sono bilanciati in base al loro <strong>livello sonoro</strong> in dB e il risultato Ã¨ rinormalizzato in energia:</p>
+  <pre>G = 10 log10 E[xÂ²]
+p = 1/(1 + 10^((G1-G2)/20) Â· (1-Î»)/Î»)
+x = (pÂ·x1 + (1-p)Â·x2) / sqrt(pÂ² + (1-p)Â²)      etichette pesate con Î», non con p</pre>
+  <p>Il peso dei <em>dati</em> Ã¨ p, corretto per il livello; quello delle <em>etichette</em> Ã¨ Î», il rapporto percettivo voluto. La rinormalizzazione impedisce che il volume della miscela diventi un indizio dell'augmentation.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>Lo stem: niente BatchNorm, ma LayerNorm dopo il pooling</p>
+  <p>Il codice di SparseFormer conferma la descrizione del paper e la completa:</p>
+  <pre>conv 7x7 stride 2 pad 3 (bias=True) -> ReLU -> maxpool 3x3 -> LayerNorm sui canali</pre>
+  <p>La nostra <code>BatchNorm2d</code> fra conv e ReLU era una deviazione su <strong>tre punti</strong>: tipo di normalizzazione, posizione, e <code>bias=False</code> sulla convoluzione. Corretto, con test di regressione che verifica la sequenza esatta dei moduli e l'assenza di BatchNorm.</p>
+  <p>La differenza non Ã¨ cosmetica: la BatchNorm normalizza ogni canale rispetto al batch, con statistiche da congelare in valutazione; la LayerNorm sui canali normalizza ogni posizione rispetto ai propri canali, Ã¨ indipendente dal batch e si comporta identicamente in training e inferenza.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Risolte due ambiguitÃ  del metodo sparso</p>
+  <p><strong>Â«Normalization by three standard deviationsÂ»</strong>, che era una delle nostre assunzioni aperte, ha una formula precisa:</p>
+  <pre>offset = (offset - offset.mean(-2)) / (3 * (offset.std(-2) + 1e-7))</pre>
+  <p>Media e deviazione sull'asse dei <em>P punti</em>, non sul batch. Dopo la standardizzazione la deviazione Ã¨ 1/3, quindi per una distribuzione quasi normale il 99,7 % della massa cade dentro la regione: la regola dei tre sigma applicata per costruzione.</p>
+  <p><strong>L'inizializzazione</strong>: token da normale troncata con std 1, regioni su una griglia <code>root Ã— root</code> con <code>root = âˆšN</code> in coordinate normalizzate. Da qui una scoperta collaterale: <strong>N deve essere un quadrato perfetto</strong>, ed Ã¨ esattamente ciÃ² che si osserva nella Tabella 3 del paper, la cui ablation usa N âˆˆ {4, 9, 16, 25, 36}. Non era una scelta estetica degli autori ma un vincolo strutturale ereditato â€” un dettaglio che ora sappiamo spiegare.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Un test fallito che ha insegnato qualcosa: la consistenza della STFT</p>
+  <p>Avevo scritto un test che verificava Â«phasemix preserva il modulo dello spettrogrammaÂ». Fallito: errore relativo del <strong>34 %</strong>, non dello 0.</p>
+  <p>Non era un bug. Una matrice complessa arbitraria <strong>non Ã¨ la STFT di alcun segnale reale</strong>: con finestre sovrapposte al 60 % i frame adiacenti condividono campioni e si vincolano a vicenda, e alterare le fasi rende la matrice <em>inconsistente</em>. La iSTFT fa overlap-add, che equivale a proiettare sul sottospazio delle STFT consistenti â€” e la proiezione cambia anche i moduli.</p>
+  <p>Â«Ampiezza preservataÂ» vale quindi sulla <em>matrice modificata</em>, non sul segnale ricostruito. Ãˆ plausibilmente parte di ciÃ² che rende efficace l'augmentation: il risultato non Ã¨ una semplice ricombinazione dei due originali. Stesso fenomeno che rende necessario Griffin-Lim per ricostruire da spettrogrammi di sola ampiezza.</p>
+  <p>Il test Ã¨ stato riscritto in due: con Î»=1 phasemix Ã¨ l'identitÃ  entro 10â»â´ (correttezza del percorso STFTâ†’iSTFT), e con Î»=0 la deviazione dei moduli Ã¨ misurabile ma limitata. Suite ora a <strong>26 test</strong>.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>Normalizzazione dello spettrogramma disattivata di default</p>
+  <p>Coerente con la regola stabilita oggi. All'evidenza contraria della sonda lineare si aggiunge ora un argomento piÃ¹ forte: <strong>nÃ© il paper nÃ© i due ancestor</strong>, di cui abbiamo letto il codice, normalizzano lo spettrogramma. Resta come flag e ablation dichiarata.</p>
+  <p>Verificato che la configurazione adottata regge dopo tutte le correzioni: 4 899 147 parametri (+2,1 %), 0,574 GFLOP (âˆ’11,0 %), sequenza di 51 frame.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Audit completo prima del training</p>
+  <p>Eseguito un audit che esercita la catena intera su dati veri, non i singoli pezzi:</p>
+  <pre>forward completo      logits (64,35) finiti
+backward              gradiente su tutti i 108 tensori, nessuno identicamente nullo
+train/eval            delta esattamente 0.00e+00
+EMA                   passo 0.0050 = 1 - decay, forward funzionante
+augmentation con lam forzato    tutti i percorsi</pre>
+  <p>Il <code>delta 0.00e+00</code> fra train ed eval conferma che la sostituzione BatchNorm â†’ LayerNorm ha eliminato <strong>ogni dipendenza dal batch</strong>. Prima quel numero sarebbe stato diverso da zero e il modello si sarebbe comportato diversamente in valutazione.</p>
+  <p>Un solo problema trovato: mancava <code>configs/dense.yaml</code>, cioÃ¨ la configurazione adottata viveva solo nella prosa dei documenti. Creato, con ogni scelta annotata come <em>dichiarata</em>, <em>dedotta</em> o <em>assunta</em>, piÃ¹ una guardia di regressione che fallisce se una modifica sposta i numeri fuori dal budget del paper.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Il modello sparso come secondo vincolo: predizione a âˆ’0,8 %</p>
+  <p>Calcolato il budget di parametri del modello sparso componente per componente, senza implementarlo, per sciogliere un'ambiguitÃ  rimasta: Â«the final decoded output xâ½Â²â¾ is applied to a linear layer with dimension dÂ» â€” ma xâ½Â²â¾ ha forma [P, C], quindi il layer opera sul tensore appiattito o su una riduzione?</p>
+  <pre>x(2) appiattito:  Linear(PÂ·C -> d)     2.846.623    -0,8%
+ridotto sui punti: Linear(C -> d)      2.201.503   -23,3%
+                                       dichiarato: 2,87 M</pre>
+  <p>AmbiguitÃ  risolta senza margine: Ã¨ il tensore appiattito. Ma il risultato vale soprattutto per un'altra ragione: <strong>abbiamo predetto il conteggio dei parametri di un modello che non abbiamo ancora scritto, entro lo 0,8 %</strong>. Ãˆ l'evidenza piÃ¹ forte che la nostra lettura del metodo sia corretta â€” piÃ¹ di qualunque test unitario.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>Il mel Ã¨ giusto, ma non per la ragione che credevamo</p>
+  <p>Verificato sulle fonti: <strong>EAT non usa il mel</strong>. Ãˆ l'opposto â€” opera sulla forma d'onda grezza e argomenta che Â«the use of mel-spectrogram comes at the cost of having to carefully adjust the parameters for time-frequency resolution and compressionÂ».</p>
+  <p>Il sostegno alla scelta viene da altrove: <strong>KWT</strong> usa Â«Mel-spectrogram patchesÂ» (per parola dello stesso Kavaki), <strong>AST</strong> usa spettrogrammi con banco mel, ed EAT stesso riporta che i sistemi audio si basano Â«mostly on a mel-spectrogram representationÂ», citando una comparazione sistematica che ne deduce la superioritÃ .</p>
+  <p>Conclusione invariata, motivazione corretta. All'orale un'affermazione giusta con la motivazione sbagliata Ã¨ peggio di un dubbio dichiarato.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT: tre punti chiusi</p>
+  <p><strong>Programmazione delle augmentation.</strong> <code>BatchAugs.__call__</code>: si mescola se <code>rand() &lt;= mix_ratio</code> e <code>epoch &gt; epoch_mix</code>; poi si sceglie <em>una</em> augmentation a caso e la si applica all'<em>intero</em> batch. Il default <code>mix_ratio=1</code> significa <strong>sempre</strong> â€” noi avevamo assunto 0,5.</p>
+  <p><strong>One-cycle.</strong> <code>pct_start=0.1</code> esplicito; <code>div_factor</code> e <code>final_div_factor</code> ai default PyTorch (25 e 10â´), quindi lr iniziale 1,2Â·10â»âµ e finale 1,2Â·10â»â¹.</p>
+  <p><strong>Weight decay.</strong> Qui una <strong>riabilitazione</strong>: avevamo classificato come nostra deviazione l'esclusione di bias e normalizzazioni. Ma EAT costruisce AdamW con <code>weight_decay=0</code> e delega a gruppi di parametri con criterio <code>len(param.shape) == 1</code> â€” che cattura bias, LayerNorm e BatchNorm insieme. Non era una deviazione: era conforme al riferimento.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Il target mixato non Ã¨ morbido: Ã¨ multi-hot con soglia</p>
+  <p>L'ultima e piÃ¹ sottile delle correzioni. Il ramo <code>'bce'</code> di <code>mix_loss</code>:</p>
+  <pre>target_shuffled = F.one_hot(target_shuffled, n).float() * (lam &lt; 0.9)
+one_h_mix       = torch.clamp(target + target_shuffled, max=1)</pre>
+  <p><strong>Î» non Ã¨ un peso, Ã¨ una soglia.</strong> Non compare nel valore del target: decide solo se includere o no la seconda etichetta. Se Î» â‰¥ 0,9 il secondo suono Ã¨ troppo debole e la sua classe viene scartata. E il target Ã¨ <strong>multi-hot</strong> â€” entrambe le classi a 1, non Î» e 1âˆ’Î».</p>
+  <p>Ãˆ la formulazione naturale per la BCE, che tratta ogni classe come domanda binaria indipendente: per una miscela udibile di due parole la risposta Ã¨ sÃ¬ a entrambe.</p>
+  <p>Noi avevamo implementato la semantica del ramo <code>'ce'</code> â€” dove Î»Lâ‚+(1âˆ’Î»)Lâ‚‚ <em>Ã¨</em> equivalente a un target morbido per linearitÃ . Non un errore di matematica, un errore di scelta del ramo di riferimento. Visibile solo leggendo il codice.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Due test falliti, entrambi colpa mia, entrambi istruttivi</p>
+  <p>Dopo il passaggio ai target multi-hot, due test asserivano che tutti i campioni mixati avessero due classi attive. Falliti su 1 campione su 16.</p>
+  <p>Causa: <code>randperm</code> ha <strong>punti fissi</strong>. Con probabilitÃ  â‰ˆ 1âˆ’1/e almeno un campione viene mixato con sÃ© stesso, e il <code>clamp</code> riporta quel target a una sola classe. Ãˆ il comportamento del riferimento, non un difetto â€” circa 1/B dei campioni per batch riceve un'augmentation che Ã¨ di fatto un no-op.</p>
+  <p>Test resi robusti e il fenomeno documentato. Suite ora a <strong>31 test</strong>.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Stato finale delle ambiguitÃ  prima del training</p>
+  <p>Resta <strong>una sola assunzione</strong> senza appiglio in nessuna fonte: il <strong>numero di epoche</strong>. Tutto il resto Ã¨ dichiarato dal paper, documentato nel codice di riferimento, o supportato da una nostra misura.</p>
+  <p>Restano invece aperte quattro <em>questioni</em>, che non sono assunzioni nascoste ma incertezze dichiarate: lo scarto dell'11 % sui FLOPs (non spiegato, due candidati eliminati), <code>pool_freq</code> contro <code>flatten</code> (indecidibile dai vincoli, si addestrano entrambe), pre-norm contro post-norm (da ablare), e la verifica dei FLOPs dello sparso come terzo vincolo (rimandata alla Fase 4, perchÃ© i parametri non testano <code>pool_stride</code> mentre i FLOPs sÃ¬).</p>
 </div>
 
 <!-- ==================================================================== -->
@@ -348,23 +597,27 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
 <table>
   <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:52mm">Decisione</th><th>Motivazione</th></tr></thead>
   <tbody>
-    <tr><td class="c">12/08</td><td>Infrastruttura di misura prima del modello</td><td>Il claim è un rapporto accuratezza/FLOPs: un contatore scritto dopo tende a confermare il risultato atteso.</td></tr>
-    <tr><td class="c">12/08</td><td>Venv dedicato, non riuso di ambienti esistenti</td><td>Riproducibilità (l'ambiente è parte del deliverable); <code>DLA2026</code> appartiene a un altro corso.</td></tr>
+    <tr><td class="c">12/08</td><td>Infrastruttura di misura prima del modello</td><td>Il claim Ã¨ un rapporto accuratezza/FLOPs: un contatore scritto dopo tende a confermare il risultato atteso.</td></tr>
+    <tr><td class="c">12/08</td><td>Venv dedicato, non riuso di ambienti esistenti</td><td>RiproducibilitÃ  (l'ambiente Ã¨ parte del deliverable); <code>DLA2026</code> appartiene a un altro corso.</td></tr>
     <tr><td class="c">12/08</td><td>Criteri di successo definiti in anticipo</td><td>Per non poterli riscrivere a posteriori in base ai risultati.</td></tr>
     <tr><td class="c">12/08</td><td>Installazione pip in due passi</td><td><code>--index-url</code> sostituisce PyPI; <code>--extra-index-url</code> esporrebbe a dependency confusion.</td></tr>
-    <tr><td class="c">17/08</td><td><strong>Baseline = dense-transformer, non EAT-S</strong></td><td>È il confronto controllato del paper; EAT-S è un numero citato. Riduce il lavoro e il rischio.</td></tr>
+    <tr><td class="c">17/08</td><td><strong>Baseline = dense-transformer, non EAT-S</strong></td><td>Ãˆ il confronto controllato del paper; EAT-S Ã¨ un numero citato. Riduce il lavoro e il rischio.</td></tr>
     <tr><td class="c">17/08</td><td>Split ufficiali con verifica bloccante dei conteggi</td><td>Speaker-disjoint; i tre numeri dichiarati dal paper sono un test di correttezza gratuito.</td></tr>
-    <tr><td class="c">17/08</td><td>Ogni assunzione marcata <code>[ASSUNZIONE]</code></td><td>Il paper tace su sei punti: vanno dichiarati, non nascosti. È materiale da presentazione.</td></tr>
+    <tr><td class="c">17/08</td><td>Ogni assunzione marcata <code>[ASSUNZIONE]</code></td><td>Il paper tace su sei punti: vanno dichiarati, non nascosti. Ãˆ materiale da presentazione.</td></tr>
     <tr><td class="c">17/08</td><td>Test prima del download del dataset</td><td>Separare i bug dell'infrastruttura da quelli del modello costa 2 secondi invece di ore.</td></tr>
     <tr><td class="c">17/08</td><td>Sorgenti dei documenti in <code>docs/</code></td><td>Erano in una cartella temporanea di sessione: non ritrovabili in futuro.</td></tr>
+    <tr><td class="c">17/08</td><td>Encoder reimplementato invece di <code>nn.MultiheadAttention</code></td><td>La consegna chiede reimplementazione autonoma; verificata l'equivalenza bit a bit col riferimento PyTorch.</td></tr>
+    <tr><td class="c">17/08</td><td>Configurazione del denso ricostruita dai vincoli numerici</td><td>Il paper non dichiara iperparametri del denso: 4,80 M e 0,645 G sono gli unici appigli. +13 min per run, in cambio di FLOPs confrontabili.</td></tr>
+    <tr><td class="c">17/08</td><td>A paritÃ  di parametri si preferisce larghezza a profonditÃ </td><td>Misurato: d=128 L=24 costa 1,85Ã— d=224 L=8 a paritÃ  di capacitÃ  (limite sui lanci di kernel).</td></tr>
+    <tr><td class="c">17/08</td><td>Testare il denso con <em>e</em> senza positional encoding</td><td>Il paper tace; l'invarianza a permutazioni rende la domanda sperimentale legittima e quasi gratuita.</td></tr>
   </tbody>
 </table>
 
 <h2>Errori e correzioni</h2>
 <table>
-  <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:48mm">Cosa è andato storto</th><th>Esito</th></tr></thead>
+  <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:48mm">Cosa Ã¨ andato storto</th><th>Esito</th></tr></thead>
   <tbody>
-    <tr><td class="c">12/08</td><td>Ipotesi sbagliata sull'ancestor del metodo (importance-map di Mandel)</td><td>Smentita il 17/08: è SparseFormer. Era marcata «da confermare», ma resta una congettura presa per plausibile troppo a lungo.</td></tr>
+    <tr><td class="c">12/08</td><td>Ipotesi sbagliata sull'ancestor del metodo (importance-map di Mandel)</td><td>Smentita il 17/08: Ã¨ SparseFormer. Era marcata Â«da confermareÂ», ma resta una congettura presa per plausibile troppo a lungo.</td></tr>
     <tr><td class="c">12/08</td><td>Stima della cache: 1,7 GB</td><td>Valore corretto <strong>2,72 GB</strong>. Corretto in PDF e codice.</td></tr>
     <tr><td class="c">12/08</td><td>Generazione PDF fallita (flag inesistente, profilo Edge bloccato)</td><td>Risolto con <code>--user-data-dir</code> dedicato; ricetta salvata in <code>scripts/build_docs.ps1</code>.</td></tr>
     <tr><td class="c">17/08</td><td>Lettura PDF impossibile (<code>poppler</code> mancante)</td><td>Aggirato con PyMuPDF dall'ambiente <code>DLA2026</code>.</td></tr>
@@ -372,7 +625,22 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
     <tr><td class="c">17/08</td><td><code>.gitignore</code> copriva <code>.venv/</code> ma l'ambiente si chiama <code>DL_F</code></td><td>Aggiunta la riga mancante prima del primo <code>git add</code>.</td></tr>
     <tr><td class="c">17/08</td><td><code>data/</code> in gitignore nascondeva anche <code>src/data/</code></td><td>Corretto in <code>/data/</code>. Intercettato con <code>git add --dry-run</code> prima del commit.</td></tr>
     <tr><td class="c">17/08</td><td>Memmap non picklabile: <code>num_workers&gt;0</code> in crash su Windows</td><td>Apertura pigra + <code>__getstate__</code>. Test di regressione aggiunto.</td></tr>
-    <tr><td class="c">17/08</td><td>Smoke test su batch non mescolato: augmentation apparentemente rotte</td><td>Era il test a essere sbagliato. Ha però rivelato che <strong>la cache è ordinata per classe</strong>.</td></tr>
+    <tr><td class="c">17/08</td><td>Smoke test su batch non mescolato: augmentation apparentemente rotte</td><td>Era il test a essere sbagliato. Ha perÃ² rivelato che <strong>la cache Ã¨ ordinata per classe</strong>.</td></tr>
+    <tr><td class="c">18/08</td><td>Stem escluso dalla griglia della prima ricerca</td><td>Rifatta su 432 configurazioni: la deduzione <em>N</em>=51 <strong>regge</strong>.</td></tr>
+    <tr><td class="c">18/08</td><td>Ottimizzata la profonditÃ  <em>L</em>, che il paper aveva giÃ  dichiarato (8)</td><td>Vincolata a 8. L'errore classico del fitting: ottimizzare su ciÃ² che Ã¨ noto.</td></tr>
+    <tr><td class="c">18/08</td><td><strong>La normalizzazione per-campione non Ã¨ supportata dai dati</strong></td><td>La sonda lineare peggiora di 0,5 punti. Declassata da default ad ablation dichiarata.</td></tr>
+    <tr><td class="c">18/08</td><td>Ipotesi Â«piÃ¹ strati convolutivi spiegano lo scarto sui FLOPsÂ»</td><td><strong>Confutata</strong>: 2 conv danno +164 % invece di +11 %. Scarto non spiegato, riportato come tale.</td></tr>
+    <tr><td class="c">18/08</td><td><strong>PhaseMix dedotta dal testo: sbagliata su 5 dettagli su 5</strong></td><td>Riscritta dal codice ufficiale di EAT. Trasformata, ampiezza, fase, Î» e peso dell'etichetta erano tutti diversi.</td></tr>
+    <tr><td class="c">18/08</td><td><code>mixing</code> scambiato per il mixup di Zhang et al.</td><td>Ãˆ il between-class learning di Tokozume et al. con correzione di potenza. Riscritto.</td></tr>
+    <tr><td class="c">18/08</td><td>BatchNorm nello stem, con <code>bias=False</code> sulla conv</td><td>Deviazione su tre punti. Corretta in conv(bias) â†’ ReLU â†’ maxpool â†’ LayerNorm sui canali.</td></tr>
+    <tr><td class="c">18/08</td><td>Test Â«phasemix preserva il moduloÂ» fallito al 34 %</td><td>Non era un bug: Ã¨ l'<strong>inconsistenza della STFT</strong>. Test riscritto, fenomeno documentato nel manuale.</td></tr>
+    <tr><td class="c">18/08</td><td>Grep su SparseFormer: Â«nessun risultatoÂ»</td><td>ripgrep aveva classificato il file come binario. Il link c'era. Non fidarsi di un negativo.</td></tr>
+    <tr><td class="c">18/08</td><td>Target mixato implementato come morbido Î»yâ‚+(1âˆ’Î»)yâ‚‚</td><td>Ãˆ la semantica del ramo <code>'ce'</code>. Quello <code>'bce'</code> che usiamo fa <strong>multi-hot con soglia Î»&lt;0,9</strong>. Corretto.</td></tr>
+    <tr><td class="c">18/08</td><td><code>mix_ratio</code> assunto a 0,5</td><td>Il default di EAT Ã¨ <strong>1</strong>: si mescola sempre. Corretto.</td></tr>
+    <tr><td class="c">18/08</td><td>Weight decay selettivo classificato come nostra deviazione</td><td><strong>Classificazione sbagliata</strong>: EAT esclude i parametri con <code>len(shape)==1</code>. Era conforme al riferimento.</td></tr>
+    <tr><td class="c">18/08</td><td>Â«Il mel lo usa l'altro paperÂ»</td><td>Falso: EAT usa la forma d'onda grezza e argomenta <em>contro</em> il mel. Conclusione invariata, motivazione riscritta su KWT e AST.</td></tr>
+    <tr><td class="c">18/08</td><td>Test che assumevano due classi attive in ogni target mixato</td><td><code>randperm</code> ha punti fissi: ~1/B dei campioni si mixa con sÃ© stesso. Test resi robusti.</td></tr>
+    <tr><td class="c">18/08</td><td>Configurazione adottata solo nella prosa dei documenti</td><td>Creato <code>configs/dense.yaml</code> piÃ¹ una guardia di regressione sui budget.</td></tr>
   </tbody>
 </table>
 
@@ -382,8 +650,8 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
   <tbody>
     <tr><td class="c">0</td><td>Lettura paper + ancestor, setup</td><td>paper letti; <strong>SparseFormer ancora da leggere</strong>; form risorse e ricevimento da fare</td></tr>
     <tr><td class="c">1</td><td>Prerequisiti teorici</td><td>in corso, in parallelo</td></tr>
-    <tr><td class="c"><strong>2</strong></td><td>Dati, split, contatore FLOPs</td><td><strong>COMPLETATA</strong> — split esatti, cache costruita, 19/19 test, ~3,5 s/epoca di dati</td></tr>
-    <tr><td class="c">3</td><td>Early conv + dense transformer</td><td>da fare — prossimo passo</td></tr>
+    <tr><td class="c"><strong>2</strong></td><td>Dati, split, contatore FLOPs</td><td><strong>COMPLETATA</strong> â€” split esatti, cache costruita, 19/19 test, ~3,5 s/epoca di dati</td></tr>
+    <tr><td class="c"><strong>3</strong></td><td>Early conv + dense transformer</td><td><strong>in corso</strong> â€” moduli 1â€“3 scritti e verificati, configurazione ricostruita; manca <code>train.py</code></td></tr>
     <tr><td class="c">4</td><td>Sparse feature extractor</td><td>da fare</td></tr>
     <tr><td class="c">4-bis</td><td>EAT-S <em>(opzionale)</em></td><td>da fare</td></tr>
     <tr><td class="c">5</td><td>Ablation, seed multipli, HPO</td><td>da fare</td></tr>
@@ -393,16 +661,20 @@ yaml 6.0.3 · fvcore 0.1.5 · einops 0.8.2 · optuna 4.9.0
 
 <h4>Questioni aperte</h4>
 <ul>
-  <li><strong>Leggere SparseFormer</strong> (<code>paper pre progetto/2304.03768v1.pdf</code>): è dove il metodo è spiegato per esteso.</li>
-  <li><s>Inizializzare il repository git</s> — fatto il 17/08, locale.</li>
-  <li>Valutare un <code>.gitattributes</code> con <code>* text=auto eol=lf</code>, per quando il repo verrà clonato da Linux.</li>
+  <li><strong>Leggere SparseFormer</strong> (<code>paper pre progetto/2304.03768v1.pdf</code>): Ã¨ dove il metodo Ã¨ spiegato per esteso.</li>
+  <li><s>Inizializzare il repository git</s> â€” fatto il 17/08, locale.</li>
+  <li>Valutare un <code>.gitattributes</code> con <code>* text=auto eol=lf</code>, per quando il repo verrÃ  clonato da Linux.</li>
   <li>Compilare il <strong>form per le risorse di calcolo</strong> e fissare il <strong>ricevimento</strong> col docente.</li>
-  <li>Risolvere la contraddizione «96 dimensional» vs «196 kernels» implementando entrambe le letture.</li>
-  <li>Calibrare la convenzione FLOPs/MAC del paper misurando EAT-S con entrambi i contatori.</li>
+  <li>Risolvere la contraddizione Â«96 dimensionalÂ» vs Â«196 kernelsÂ» implementando entrambe le letture.</li>
+  <li><s>Calibrare la convenzione FLOPs/MAC del paper</s> â€” <strong>risolta</strong> il 17/08 dalla ricerca sulle configurazioni: il paper riporta <strong>FLOPs</strong>, non MAC.</li>
+  <li><s>Verificare l'ipotesi del secondo strato convolutivo</s> â€” <strong>confutata</strong> il 18/08. Lo scarto dell'11 % resta non spiegato.</li>
+  <li><s>Verificare la formula di PhaseMix contro il codice ufficiale di EAT</s> â€” <strong>fatto</strong> il 18/08, era sbagliata e ora Ã¨ corretta.</li>
+  <li>Scrivere <code>src/train.py</code>: AdamW, one-cycle, EMA, BCE, disciplina sul test set. Ãˆ il prossimo passo.</li>
   <li>Verificare la formula di <em>PhaseMix</em> contro il codice ufficiale di EAT.</li>
 </ul>
 
-<p class="foot">Diario di bordo del progetto d'esame B031278 — Deep Learning, Fall 2025, Università di Firenze. Documento di lavoro personale, aggiornato a ogni sessione. Sorgente: <code>docs/diario_di_bordo.html</code> — rigenerare con <code>scripts\build_docs.ps1</code>.</p>
+<p class="foot">Diario di bordo del progetto d'esame B031278 â€” Deep Learning, Fall 2025, UniversitÃ  di Firenze. Documento di lavoro personale, aggiornato a ogni sessione. Sorgente: <code>docs/diario_di_bordo.html</code> â€” rigenerare con <code>scripts\build_docs.ps1</code>.</p>
 
 </body>
 </html>
+

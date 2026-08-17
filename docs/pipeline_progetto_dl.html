@@ -85,8 +85,10 @@
   <h1>Progetto d'esame — Pipeline realizzativa e piano di studio</h1>
   <p class="sub">B031278 <em>Deep Learning</em>, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
   <p class="sub" style="font-size:10pt">Riproduzione di <strong>Kavaki &amp; Mandel (2025)</strong>, <em>Audio Sparse-Transformer for Speech Classification</em>, con <strong>Gazneli et al. (2022)</strong> come baseline</p>
-  <p class="meta">Docente: Paolo Frasconi (DINFO) · Documento di lavoro personale · v2.0 — 17 agosto 2026<br>
-  <em>v2.0: metodo di Kavaki &amp; Mandel ricavato dal PDF integrale; ancestor corretto (SparseFormer, non la linea importance-map); Fase 3 semplificata a early conv + dense transformer.</em></p>
+  <p class="meta">Docente: Paolo Frasconi (DINFO) · Documento di lavoro personale · v2.1 — 18 agosto 2026<br>
+  <em>v2.0: metodo di Kavaki &amp; Mandel ricavato dal PDF integrale; ancestor corretto (SparseFormer, non la linea importance-map); Fase 3 semplificata a early conv + dense transformer.<br>
+  v2.1: §3.4 aggiornata — quasi tutte le ambiguità risolte leggendo il codice ufficiale di SparseFormer e di EAT.</em></p>
+  <p class="meta" style="margin-top:2mm"><strong>Questo documento è il piano</strong> — cosa fare e in che ordine. Per i dettagli di metodo, le formule e le evidenze il riferimento è <code>Manuale_tecnico.pdf</code>; per la cronaca delle decisioni e degli errori, <code>Diario_di_bordo.pdf</code>.</p>
 </header>
 
 <h2><span class="n">1</span>Vincoli d'esame: cosa determina ogni scelta</h2>
@@ -131,7 +133,7 @@
 
 <p>Il contributo dichiarato non è l'architettura ma le <strong>augmentation audio</strong>. Due famiglie:</p>
 <ul>
-  <li><strong>Label-mixing</strong> — Mixup (ampiezza), <em>FreqMix</em> (split dei bin FFT fra due campioni a un cutoff <em>k<sub>c</sub></em> = int(λ·n<sub>fft</sub>)), <em>PhaseMix</em> (mescola la fase preservando l'ampiezza), TimeMix/CutMix in versione 1D.</li>
+  <li><strong>Label-mixing</strong> — <em>Mixup</em>, <em>FreqMix</em>, <em>PhaseMix</em>, TimeMix/CutMix in versione 1D. <span style="color:var(--accent2)">Attenzione: i nomi ingannano. Il «mixup» di EAT è in realtà il <em>between-class learning</em> di Tokozume et al., con bilanciamento in dB e rinormalizzazione dell'energia; e PhaseMix <strong>non mescola l'ampiezza affatto</strong>. Formule in <code>Manuale_tecnico.pdf</code> §6.3.</span></li>
   <li><strong>Label-preserving</strong> — gain, rumore bianco e colorato, time shift, filtraggio, inversione di polarità, time masking, quantizzazione, resampling.</li>
 </ul>
 
@@ -210,17 +212,23 @@
 </table>
 <p>Un layer lineare fa da ponte fra le due dimensioni (64 → 128). Training: <strong>AdamW</strong> (β₁ = 0,9, β₂ = 0,99, eps = 10⁻⁸), lr <strong>3·10⁻⁴</strong>, schedule <strong>one-cycle</strong>, weight decay 10⁻⁵, <strong>EMA</strong> 0,995, batch size <strong>64</strong>. Augmentation: <em>mixing</em> e <em>phasemix</em>, prese direttamente da EAT.</p>
 
-<h3>3.4 Le ambiguità da risolvere e documentare</h3>
-<p>Il paper tace su punti che devi decidere tu. <strong>Non è un problema: è il materiale migliore per la presentazione</strong>, purché ogni scelta sia dichiarata e, dove conta, testata in entrambe le versioni.</p>
+<h3>3.4 Le ambiguità: stato al 18 agosto 2026</h3>
+<div class="box info">
+  <p class="box-t">Questa sezione è ora un riepilogo — il riferimento è il manuale</p>
+  <p>Quasi tutte le ambiguità elencate qui sono state <strong>risolte</strong> leggendo il codice ufficiale di SparseFormer e di EAT. Il catalogo completo, con formule ed evidenze, sta in <code>Manuale_tecnico.pdf</code> §9. In caso di discordanza fra questo documento e il manuale, <strong>fa fede il manuale</strong>.</p>
+</div>
 <table>
-  <thead><tr><th style="width:52mm">Ambiguità</th><th>Come gestirla</th></tr></thead>
+  <thead><tr><th style="width:52mm">Ambiguità</th><th>Stato</th></tr></thead>
   <tbody>
-    <tr><td><strong>Parametri dello spettrogramma</strong> — mai dichiarati: mel o lineare? <code>n_fft</code>? hop? numero di bin?</td><td>È il parametro libero <strong>più impattante</strong> di tutto il progetto. Parti da una configurazione standard per keyword spotting (mel, 25 ms finestra / 10 ms hop, 64 bin) e trattala come iperparametro dichiarato.</td></tr>
-    <tr><td><strong>Contraddizione interna in §3.2 del paper</strong>: feature «96 dimensional» ma «196 kernels» 7×7 stride 2</td><td>Uno dei due è un refuso. Implementa entrambe le letture e riporta il confronto: è esattamente il tipo di verifica che distingue una riproduzione seria.</td></tr>
-    <tr><td>Numero di layer della early convolution non dichiarato</td><td>Segui Xiao et al. 2021 e dichiara la scelta.</td></tr>
-    <tr><td>Numero di epoche non dichiarato</td><td>Fissa un budget, dichiaralo, e verifica la convergenza sulle curve.</td></tr>
-    <tr><td>Come il dense-transformer costruisce i frame dall'output della early conv</td><td>Interpretazione da dichiarare; è il baseline, quindi conta.</td></tr>
-    <tr><td>Se i FLOPs di EAT-S (0,373 G) siano misurati o citati</td><td>Sono <strong>citati</strong>. Se vuoi confrontarti con EAT-S devi rimisurarli col <em>tuo</em> contatore, altrimenti confronti convenzioni diverse.</td></tr>
+    <tr><td><strong>Parametri dello spettrogramma</strong> — mel o lineare? <code>n_fft</code>? hop? bin?</td><td><strong>Risolta.</strong> Mel, giustificato da KWT e AST (<em>non</em> da EAT, che usa la forma d'onda grezza). Il numero di bin è quasi irrilevante: 0,8 punti di escursione su un fattore 4 di risoluzione. Adottati 64.</td></tr>
+    <tr><td><strong>Contraddizione «96 dimensional» / «196 kernels»</strong></td><td><strong>Risolta</strong> dal conteggio dei parametri: <code>c196_proj96</code>, cioè 196 kernel seguiti da una proiezione 1×1 a 96 — la lettura in cui entrambe le cifre sono vere.</td></tr>
+    <tr><td>Stride del max pooling</td><td><strong>Dedotto</strong>: (2, 1), solo sull'asse frequenza → 51 frame. Con (2, 2) il costo si ferma al 70 % di quello dichiarato.</td></tr>
+    <tr><td>Normalizzazione nello stem</td><td><strong>Risolta</strong> dal codice di SparseFormer: LayerNorm sui canali <em>dopo</em> il pooling, nessuna BatchNorm.</td></tr>
+    <tr><td>Formule di <code>mixing</code> e <code>phasemix</code></td><td><strong>Risolte</strong> dal codice di EAT. Nessuna delle due era quello che il nome suggeriva.</td></tr>
+    <tr><td>Normalizzazione degli offset «a tre deviazioni standard»; inizializzazione</td><td><strong>Risolte</strong> dal codice di SparseFormer. Da qui anche il perché N è sempre un quadrato perfetto.</td></tr>
+    <tr><td>Parametri di one-cycle, programmazione delle augmentation, weight decay</td><td><strong>Risolti</strong> dal <code>trainer.py</code> di EAT.</td></tr>
+    <tr><td>Se i FLOPs di EAT-S (0,373 G) siano misurati o citati</td><td>Sono <strong>citati</strong>. Per confrontarsi con EAT-S vanno rimisurati col proprio contatore.</td></tr>
+    <tr><td colspan="2" style="background:#fbf2e8"><strong>Restano aperte</strong>: il numero di <strong>epoche</strong> (nessuna fonte); lo <strong>scarto dell'11 %</strong> sui FLOPs (non spiegato, due candidati eliminati); <code>pool_freq</code> contro <code>flatten</code> (si addestrano entrambe); <strong>pre-norm contro post-norm</strong> (da ablare).</td></tr>
   </tbody>
 </table>
 

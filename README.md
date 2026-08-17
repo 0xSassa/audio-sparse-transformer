@@ -163,6 +163,7 @@ results/                 CSV/JSON dei run e notebook delle figure
 
 | File | Contenuto |
 |---|---|
+| `Manuale_tecnico.pdf` | **il riferimento**: matematica, architettura, ogni scelta implementativa e la sua motivazione |
 | `Pipeline_progetto_DL.pdf` | il piano: cosa fare, in che ordine, con quali criteri |
 | `Diario_di_bordo.pdf` | il registro: cosa è stato fatto, decisioni, errori, cambi di direzione |
 

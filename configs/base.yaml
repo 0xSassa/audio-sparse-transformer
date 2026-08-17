@@ -15,32 +15,52 @@ data:
   clip_samples: 16000
   num_workers: 4
 
-features:                       # [ASSUNZIONE] — il paper non dichiara nulla
-  type: log_mel                 #   di questo blocco. E' il parametro libero
-  n_fft: 400                    #   piu' impattante dell'intera riproduzione.
+features:                       # [ASSUNZIONE] il paper non dichiara nulla di
+  type: log_mel                 #   questo blocco. Misurato: la scelta di n_mels
+  n_fft: 400                    #   e' quasi piatta (0.8 punti su un fattore 4).
   hop_length: 160               #   400/160 @16 kHz = finestra 25 ms, hop 10 ms
-  n_mels: 64                    #   -> 101 frame per clip da 1 s
+  n_mels: 64                    #   -> 101 frame per clip da 1 s; F=16 dopo lo stem
   f_min: 20.0
   f_max: 7600.0
   top_db: 80.0
-  normalize: true               # normalizzazione per-campione (livello variabile in SC-V2)
+  normalize: false              # NOSTRA aggiunta, evidenza contraria (-0.5 punti
+                                # alla sonda lineare). Default off; e' un'ablation.
+
+model:
+  norm: layernorm               # come SparseFormer: LayerNorm sui canali DOPO il
+                                # pooling. "batchnorm" e' una nostra variante,
+                                # "none" la lettura piu' letterale del paper.
 
 augment:                        # dichiarate dal paper: "mixing and phasemix [1]"
-  names: [mixing, phasemix]
-  alpha: 0.2                    # [ASSUNZIONE] — EAT non dichiara il Beta
-  prob: 0.5                     # [ASSUNZIONE] — probabilita' di applicarne una
+  names: [mixing, phasemix]     # implementate seguendo datasets/batch_augs.py di EAT
+  mix_ratio: 1.0                # probabilita' di mescolare. DEFAULT DI EAT = 1,
+                                # cioe' SEMPRE. Avevamo assunto 0.5: sbagliato.
+  epoch_mix: -1                 # soglia di epoca sotto cui il mixing e' spento
+                                # (EAT lo usa per partire su dati puliti).
+                                # -1 = sempre attivo
+  lam_label_threshold: 0.9      # oltre questo lam la seconda etichetta cade
+                                # lam: mixing ~ U[0.1,1], phasemix ~ U[0,1] (da EAT)
 
-optim:                          # tutto dichiarato dal paper, sez. 3.2
-  optimizer: adamw
-  lr: 0.0003
-  betas: [0.9, 0.99]
-  eps: 1.0e-8
-  weight_decay: 1.0e-5
-  scheduler: one_cycle
-  batch_size: 64
-  epochs: 100                   # [ASSUNZIONE] — il paper non dichiara le epoche
-  ema_decay: 0.995
-  loss: bce                     # obbligata dai target mixati
+optim:
+  optimizer: adamw              # dichiarato dal paper, sez. 3.2
+  lr: 0.0003                    # dichiarato
+  betas: [0.9, 0.99]            # dichiarato
+  eps: 1.0e-8                   # dichiarato
+  weight_decay: 1.0e-5          # dichiarato
+  wd_skip_1d_params: true       # EAT esclude dal decay ogni parametro con
+                                # len(shape)==1: bias, LayerNorm, BatchNorm.
+                                # Non e' una nostra aggiunta, e' il riferimento.
+  scheduler: one_cycle          # dichiarato
+  pct_start: 0.1                # dal trainer.py di EAT
+  div_factor: 25.0              # default PyTorch, usato da EAT
+  final_div_factor: 10000.0     # default PyTorch, usato da EAT
+  batch_size: 64                # dichiarato
+  epochs: 100                   # [ASSUNZIONE] unico iperparametro di training
+                                # che nessuna fonte fissa
+  ema_decay: 0.995              # dichiarato
+  loss: bce                     # target multi-hot, ramo 'bce' di EAT
+  label_smoothing: 0.0          # [ASSUNZIONE] EAT usa 0.1 nel ramo CE; con la
+                                # BCE multi-hot non si applica e Kavaki tace
 
 eval:
   metric: accuracy

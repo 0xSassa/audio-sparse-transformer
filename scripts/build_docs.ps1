@@ -32,7 +32,8 @@ Write-Host "browser: $browser"
 
 # sorgente (in docs/)  ->  PDF prodotto (nella radice del progetto)
 $targets = [ordered]@{
-    "diario_di_bordo.html"     = "Diario_di_bordo.pdf"
+    "manuale_tecnico.html"      = "Manuale_tecnico.pdf"
+    "diario_di_bordo.html"      = "Diario_di_bordo.pdf"
     "pipeline_progetto_dl.html" = "Pipeline_progetto_DL.pdf"
 }
 

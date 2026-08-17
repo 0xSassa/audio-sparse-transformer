@@ -93,7 +93,7 @@ def sanity_check(cache_dir: Path) -> None:
     """Verifica rapida di shape, range e bilanciamento delle classi."""
     for split in ("train", "validation", "test"):
         ds = SpeechCommandsCached(cache_dir, split)
-        wave, label = ds[0]
+        wave, _ = ds[0]
         assert wave.shape == (CLIP_SAMPLES,), wave.shape
         assert wave.dtype == torch.float32
         assert -1.0 <= float(wave.min()) and float(wave.max()) <= 1.0
