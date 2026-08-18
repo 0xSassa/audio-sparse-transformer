@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 from .speech_commands import CLIP_SAMPLES, LABELS
 
@@ -65,6 +65,48 @@ class SpeechCommandsCached(Dataset):
         return torch.from_numpy(wave), int(self.labels[idx])
 
 
+class EpochShuffleSampler(Sampler[int]):
+    """Permutazione che dipende SOLO da (seed, epoca).
+
+    >>> PERCHE' NON `shuffle=True` <<<
+    `RandomSampler.__iter__`, quando non riceve un generatore, estrae il
+    proprio seed dal generatore GLOBALE della CPU. E
+    `_MultiProcessingDataLoaderIter.__init__` ne consuma un'altra per il
+    `base_seed` dei worker.
+
+    Con `persistent_workers=True` l'iteratore viene costruito UNA VOLTA e poi
+    riusato: un run ininterrotto consuma quindi un'estrazione per epoca,
+    mentre un run RIPRESO ricostruisce l'iteratore in un processo nuovo e ne
+    consuma una in piu'. Il seed del sampler risulta diverso, e da quel punto
+    in poi l'ordine dei dati diverge — anche ripristinando perfettamente tutti
+    gli stati RNG.
+
+    Misurato: 0.32 punti di accuratezza di scarto dopo due sole epoche, in
+    modalita' deterministica, cioe' con ogni altra fonte di rumore azzerata.
+
+    Qui la permutazione e' una funzione pura di (seed, epoca): immune al
+    numero di estrazioni fatte altrove, al confine di processo e all'ordine
+    di costruzione degli iteratori. E' lo stesso schema di `set_epoch` in
+    `DistributedSampler`.
+    """
+
+    def __init__(self, num_samples: int, seed: int) -> None:
+        self.num_samples = num_samples
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = epoch
+
+    def __len__(self) -> int:
+        return self.num_samples
+
+    def __iter__(self):
+        generator = torch.Generator()
+        generator.manual_seed(self.seed * 1_000_003 + self.epoch)
+        yield from torch.randperm(self.num_samples, generator=generator).tolist()
+
+
 def make_loader(
     cache_dir: Path,
     split: str,
@@ -73,14 +115,24 @@ def make_loader(
     num_workers: int = 4,
     shuffle: bool | None = None,
     drop_last: bool | None = None,
+    seed: int = 0,
 ) -> DataLoader:
-    """DataLoader con i default giusti per train vs eval."""
+    """DataLoader con i default giusti per train vs eval.
+
+    Sul training usa `EpochShuffleSampler`: l'ordine dipende solo da
+    (seed, epoca), quindi resta identico anche riprendendo da checkpoint.
+    Chi lo usa deve chiamare `loader.sampler.set_epoch(epoch)` a ogni epoca.
+    """
     is_train = split == "train"
+    do_shuffle = is_train if shuffle is None else shuffle
     dataset = SpeechCommandsCached(cache_dir, split)
+
+    sampler = EpochShuffleSampler(len(dataset), seed) if do_shuffle else None
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=is_train if shuffle is None else shuffle,
+        sampler=sampler,
+        shuffle=False if sampler is not None else do_shuffle,
         drop_last=is_train if drop_last is None else drop_last,
         num_workers=num_workers,
         pin_memory=True,

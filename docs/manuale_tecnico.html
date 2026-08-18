@@ -898,6 +898,44 @@ bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
   <p>Una matrice 35×35 disegnata è quasi illeggibile. L'elenco delle coppie più confuse è più utile in diagnosi e all'orale: se il modello scambia <em>seven</em> con <em>six</em> o <em>forward</em> con <em>four</em> sta facendo errori fonologicamente sensati, e la cosa si commenta; se scambia coppie senza somiglianza acustica, c'è qualcosa che non va nella pipeline. Già dopo una sola epoca di prova le confusioni osservate erano del primo tipo, il che è un segnale che la catena funziona.</p>
 </div>
 
+<h3>11.3-quinquies Riproducibilità del resume: tre bug e una lezione</h3>
+<p>Prima di lanciare i run lunghi abbiamo verificato una proprietà che sembrava già acquisita: <em>un run interrotto e ripreso deve dare gli stessi numeri di uno mai interrotto</em>. Non era vero, e scoprirlo ha richiesto tre correzioni.</p>
+
+<div class="box warn">
+  <p class="box-t">La causa radice, in una frase</p>
+  <p><strong>Ripristinare lo stato dei generatori casuali non basta se il <em>numero di consumi</em> differisce fra i due percorsi.</strong></p>
+  <p>Il <code>DataLoader</code> di PyTorch estrae dal generatore globale in due punti: il seed del <code>RandomSampler</code> (quando non gliene si passa uno) e il <code>base_seed</code> dei worker. Con <code>persistent_workers=True</code> lo fa <strong>una volta per processo</strong>, non una per epoca. Un run ripreso ricostruisce l'iteratore in un processo nuovo e ripete quelle estrazioni: da lì in poi ogni consumatore a valle legge da uno stato sfasato.</p>
+</div>
+
+<table>
+  <thead><tr><th class="c" style="width:10mm">#</th><th style="width:44mm">Consumatore sfasato</th><th style="width:38mm">Effetto</th><th>Correzione</th></tr></thead>
+  <tbody>
+    <tr><td class="c">1</td><td>seed del sampler</td><td>ordine dei dati diverso dopo la ripresa</td><td><code>EpochShuffleSampler</code>: la permutazione è una funzione pura di (seed, epoca)</td></tr>
+    <tr><td class="c">2</td><td>scelta dell'augmentation, che <code>apply_augmentations</code> fa con <code>torch.rand</code> globale</td><td>augmentation diverse</td><td><code>seed_epoch</code>: risemina i generatori a ogni epoca</td></tr>
+    <tr><td class="c">3</td><td><code>base_seed</code> dei worker, consumato <em>dopo</em> la risemina</td><td>la correzione 2 era nel posto sbagliato di tre righe</td><td>creare l'iteratore <strong>prima</strong> e seminare <strong>dopo</strong></td></tr>
+  </tbody>
+</table>
+
+<h4>Come è stata localizzata</h4>
+<p>Confrontare l'accuratezza dopo due epoche non diceva nulla: passava da 0,32 a 0,01 a 0,08 punti senza un andamento leggibile, perché ogni correzione cambia i flussi casuali e quindi la traiettoria — i valori assoluti non sono confrontabili fra tentativi.</p>
+<p>La svolta è stata cambiare metrica: confrontare <strong>i pesi del modello</strong> subito dopo la prima epoca ripresa, invece dell'accuratezza dopo due.</p>
+<pre>epoca 1  loss 0.20552399   identica a 8 decimali
+epoca 2  loss 0.16076120   identica
+epoca 3  divergente su 108/108 tensori</pre>
+<p>Divergenza <em>immediata</em> al confine, non accumulo graduale: questo escludeva il rumore numerico e puntava a un input diverso, non a un calcolo diverso.</p>
+
+<h4>Verifica finale</h4>
+<pre>tensori diversi: 0/108
+loc_full   epoca 3  loss 0.14688354  val 72.6981%
+loc_part   epoca 3  loss 0.14688354  val 72.6981%</pre>
+<p>Il resume è ora esattamente trasparente: si può interrompere un run in qualsiasi momento e riprenderlo ottenendo gli stessi numeri. Su un portatile che va in throttling a 77 °C, con run da quasi tre ore, è la differenza fra poter spezzare il lavoro e doverlo rifare.</p>
+
+<div class="box info">
+  <p class="box-t">Il determinismo, e quanto costa</p>
+  <p>Misurato: due run identici in modalità normale differiscono di <strong>0,02 punti</strong>; con <code>--deterministic</code> sono <strong>bit-identici</strong>. Il costo è <strong>+10 %</strong> sul tempo per epoca — insolitamente basso, e per la stessa ragione già emersa tre volte: siamo limitati dal lancio dei kernel, non dal calcolo, quindi rinunciare agli algoritmi cuDNN più rapidi pesa poco.</p>
+  <p>Con differenze fra configurazioni che nel paper valgono 0,21 punti (96,88 contro 96,67), un pavimento di rumore di 0,02 non è trascurabile e crescerebbe su 100 epoche. Azzerandolo, l'unica varianza che resta è quella <em>fra seed</em>, che è esattamente ciò che vogliamo misurare e riportare.</p>
+</div>
+
 <h3>11.4 Disciplina sperimentale</h3>
 <ul>
   <li><strong>≥ 3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Motivazione empirica: nella Tabella 3 del paper l'ablation sui token non è monotona (16 → 97,53 %, 25 → 97,20 %, 36 → 97,94 %) su singolo seed, il che suggerisce un rumore di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse.</li>

@@ -48,7 +48,9 @@ from src.utils import (
     load_config,
     load_rng_state,
     param_groups,
+    provenance,
     rng_state,
+    seed_epoch,
     seed_everything,
 )
 
@@ -120,13 +122,22 @@ def amp_context(cfg: dict[str, Any], device: torch.device):
 def train_one_epoch(
     model: nn.Module, frontend: nn.Module, ema: ModelEMA, loader,
     optimizer: torch.optim.Optimizer, scheduler, cfg: dict[str, Any],
-    device: torch.device, epoch: int,
+    device: torch.device, epoch: int, base_seed: int = 0,
 ) -> dict[str, float]:
     model.train()
     a = cfg["augment"]
     num_classes = cfg["data"]["num_classes"]
     total_loss, total_gnorm, seen, steps = 0.0, 0.0, 0, 0
     start = time.perf_counter()
+
+    # L'ITERATORE SI CREA QUI, NON AL `for`. E' deliberato: costruirlo
+    # consuma estrazioni dal generatore globale (`base_seed` dei worker), e
+    # lo fa SOLO nel processo che lo costruisce per la prima volta. In un run
+    # ripreso quella costruzione avviene di nuovo, mentre in uno continuo no.
+    # Seminando DOPO, lo stato dei generatori all'inizio del ciclo e'
+    # identico nei due casi, qualunque cosa il DataLoader abbia consumato.
+    data_iter = iter(loader)
+    seed_epoch(base_seed, epoch)
 
     try:
         import sys
@@ -135,10 +146,11 @@ def train_one_epoch(
 
         # disattivata quando l'output non e' un terminale: in un file di log
         # una barra di avanzamento produce migliaia di righe inutili
-        iterator = tqdm(loader, desc=f"epoca {epoch}", leave=False, unit="batch",
+        iterator = tqdm(data_iter, desc=f"epoca {epoch}", leave=False,
+                        unit="batch", total=len(loader),
                         disable=not sys.stderr.isatty())
     except ImportError:
-        iterator = loader
+        iterator = data_iter
 
     for wave, labels in iterator:
         wave = wave.to(device, non_blocking=True)
@@ -187,6 +199,7 @@ def evaluate(
     Con `collect=True` restituisce anche etichette e predizioni, per le
     metriche per classe.
     """
+    was_training = model.training
     model.eval()
     correct, seen, total_loss = 0, 0, 0.0
     all_true: list[torch.Tensor] = []
@@ -206,7 +219,11 @@ def evaluate(
             all_true.append(labels.cpu())
             all_pred.append(pred.cpu())
 
-    model.train()
+    # si ripristina il modo precedente invece di forzare train(): questa
+    # funzione viene chiamata anche sul modello EMA, che deve restare in
+    # eval. Con dropout=0 oggi e' innocuo, ma e' il tipo di dettaglio che
+    # diventa un bug silenzioso appena si attiva una regolarizzazione.
+    model.train(was_training)
     out: dict[str, Any] = {"accuracy": correct / seen, "loss": total_loss / seen,
                            "n": seen}
     if collect:
@@ -236,9 +253,18 @@ def main() -> int:
     ap.add_argument("--epochs", type=int, default=None, help="sovrascrive la config")
     ap.add_argument("--tag", type=str, default=None, help="nome della cartella del run")
     ap.add_argument("--resume", action="store_true")
-    ap.add_argument("--deterministic", action="store_true")
+    ap.add_argument("--deterministic", dest="deterministic", action="store_true",
+                    default=None, help="forza il determinismo (default dal config)")
+    ap.add_argument("--no-deterministic", dest="deterministic",
+                    action="store_false", help="disattiva il determinismo")
     ap.add_argument("--amp", choices=["none", "bf16"], default=None,
                     help="sovrascrive optim.amp; la valutazione resta in fp32")
+    ap.add_argument("--stop-after", type=int, default=None, metavar="N",
+                    help="ferma dopo N epoche in QUESTA invocazione, lasciando "
+                         "lo schedule configurato per il totale. Serve a "
+                         "spezzare un run lungo su piu' sessioni: si riprende "
+                         "con --resume e la curva del learning rate resta "
+                         "quella giusta")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
@@ -246,7 +272,10 @@ def main() -> int:
         cfg["optim"]["epochs"] = args.epochs
     if args.amp is not None:
         cfg["optim"]["amp"] = args.amp
-    seed_everything(args.seed, deterministic=args.deterministic)
+    deterministic = (cfg.get("deterministic", False) if args.deterministic is None
+                     else args.deterministic)
+    cfg["deterministic"] = deterministic
+    seed_everything(args.seed, deterministic=deterministic)
 
     tag = args.tag or f"{args.config.stem}_seed{args.seed}"
     run_dir = ROOT / cfg["log"]["dir"] / tag
@@ -260,7 +289,8 @@ def main() -> int:
     workers = cfg["data"]["num_workers"]
     batch = cfg["optim"]["batch_size"]
 
-    train_loader = make_loader(cache, "train", batch_size=batch, num_workers=workers)
+    train_loader = make_loader(cache, "train", batch_size=batch,
+                               num_workers=workers, seed=args.seed)
     val_loader = make_loader(cache, "validation", batch_size=256, num_workers=workers)
 
     frontend = build_frontend(cfg).to(device)
@@ -278,8 +308,21 @@ def main() -> int:
         final_div_factor=cfg["optim"]["final_div_factor"],
     )
 
+    # FLOPs misurati sul modello di QUESTO run: e' la metrica centrale del
+    # progetto e va registrata insieme all'accuratezza, non ricalcolata dopo
+    # sperando che la configurazione fosse la stessa.
+    from src.flops import analyze
+
+    cost = analyze(build_model(cfg, frontend.n_mels, n_frames),
+                   (1, frontend.n_mels, n_frames))
+    prov = provenance()
+
     n_params = sum(p.numel() for p in model.parameters())
     print(f"run          : {tag}")
+    print(f"codice       : commit {(prov['commit'] or '?')[:8]}"
+          f"{'  ALBERO SPORCO' if prov['dirty'] else ''}")
+    print(f"costo        : {cost.native_flops/1e9:.4f} GFLOP · "
+          f"{cost.fvcore_macs/1e9:.4f} GMAC" if cost.fvcore_macs else "")
     print(f"device       : {device} · {torch.cuda.get_device_name(0) if device.type=='cuda' else ''}")
     print(f"modello      : {n_params:,} parametri · sequenza {model.seq_len} · "
           f"feature {model.feature_shape}")
@@ -287,12 +330,36 @@ def main() -> int:
           f"val {len(val_loader.dataset):,} · batch {batch}")
     print(f"training     : {epochs} epoche · lr max {cfg['optim']['lr']} · "
           f"EMA {cfg['optim']['ema_decay']} · augment {cfg['augment']['names']}")
+    print(f"riproducibile: deterministic={deterministic} · amp={cfg['optim']['amp']}")
     print()
 
     start_epoch, best_acc = 1, 0.0
     ckpt_last, ckpt_best = run_dir / "last.pt", run_dir / "best.pt"
     if args.resume and ckpt_last.exists():
         state = torch.load(ckpt_last, map_location=device, weights_only=False)
+
+        # Il numero di epoche NON e' modificabile in ripresa. One-cycle lega
+        # la forma dello schedule al totale dei passi, e `load_state_dict`
+        # ripristina quel totale dal checkpoint sovrascrivendo quello appena
+        # costruito. Riprendere con un valore diverso porta a un errore
+        # criptico ("Tried to step N+1 times") al primo passo, oppure — se il
+        # nuovo totale fosse maggiore — a uno schedule silenziosamente
+        # sbagliato. Meglio fermarsi subito e dirlo.
+        old = state.get("config", {}).get("optim", {})
+        mismatches = [
+            f"{k}: checkpoint {old.get(k)!r} vs richiesto {cfg['optim'][k]!r}"
+            for k in ("epochs", "batch_size", "lr", "pct_start")
+            if k in old and old[k] != cfg["optim"][k]
+        ]
+        if mismatches:
+            print("[errore] il checkpoint e' stato prodotto con una "
+                  "configurazione diversa:")
+            for m in mismatches:
+                print(f"         {m}")
+            print("         Per un run diverso usa un --tag diverso; per "
+                  "riprendere questo, ripeti gli stessi valori.")
+            return 2
+
         model.load_state_dict(state["model"])
         ema.module.load_state_dict(state["ema"])
         optimizer.load_state_dict(state["optimizer"])
@@ -305,8 +372,11 @@ def main() -> int:
     tracker = RunTracker(run_dir, cfg, tag, args.seed, resume=args.resume)
 
     for epoch in range(start_epoch, epochs + 1):
+        # Ordine dei dati E flusso casuale delle augmentation dipendono solo
+        # da (seed, epoca): identici anche riprendendo in un processo nuovo.
+        train_loader.sampler.set_epoch(epoch)
         tr = train_one_epoch(model, frontend, ema, train_loader, optimizer,
-                             scheduler, cfg, device, epoch)
+                             scheduler, cfg, device, epoch, base_seed=args.seed)
         ev_ema = evaluate(ema.module, frontend, val_loader, device,
                           cfg["data"]["num_classes"])
         ev_raw = evaluate(model, frontend, val_loader, device,
@@ -338,6 +408,14 @@ def main() -> int:
         if is_best:
             save_checkpoint(ckpt_best, **state)
 
+        if args.stop_after and (epoch - start_epoch + 1) >= args.stop_after:
+            tracker.finish()
+            print(f"\nfermato dopo {args.stop_after} epoche di questa sessione "
+                  f"(siamo a {epoch}/{epochs}).")
+            print(f"Per continuare:  python -m src.train --config {args.config} "
+                  f"--seed {args.seed} --tag {tag} --resume")
+            return 0
+
     # Analisi per classe sul modello migliore, su VALIDATION.
     best_state = torch.load(ckpt_best, map_location=device, weights_only=False)
     ema.module.load_state_dict(best_state["ema"])
@@ -354,6 +432,9 @@ def main() -> int:
         tag=tag, seed=args.seed, epochs=epochs, params=n_params,
         best_val_accuracy=best_acc, peak_gpu_mb=round(peak),
         seq_len=model.seq_len,
+        gflops=cost.native_flops / 1e9,
+        gmacs=(cost.fvcore_macs / 1e9) if cost.fvcore_macs else None,
+        provenance=prov,
     )
     if cfg["log"].get("wandb", {}).get("log_checkpoints", False):
         tracker.save_artifact(ckpt_best)

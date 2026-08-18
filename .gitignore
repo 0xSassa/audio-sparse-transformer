@@ -16,9 +16,14 @@ __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 
-# Output degli esperimenti
+# Output degli esperimenti.
+# Si versionano metriche, configurazioni e report — sono l'evidenza dei
+# risultati e pesano pochi KB. Restano fuori i pesi, i log binari di
+# TensorBoard e la cache locale di W&B.
 results/**/*.pt
 results/**/*.ckpt
+results/**/*.tmp
+results/**/tb/
 runs/
 wandb/
 optuna*.db

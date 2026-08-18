@@ -6,7 +6,10 @@
 # nel README e discussa all'orale.
 
 seed: 0
-deterministic: false
+deterministic: true             # +10% sul tempo, ma i run diventano
+                                # bit-identici e il resume esattamente
+                                # trasparente. Misurato: senza, due run
+                                # identici differiscono di 0,02 punti.
 
 data:
   cache_dir: data/cache

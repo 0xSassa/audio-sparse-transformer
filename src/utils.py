@@ -91,6 +91,71 @@ def param_groups(model: torch.nn.Module, weight_decay: float,
     ]
 
 
+def seed_epoch(base_seed: int, epoch: int) -> None:
+    """Riporta i generatori a uno stato funzione pura di (seed, epoca).
+
+    Serve a rendere il flusso casuale di un'epoca INDIPENDENTE da quante
+    estrazioni sono state fatte prima. E' necessario per una ragione
+    tutt'altro che teorica: `_MultiProcessingDataLoaderIter.__init__`
+    estrae il `base_seed` dei worker dal generatore globale, e con
+    `persistent_workers` lo fa UNA sola volta per processo. Un run ripreso
+    ricostruisce l'iteratore e consuma quell'estrazione in piu', sfasando
+    tutto cio' che viene dopo — nel nostro caso la SCELTA di quale
+    augmentation applicare, che `apply_augmentations` fa con `torch.rand`
+    sul generatore globale.
+
+    Misurato: senza questa funzione, un run ripreso in modalita'
+    deterministica divergeva ancora di 0.01 punti dopo due epoche, pur
+    avendo gia' reso l'ordine dei dati indipendente dal resume.
+
+    Dopo, l'epoca N e' riproducibile da sola, il che rende anche piu'
+    facile indagare un'epoca specifica senza rieseguire le precedenti.
+    """
+    torch.manual_seed(base_seed * 1_000_003 + epoch)   # copre anche CUDA
+    np.random.seed((base_seed * 1_000_003 + epoch) % (2**32))
+    random.seed(base_seed * 1_000_003 + epoch)
+
+
+def provenance() -> dict[str, Any]:
+    """Da quale stato del codice e su quale macchina viene un risultato.
+
+    Senza questo, fra un mese non c'e' modo di sapere quale versione del
+    codice ha prodotto un numero. E' l'informazione che rende un risultato
+    verificabile invece che semplicemente registrato — e costa una chiamata
+    a git.
+
+    `dirty` segnala modifiche non committate al momento del run: un
+    risultato prodotto con l'albero sporco non e' riproducibile dal solo
+    commit, e va saputo.
+    """
+    import platform
+    import subprocess
+
+    info: dict[str, Any] = {
+        "python": platform.python_version(),
+        "torch": torch.__version__,
+        "platform": platform.platform(),
+    }
+    if torch.cuda.is_available():
+        info["gpu"] = torch.cuda.get_device_name(0)
+        info["cuda"] = torch.version.cuda
+
+    root = Path(__file__).resolve().parents[1]
+    try:
+        info["commit"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=root, text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        info["dirty"] = bool(subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=root, text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip())
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        info["commit"] = None
+        info["dirty"] = None
+    return info
+
+
 def rng_state() -> dict[str, Any]:
     """Stato di TUTTI i generatori, per un resume davvero identico.
 

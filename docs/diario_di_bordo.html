@@ -658,6 +658,21 @@ bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
   <p><strong>Terza misura indipendente</strong> che converge sulla stessa spiegazione, dopo il confronto profondità/larghezza e i FLOPs che non predicono la latenza. <code>amp</code> resta <code>none</code>: il codice è pronto e testato, ma attivarlo aggiungerebbe una variabile numerica in cambio di nulla.</p>
 </div>
 
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Il resume non era riproducibile: tre bug in fila</p>
+  <p>Verifica pre-lancio: un run interrotto e ripreso dava numeri diversi da uno continuo. Prima ipotesi — rumore della GPU — <strong>smentita</strong>: due run identici in modalità deterministica sono bit-identici, mentre il resume divergeva di 0,32 punti.</p>
+  <p>Causa radice: <strong>ripristinare lo stato dei generatori non basta se il numero di consumi differisce</strong>. Il DataLoader estrae dal generatore globale per il seed del sampler e per il <code>base_seed</code> dei worker, e con <code>persistent_workers</code> lo fa una volta per <em>processo</em>. Un run ripreso ripete quelle estrazioni e sfasa tutto ciò che viene dopo.</p>
+  <p>Tre manifestazioni, corrette una alla volta: l'<strong>ordine dei dati</strong> (risolto con un sampler la cui permutazione è funzione pura di seed ed epoca), la <strong>scelta dell'augmentation</strong> (risolta riseminando a ogni epoca), e infine la scoperta che quella risemina era <strong>tre righe troppo in alto</strong> — va fatta dopo aver creato l'iteratore, non prima.</p>
+  <p><strong>Verifica finale: 0 tensori diversi su 108</strong>, metriche identiche a otto decimali. Il resume è ora esattamente trasparente.</p>
+  <p><strong>Come è stata trovata</strong>: non rileggendo il codice — che sembra corretto in tutti e tre i casi — ma confrontando due percorsi che dovevano dare lo stesso risultato. E la localizzazione è arrivata solo cambiando metrica: i pesi dopo la prima epoca ripresa invece dell'accuratezza dopo due.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Si addestra con <code>--deterministic</code></p>
+  <p>Misurato: due run identici differiscono di 0,02 punti in modalità normale e sono bit-identici con <code>--deterministic</code>, al costo di <strong>+10 %</strong> sul tempo. Su 17 ore sono 1,7 ore in più.</p>
+  <p>In cambio: ogni numero è esattamente riproducibile, il pavimento di rumore va a zero, e l'unica varianza che resta è quella fra seed — che è ciò che vogliamo misurare. Con differenze fra configurazioni che nel paper valgono 0,21 punti, non è un dettaglio.</p>
+</div>
+
 <!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
