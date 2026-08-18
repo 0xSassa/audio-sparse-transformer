@@ -25,7 +25,6 @@ TRE SCELTE CHE VALE LA PENA CONOSCERE PRIMA DI LEGGERE IL CODICE
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import shutil
 import time
@@ -39,8 +38,19 @@ from torch import nn
 from src.data.augment import apply_augmentations, one_hot
 from src.data.dataset import make_loader
 from src.data.features import LogMelSpectrogram
+from src.data.speech_commands import LABELS
+from src.metrics import classification_summary, print_summary, save_summary
 from src.models.dense import DenseAudioTransformer
-from src.utils import ModelEMA, load_config, param_groups, seed_everything
+from src.tracking import RunTracker
+from src.utils import (
+    ModelEMA,
+    grad_global_norm,
+    load_config,
+    load_rng_state,
+    param_groups,
+    rng_state,
+    seed_everything,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -82,6 +92,31 @@ def build_optimizer(model: nn.Module, cfg: dict[str, Any]) -> torch.optim.Optimi
 # Un'epoca
 # --------------------------------------------------------------------------
 
+def amp_context(cfg: dict[str, Any], device: torch.device):
+    """Contesto di precisione mista per il TRAINING.
+
+    `optim.amp` puo' valere "none" o "bf16".
+
+    Perche' solo bf16 e non fp16: bf16 ha lo stesso esponente di fp32, quindi
+    non serve un GradScaler e non ci sono underflow dei gradienti. Su
+    Blackwell e' anche la precisione ridotta meglio supportata. fp16 darebbe
+    forse un filo di velocita' in piu' al prezzo di una macchina di scaling
+    che puo' nascondere problemi di ottimizzazione: non ne vale la pena.
+
+    NOTA IMPORTANTE: l'autocast si applica al solo training. La VALUTAZIONE
+    resta sempre in fp32, cosi' l'accuratezza riportata e' misurata allo
+    stesso modo qualunque sia la precisione di training — che e' esattamente
+    la condizione per poter verificare che attivare bf16 non sposti il
+    risultato.
+    """
+    kind = cfg["optim"].get("amp", "none")
+    if kind == "none" or device.type != "cuda":
+        return torch.autocast(device_type="cuda", enabled=False)
+    if kind == "bf16":
+        return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+    raise ValueError(f"optim.amp sconosciuto: {kind!r} (attesi 'none' o 'bf16')")
+
+
 def train_one_epoch(
     model: nn.Module, frontend: nn.Module, ema: ModelEMA, loader,
     optimizer: torch.optim.Optimizer, scheduler, cfg: dict[str, Any],
@@ -90,10 +125,22 @@ def train_one_epoch(
     model.train()
     a = cfg["augment"]
     num_classes = cfg["data"]["num_classes"]
-    total_loss, seen = 0.0, 0
+    total_loss, total_gnorm, seen, steps = 0.0, 0.0, 0, 0
     start = time.perf_counter()
 
-    for wave, labels in loader:
+    try:
+        import sys
+
+        from tqdm import tqdm
+
+        # disattivata quando l'output non e' un terminale: in un file di log
+        # una barra di avanzamento produce migliaia di righe inutili
+        iterator = tqdm(loader, desc=f"epoca {epoch}", leave=False, unit="batch",
+                        disable=not sys.stderr.isatty())
+    except ImportError:
+        iterator = loader
+
+    for wave, labels in iterator:
         wave = wave.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
 
@@ -102,22 +149,26 @@ def train_one_epoch(
             names=tuple(a["names"]), mix_ratio=a["mix_ratio"],
             epoch=epoch, epoch_mix=a["epoch_mix"],
         )
-        logits = model(frontend(wave))
-        loss = F.binary_cross_entropy_with_logits(logits, targets)
+        with amp_context(cfg, device):
+            logits = model(frontend(wave))
+            loss = F.binary_cross_entropy_with_logits(logits, targets)
 
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
+        total_gnorm += grad_global_norm(model)
         optimizer.step()
         scheduler.step()
         ema.update(model)
 
         total_loss += loss.detach().item() * wave.shape[0]
         seen += wave.shape[0]
+        steps += 1
 
     if device.type == "cuda":
         torch.cuda.synchronize()
     return {
-        "loss": total_loss / seen,
+        "train_loss": total_loss / seen,
+        "train_grad_norm": total_gnorm / steps,
         "lr": scheduler.get_last_lr()[0],
         "seconds": time.perf_counter() - start,
     }
@@ -126,11 +177,21 @@ def train_one_epoch(
 @torch.no_grad()
 def evaluate(
     model: nn.Module, frontend: nn.Module, loader, device: torch.device,
-    num_classes: int,
-) -> dict[str, float]:
-    """Accuratezza top-1 e loss su target one-hot (nessuna augmentation)."""
+    num_classes: int, *, collect: bool = False,
+) -> dict[str, Any]:
+    """Accuratezza top-1 e loss su target one-hot (nessuna augmentation).
+
+    Sempre in fp32, anche quando il training usa bf16: cosi' il numero
+    riportato non dipende dalla precisione con cui si e' addestrato.
+
+    Con `collect=True` restituisce anche etichette e predizioni, per le
+    metriche per classe.
+    """
     model.eval()
     correct, seen, total_loss = 0, 0, 0.0
+    all_true: list[torch.Tensor] = []
+    all_pred: list[torch.Tensor] = []
+
     for wave, labels in loader:
         wave = wave.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
@@ -138,10 +199,20 @@ def evaluate(
         total_loss += F.binary_cross_entropy_with_logits(
             logits, one_hot(labels, num_classes)
         ).item() * wave.shape[0]
-        correct += int((logits.argmax(dim=1) == labels).sum())
+        pred = logits.argmax(dim=1)
+        correct += int((pred == labels).sum())
         seen += wave.shape[0]
+        if collect:
+            all_true.append(labels.cpu())
+            all_pred.append(pred.cpu())
+
     model.train()
-    return {"accuracy": correct / seen, "loss": total_loss / seen, "n": seen}
+    out: dict[str, Any] = {"accuracy": correct / seen, "loss": total_loss / seen,
+                           "n": seen}
+    if collect:
+        out["y_true"] = torch.cat(all_true).numpy()
+        out["y_pred"] = torch.cat(all_pred).numpy()
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -166,11 +237,15 @@ def main() -> int:
     ap.add_argument("--tag", type=str, default=None, help="nome della cartella del run")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--deterministic", action="store_true")
+    ap.add_argument("--amp", choices=["none", "bf16"], default=None,
+                    help="sovrascrive optim.amp; la valutazione resta in fp32")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     if args.epochs is not None:
         cfg["optim"]["epochs"] = args.epochs
+    if args.amp is not None:
+        cfg["optim"]["amp"] = args.amp
     seed_everything(args.seed, deterministic=args.deterministic)
 
     tag = args.tag or f"{args.config.stem}_seed{args.seed}"
@@ -222,24 +297,12 @@ def main() -> int:
         ema.module.load_state_dict(state["ema"])
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
+        load_rng_state(state.get("rng"))
         start_epoch, best_acc = state["epoch"] + 1, state["best_acc"]
-        print(f"ripreso da epoca {state['epoch']} (best {100*best_acc:.2f}%)\n")
+        rng_note = "con stato RNG" if state.get("rng") else "SENZA stato RNG (checkpoint vecchio)"
+        print(f"ripreso da epoca {state['epoch']} (best {100*best_acc:.2f}%) — {rng_note}\n")
 
-    csv_path = run_dir / "metrics.csv"
-    if not csv_path.exists():
-        with open(csv_path, "w", newline="", encoding="utf-8") as fh:
-            csv.writer(fh).writerow(
-                ["epoch", "train_loss", "lr", "val_acc_ema", "val_acc_raw",
-                 "val_loss_ema", "seconds"]
-            )
-
-    writer = None
-    if cfg["log"].get("tensorboard"):
-        try:
-            from torch.utils.tensorboard import SummaryWriter
-            writer = SummaryWriter(run_dir / "tb")
-        except ImportError:
-            pass
+    tracker = RunTracker(run_dir, cfg, tag, args.seed, resume=args.resume)
 
     for epoch in range(start_epoch, epochs + 1):
         tr = train_one_epoch(model, frontend, ema, train_loader, optimizer,
@@ -252,42 +315,49 @@ def main() -> int:
         is_best = ev_ema["accuracy"] > best_acc
         best_acc = max(best_acc, ev_ema["accuracy"])
         mark = "  <-- best" if is_best else ""
-        print(f"epoca {epoch:>3}/{epochs}  loss {tr['loss']:.4f}  "
-              f"lr {tr['lr']:.2e}  val(EMA) {100*ev_ema['accuracy']:.2f}%  "
+        print(f"epoca {epoch:>3}/{epochs}  loss {tr['train_loss']:.4f}  "
+              f"|g| {tr['train_grad_norm']:.2f}  lr {tr['lr']:.2e}  "
+              f"val(EMA) {100*ev_ema['accuracy']:.2f}%  "
               f"val(raw) {100*ev_raw['accuracy']:.2f}%  {tr['seconds']:.0f}s{mark}")
 
-        with open(csv_path, "a", newline="", encoding="utf-8") as fh:
-            csv.writer(fh).writerow([
-                epoch, f"{tr['loss']:.6f}", f"{tr['lr']:.3e}",
-                f"{ev_ema['accuracy']:.6f}", f"{ev_raw['accuracy']:.6f}",
-                f"{ev_ema['loss']:.6f}", f"{tr['seconds']:.1f}",
-            ])
-        if writer is not None:
-            writer.add_scalar("train/loss", tr["loss"], epoch)
-            writer.add_scalar("train/lr", tr["lr"], epoch)
-            writer.add_scalar("val/acc_ema", ev_ema["accuracy"], epoch)
-            writer.add_scalar("val/acc_raw", ev_raw["accuracy"], epoch)
+        tracker.log(epoch, {
+            **tr,
+            "val_accuracy_ema": ev_ema["accuracy"],
+            "val_accuracy_raw": ev_raw["accuracy"],
+            "val_loss_ema": ev_ema["loss"],
+            "best_accuracy": best_acc,
+        })
 
         state = {
             "epoch": epoch, "best_acc": best_acc, "seed": args.seed, "config": cfg,
             "model": model.state_dict(), "ema": ema.module.state_dict(),
             "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
+            "rng": rng_state(),
         }
         save_checkpoint(ckpt_last, **state)
         if is_best:
             save_checkpoint(ckpt_best, **state)
 
-    if writer is not None:
-        writer.close()
+    # Analisi per classe sul modello migliore, su VALIDATION.
+    best_state = torch.load(ckpt_best, map_location=device, weights_only=False)
+    ema.module.load_state_dict(best_state["ema"])
+    final = evaluate(ema.module, frontend, val_loader, device,
+                     cfg["data"]["num_classes"], collect=True)
+    report = classification_summary(final["y_true"], final["y_pred"], list(LABELS))
+    save_summary(report, run_dir / "validation_report.json")
+    print("\n--- analisi per classe (validation, modello migliore) ---")
+    print_summary(report)
 
     peak = torch.cuda.max_memory_allocated() / 1e6 if device.type == "cuda" else 0
-    summary = {
-        "tag": tag, "seed": args.seed, "epochs": epochs,
-        "best_val_accuracy": best_acc, "params": n_params,
-        "peak_gpu_mb": round(peak),
-    }
-    with open(run_dir / "summary.json", "w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2)
+    tracker.summary(
+        balanced_val_accuracy=report["balanced_accuracy"],
+        tag=tag, seed=args.seed, epochs=epochs, params=n_params,
+        best_val_accuracy=best_acc, peak_gpu_mb=round(peak),
+        seq_len=model.seq_len,
+    )
+    if cfg["log"].get("wandb", {}).get("log_checkpoints", False):
+        tracker.save_artifact(ckpt_best)
+    tracker.finish()
 
     print(f"\nmigliore accuratezza di validation: {100*best_acc:.2f}%")
     print(f"picco memoria GPU: {peak:.0f} MB")

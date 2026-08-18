@@ -91,6 +91,51 @@ def param_groups(model: torch.nn.Module, weight_decay: float,
     ]
 
 
+def rng_state() -> dict[str, Any]:
+    """Stato di TUTTI i generatori, per un resume davvero identico.
+
+    Senza questo, riprendere da un checkpoint riparte con generatori
+    reinizializzati: l'ordine dello shuffle, le permutazioni delle
+    augmentation e i lambda sono diversi da quelli che il run avrebbe
+    avuto proseguendo. Il risultato resta valido, ma un run interrotto e
+    ripreso non e' piu' confrontabile bit a bit con uno mai interrotto —
+    e su un portatile le interruzioni non sono l'eccezione.
+    """
+    state = {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+    }
+    if torch.cuda.is_available():
+        state["cuda"] = torch.cuda.get_rng_state_all()
+    return state
+
+
+def load_rng_state(state: dict[str, Any] | None) -> None:
+    if not state:
+        return
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"].cpu() if hasattr(state["torch"], "cpu")
+                        else state["torch"])
+    if "cuda" in state and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all([s.cpu() for s in state["cuda"]])
+
+
+@torch.no_grad()
+def grad_global_norm(model: torch.nn.Module) -> float:
+    """Norma L2 globale del gradiente, senza modificarlo.
+
+    `clip_grad_norm_` con soglia infinita calcola la norma e non taglia
+    nulla: e' il modo idiomatico di misurarla. Serve come diagnostica —
+    una norma che esplode o che collassa a zero dice subito che qualcosa
+    non va, molto prima che si veda sulla loss.
+    """
+    return float(
+        torch.nn.utils.clip_grad_norm_(model.parameters(), float("inf"))
+    )
+
+
 class ModelEMA:
     """Media mobile esponenziale dei pesi (Tarvainen & Valpola 2017).
 

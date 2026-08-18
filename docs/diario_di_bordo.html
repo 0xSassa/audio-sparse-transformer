@@ -629,6 +629,35 @@ epoca 2/2  loss 0.1616  val(EMA) 62,98%  val(raw) 63,30%  73s</pre>
   <p><strong>Lezione</strong>: per modificare file di testo non si usano round-trip di PowerShell. Si usa uno strumento che dichiara la codifica esplicitamente, o Python.</p>
 </div>
 
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Il checkpointing non salvava lo stato dei generatori casuali</p>
+  <p>Verificando il checkpointing su richiesta, ho trovato che salvava modello, EMA, ottimizzatore e scheduler ma <strong>non lo stato dei generatori casuali</strong>. Conseguenza: un run ripreso riparte con generatori reinizializzati, quindi ordine dello shuffle, permutazioni delle augmentation e valori di λ sono diversi da quelli che il run avrebbe avuto proseguendo.</p>
+  <p>Il risultato resta valido, ma un run interrotto non è più confrontabile bit a bit con uno mai interrotto — e su un portatile le interruzioni sono la norma. Ora si salvano <code>python</code>, <code>numpy</code>, <code>torch</code> e <code>cuda</code>, e il resume lo dichiara esplicitamente. Verificato.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Tracciamento: CSV, TensorBoard e Weights &amp; Biases</p>
+  <p><code>src/tracking.py</code> mette le tre destinazioni dietro una sola interfaccia, con <strong>degrado controllato</strong>: se W&amp;B manca, non c'è login o cade la rete, il run prosegue e scrive comunque CSV e TensorBoard. Un esperimento da tre ore non deve morire perché un servizio esterno non risponde.</p>
+  <p>L'<code>id</code> del run W&amp;B si conserva in <code>wandb_id.txt</code>, così <code>--resume</code> riprende la stessa curva invece di aprirne una nuova. Verificato che funziona sia online sia in <code>mode: offline</code>, che scrive in locale e si sincronizza dopo.</p>
+  <p>Aggiunti anche: <strong>norma globale del gradiente</strong> per epoca (costa nulla, e una norma che esplode o collassa segnala il problema prima della loss), barra di avanzamento tqdm disattivata automaticamente quando l'output non è un terminale, e <code>scripts/run_seeds.py</code> che esegue più seed, salta quelli già completati e aggrega media e deviazione standard.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Metriche per classe e confusioni</p>
+  <p><code>src/metrics.py</code>: accuratezza per classe, accuratezza <strong>bilanciata</strong> (media delle accuratezze per classe, che con 2,6× di sbilanciamento può divergere da quella globale), classi peggiori e coppie più confuse. Prodotto a fine training su validation, e su test in <code>evaluate.py</code>.</p>
+  <p>Scelta deliberata: <strong>non</strong> una mappa di calore 35×35, che a quella dimensione è quasi illeggibile, ma l'elenco delle coppie. Già dopo una singola epoca di prova le confusioni osservate erano <code>seven → six</code>, <code>forward → four</code>, <code>go → down</code>: errori fonologicamente sensati, che sono un segnale che la catena funziona.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Ipotesi sulla precisione mista: confutata dalla misura</p>
+  <p>Avevo proposto l'autocast <strong>bf16</strong> come «potenzialmente il più utile» degli strumenti da aggiungere, stimando un taglio del budget da 13 a 8-9 ore. Implementato e misurato su un'epoca completa:</p>
+  <pre>fp32:  101,7 s/epoca   val 31,81%   loss 0,2015
+bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
+  <p><strong>Nessun guadagno.</strong> Verificato che non fosse un errore di configurazione: il <code>resolved_config.json</code> registra <code>amp: bf16</code> e il contesto di autocast, testato a parte, produce tensori <code>bfloat16</code>.</p>
+  <p>La spiegazione è la stessa già emersa due volte: il modello è <strong>limitato dal lancio dei kernel</strong>, non dall'aritmetica. A queste dimensioni le matrici sono troppo piccole perché i tensor core contino, e il tempo se lo prendono l'overhead CUDA e le parti non-matmul — mel, STFT e iSTFT di phasemix, EMA, norma del gradiente. Che le due epoche coincidano a 0,1 s di distanza <em>conferma</em> la tesi: il tempo dipende dal numero di lanci, identico nei due casi.</p>
+  <p><strong>Terza misura indipendente</strong> che converge sulla stessa spiegazione, dopo il confronto profondità/larghezza e i FLOPs che non predicono la latenza. <code>amp</code> resta <code>none</code>: il codice è pronto e testato, ma attivarlo aggiungerebbe una variabile numerica in cambio di nulla.</p>
+</div>
+
 <!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>

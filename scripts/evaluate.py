@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.data.dataset import make_loader
+from src.data.speech_commands import LABELS
+from src.metrics import classification_summary, print_summary, save_summary
 from src.train import build_frontend, build_model, evaluate
 
 
@@ -69,12 +71,16 @@ def main() -> int:
 
     loader = make_loader(ROOT / cfg["data"]["cache_dir"], args.split,
                          batch_size=256, num_workers=cfg["data"]["num_workers"])
-    result = evaluate(model, frontend, loader, device, cfg["data"]["num_classes"])
+    result = evaluate(model, frontend, loader, device, cfg["data"]["num_classes"],
+                      collect=True)
+    report = classification_summary(result["y_true"], result["y_pred"], list(LABELS))
+    save_summary(report, run_dir / f"{args.split}_report.json")
 
     print(f"run          : {args.run}  (checkpoint {args.checkpoint}, epoca {state['epoch']})")
     print(f"split        : {args.split}  ({result['n']:,} campioni)")
-    print(f"accuratezza  : {100*result['accuracy']:.2f}%")
     print(f"loss         : {result['loss']:.4f}")
+    print()
+    print_summary(report)
 
     if args.split == "test":
         record = {

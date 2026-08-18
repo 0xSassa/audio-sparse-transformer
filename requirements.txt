@@ -81,7 +81,11 @@ torchinfo>=1.8,<2.0
 # Tracking degli esperimenti
 # ---------------------------------------------------------------------------
 tensorboard>=2.17,<3.0
-# wandb>=0.18,<1.0              # opzionale: richiede account e connessione
+# W&B da' il confronto FRA run, che e' cio' che serve con tre seed per
+# configurazione. Funziona anche senza rete: `mode: offline` in
+# configs/base.yaml, poi `wandb sync results/<run>/wandb/offline-*`.
+# Se manca il login il training PROSEGUE comunque, con CSV e TensorBoard.
+wandb>=0.18,<1.0
 
 # ---------------------------------------------------------------------------
 # Hyperparameter optimization - FASE 5

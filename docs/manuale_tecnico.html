@@ -854,6 +854,50 @@ picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
 </table>
 <p>Le ultime due righe hanno capacità quasi identica ma tempi in rapporto 1,85. A queste dimensioni la GPU è limitata dal <strong>lancio dei kernel</strong>, non dal calcolo: 24 layer significano tre volte le chiamate CUDA su matrici troppo piccole per saturare gli SM. È la dimostrazione misurata, sul nostro hardware, che <strong>i FLOPs non predicono la latenza</strong> — e la ragione per cui, a parità di parametri, preferiamo la larghezza alla profondità.</p>
 
+<div class="box warn">
+  <p class="box-t">Il costo reale del training è tre volte la stima <span class="tag t-evi">evidenza</span></p>
+  <p>La tabella sopra misurava il <em>solo</em> encoder su dati sintetici. Il training completo, misurato: <strong>~100 s per epoca</strong>, non 24. Il fattore ~4 viene da quattro contributi che il benchmark non includeva:</p>
+  <ul>
+    <li>la sequenza reale è di <strong>51 frame</strong>, non 26 — il benchmark usava la geometria del pooling (2,2), prima che deducessimo (2,1);</li>
+    <li>il calcolo del <strong>log-mel</strong> a ogni batch;</li>
+    <li>le <strong>augmentation</strong>, che per <em>phasemix</em> includono una STFT e una iSTFT complete;</li>
+    <li><strong>due</strong> passate di validation per epoca, sul modello EMA e sui pesi correnti.</li>
+  </ul>
+  <p>Anche il picco di memoria sale da 266 MB a <strong>2,7 GB</strong>, sempre ampiamente entro gli 8 GB disponibili.</p>
+  <p><strong>Budget rivisto</strong>: ~2,8 ore per un run da 100 epoche, quindi circa <strong>17 ore</strong> per i sei run della Fase 3 (due varianti di codifica posizionale × tre seed) invece delle 4 stimate.</p>
+</div>
+
+<h3>11.3-bis La precisione mista non serve <span class="tag t-evi">evidenza</span></h3>
+<p>Ipotesi ragionevole: attivare l'autocast <strong>bf16</strong> dovrebbe ridurre i tempi in modo sensibile. Implementata e misurata su un'epoca completa:</p>
+<pre>fp32:  101,7 s/epoca   val 31,81%   loss 0,2015
+bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
+<p><strong>Nessun guadagno.</strong> Non è un errore di configurazione: il <code>resolved_config.json</code> del run registra <code>amp: bf16</code>, e il contesto di autocast verificato separatamente produce tensori <code>bfloat16</code>.</p>
+<div class="box info">
+  <p class="box-t">Perché — ed è coerente con tutto il resto</p>
+  <p>Il modello è <strong>limitato dal lancio dei kernel</strong>, non dall'aritmetica. Con <span class="v">d</span> = 224, sequenza 51 e batch 64 le matrici sono troppo piccole perché i tensor core facciano differenza; il tempo se lo prendono l'overhead di lancio CUDA e le parti che non sono moltiplicazioni di matrici — il mel, la STFT e iSTFT di <em>phasemix</em>, l'aggiornamento dell'EMA, la misura della norma del gradiente.</p>
+  <p>È lo stesso fenomeno misurato altre due volte: <span class="v">d</span>=128 con 24 layer che costa 1,85× <span class="v">d</span>=224 con 8 layer a parità di parametri, e i FLOPs che non predicono la latenza. <strong>Tre misure indipendenti che convergono sulla stessa spiegazione.</strong></p>
+  <p>Che le due epoche coincidano a 0,1 s di distanza non è una coincidenza sospetta ma la conferma della tesi: il tempo è determinato dal <em>numero</em> di lanci, identico nei due casi, non dalla precisione con cui si calcola.</p>
+  <p><strong>Conseguenza</strong>: <code>amp</code> resta <code>none</code>. Il codice è pronto e testato, ma attivarlo aggiungerebbe una variabile numerica in cambio di nulla. La leva per la velocità, se servisse, sarebbe un batch più grande — ma 64 è dichiarato dal paper.</p>
+</div>
+
+<h3>11.3-ter Tracciamento degli esperimenti</h3>
+<p>Tre destinazioni dietro una sola interfaccia (<code>src/tracking.py</code>), con degrado controllato: se W&amp;B non è installato, non c'è login o cade la rete, <strong>il run prosegue</strong> e scrive comunque CSV e TensorBoard. Un esperimento da tre ore non deve morire perché un servizio esterno non risponde.</p>
+<ul>
+  <li><strong>CSV</strong> — l'unica fonte che sopravvive a tutto, nella cartella del run;</li>
+  <li><strong>TensorBoard</strong> — locale e istantaneo, utile mentre il run gira;</li>
+  <li><strong>Weights &amp; Biases</strong> — il confronto <em>fra</em> run, che è ciò che serve con tre seed per configurazione e più configurazioni da mettere a confronto. Con <code>mode: offline</code> funziona senza rete e si sincronizza dopo.</li>
+</ul>
+<p>Si registrano per epoca: loss di training, <strong>norma globale del gradiente</strong>, learning rate, accuratezza di validation sul modello EMA <em>e</em> sui pesi correnti, secondi per epoca. La norma del gradiente costa nulla — <code>clip_grad_norm_</code> con soglia infinita la misura senza tagliare — e una norma che esplode o collassa segnala un problema molto prima che si veda sulla loss.</p>
+<p>Il divario fra accuratezza EMA e non-EMA è a sua volta una diagnostica: se si allarga, l'ottimizzazione sta oscillando e la media mobile sta lavorando; se coincidono, la traiettoria è già liscia.</p>
+
+<h3>11.3-quater Analisi per classe</h3>
+<p>A fine training si ricarica il checkpoint migliore e si produce, <strong>su validation</strong>, un rapporto per classe con accuratezza, supporto, classi peggiori e coppie più confuse (<code>validation_report.json</code>). Lo stesso avviene sul test set in <code>scripts/evaluate.py</code>.</p>
+<p>Si riporta anche l'<strong>accuratezza bilanciata</strong>, cioè la media delle accuratezze per classe. Con uno sbilanciamento di 2,6× può divergere sensibilmente da quella globale, e la coppia di numeri dice più di ciascuno dei due.</p>
+<div class="box">
+  <p class="box-t">Perché le coppie confuse e non una mappa di calore</p>
+  <p>Una matrice 35×35 disegnata è quasi illeggibile. L'elenco delle coppie più confuse è più utile in diagnosi e all'orale: se il modello scambia <em>seven</em> con <em>six</em> o <em>forward</em> con <em>four</em> sta facendo errori fonologicamente sensati, e la cosa si commenta; se scambia coppie senza somiglianza acustica, c'è qualcosa che non va nella pipeline. Già dopo una sola epoca di prova le confusioni osservate erano del primo tipo, il che è un segnale che la catena funziona.</p>
+</div>
+
 <h3>11.4 Disciplina sperimentale</h3>
 <ul>
   <li><strong>≥ 3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Motivazione empirica: nella Tabella 3 del paper l'ablation sui token non è monotona (16 → 97,53 %, 25 → 97,20 %, 36 → 97,94 %) su singolo seed, il che suggerisce un rumore di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse.</li>

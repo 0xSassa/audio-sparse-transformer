@@ -57,6 +57,10 @@ optim:
   batch_size: 64                # dichiarato
   epochs: 100                   # [ASSUNZIONE] unico iperparametro di training
                                 # che nessuna fonte fissa
+  amp: none                     # "none" o "bf16". SPENTO per il run di
+                                # riferimento: si attiva dopo, verificando che
+                                # l'accuratezza non si muova. La valutazione e'
+                                # sempre in fp32, quindi il confronto e' equo.
   ema_decay: 0.995              # dichiarato
   loss: bce                     # target multi-hot, ramo 'bce' di EAT
   label_smoothing: 0.0          # [ASSUNZIONE] EAT usa 0.1 nel ramo CE; con la
@@ -70,3 +74,11 @@ eval:
 log:
   dir: results
   tensorboard: true
+  wandb:
+    enabled: true
+    project: audio-sparse-transformer
+    entity: null                # null = account personale
+    mode: online                # "offline" se la rete non e' stabile:
+                                # si sincronizza dopo con `wandb sync`
+    log_checkpoints: false      # caricare best.pt a ogni run occupa spazio
+                                # e serve solo se si lavora da piu' macchine
