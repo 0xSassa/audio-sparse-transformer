@@ -81,7 +81,8 @@ log:
     enabled: true
     project: audio-sparse-transformer
     entity: null                # null = account personale
-    mode: online                # "offline" se la rete non e' stabile:
-                                # si sincronizza dopo con `wandb sync`
+    mode: offline               # i run restano in locale; si sincronizzano
+                                # dopo con `wandb sync results/<tag>/wandb/offline-*`
+                                # sull'account attivo in quel momento
     log_checkpoints: false      # caricare best.pt a ogni run occupa spazio
                                 # e serve solo se si lavora da piu' macchine

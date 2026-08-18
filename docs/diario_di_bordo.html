@@ -673,6 +673,23 @@ bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
   <p>In cambio: ogni numero è esattamente riproducibile, il pavimento di rumore va a zero, e l'unica varianza che resta è quella fra seed — che è ciò che vogliamo misurare. Con differenze fra configurazioni che nel paper valgono 0,21 punti, non è un dettaglio.</p>
 </div>
 
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Il determinismo era un avviso, non una garanzia</p>
+  <p>Primo lancio vero, fermato dopo un'epoca. Nel log, per <code>matmul</code>, <code>einsum</code>, <code>Linear</code> e tutto il backward:</p>
+  <pre>this operation is not deterministic because it uses CuBLAS ...
+you must set CUBLAS_WORKSPACE_CONFIG=:4096:8</pre>
+  <p>Usavamo <code>warn_only=True</code>: le operazioni non deterministiche giravano comunque, segnalandolo con righe di log che scorrono via. Avremmo addestrato 2,5 ore con una falla nota nella garanzia che avevamo passato la mattina a costruire.</p>
+  <p><strong>Correzioni</strong>: <code>CUBLAS_WORKSPACE_CONFIG=:4096:8</code> impostata in <code>src/__init__.py</code> — il primo file eseguito, l'unico posto in cui abbia effetto, e dove non può essere dimenticata da riga di comando — e <code>warn_only=False</code>, così un'operazione non deterministica diventa un errore. Il run parte lo stesso: nessuna operazione del nostro modello è in quella condizione.</p>
+  <p><strong>Esito</strong>: 0 tensori diversi su 108, e i numeri <em>identici</em> a prima della correzione. Il determinismo osservato era reale ma reggeva per fortuna; ora regge per costruzione. Picco di memoria sceso da 2715 a 1087 MB.</p>
+  <p><strong>Come è emerso</strong>: non da un test — i test passavano — ma leggendo i log del primo lancio. La falla era nella garanzia, non nel comportamento.</p>
+</div>
+
+<div class="entry fix">
+  <p class="entry-h"><span class="tag t-fix">correzione</span>Due contorni sistemati nella stessa sosta</p>
+  <p><strong><code>ALBERO SPORCO</code> era un falso positivo.</strong> <code>provenance()</code> chiama <code>git status</code> dopo che il run ha già scritto <code>config.yaml</code> e <code>resolved_config.json</code> nella propria cartella, e li contava come modifiche. Ora esclude <code>results/</code>. Un flag di riproducibilità che dà falsi positivi è peggio che non averlo.</p>
+  <p><strong>W&amp;B passato a <code>mode: offline</code></strong>, per disaccoppiare la scelta dell'account dal lancio: i run restano in locale e si sincronizzano dopo, sull'account attivo in quel momento, con <code>wandb sync results/&lt;tag&gt;/wandb/offline-*</code>. Le curve dal vivo restano su TensorBoard, che non dipende da alcun account.</p>
+</div>
+
 <!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>

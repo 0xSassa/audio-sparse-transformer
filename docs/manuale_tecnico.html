@@ -936,6 +936,31 @@ loc_part   epoca 3  loss 0.14688354  val 72.6981%</pre>
   <p>Con differenze fra configurazioni che nel paper valgono 0,21 punti (96,88 contro 96,67), un pavimento di rumore di 0,02 non è trascurabile e crescerebbe su 100 epoche. Azzerandolo, l'unica varianza che resta è quella <em>fra seed</em>, che è esattamente ciò che vogliamo misurare e riportare.</p>
 </div>
 
+<h3>11.3-sexies Il determinismo era un avviso, non una garanzia</h3>
+<p>Al primo lancio vero, con <code>deterministic=True</code> già attivo, il log ha rivelato un problema che nessuna delle verifiche precedenti aveva intercettato:</p>
+<pre>UserWarning: Deterministic behavior was enabled ... but this operation is not
+deterministic because it uses CuBLAS and you have CUDA >= 10.2. To enable
+deterministic behavior you must set CUBLAS_WORKSPACE_CONFIG=:4096:8</pre>
+<p>L'avviso compariva per <code>matmul</code>, <code>einsum</code> dell'attenzione, <code>Linear</code> e l'intero backward — cioè ovunque. Usavamo <code>use_deterministic_algorithms(True, <strong>warn_only=True</strong>)</code>: le operazioni non deterministiche <em>giravano lo stesso</em>, segnalandolo con una riga di log che scorre via senza che nessuno la noti.</p>
+<div class="box warn">
+  <p class="box-t">Perché serviva la variabile d'ambiente</p>
+  <p>cuBLAS riusa un'area di memoria di lavoro condivisa fra chiamate. Quando più stream la usano, l'ordine delle riduzioni può variare fra esecuzioni: due somme degli stessi float in ordine diverso differiscono negli ultimi bit. <code>CUBLAS_WORKSPACE_CONFIG=:4096:8</code> alloca workspace dedicati e fissa quell'ordine.</p>
+  <p>Va impostata <strong>prima che torch inizializzi CUDA</strong>, quindi non basta metterla in <code>train.py</code>: sta in <code>src/__init__.py</code>, il primo file eseguito da qualunque punto d'ingresso — <code>src.train</code>, <code>scripts/evaluate.py</code>, i test. Così non può essere dimenticata da riga di comando.</p>
+</div>
+<p>Contestualmente il controllo è stato irrigidito a <code>warn_only=False</code>: un'operazione priva di implementazione deterministica ora è un <strong>errore</strong>, non un avviso. Il run parte comunque, il che dimostra che nessuna operazione del nostro modello è in quella condizione.</p>
+<h4>L'esito è il più informativo possibile</h4>
+<pre>tensori diversi: 0/108
+epoca 1  loss 0.20624505      identiche a quelle misurate PRIMA
+epoca 2  loss 0.16153782      della correzione
+epoca 3  loss 0.14688354</pre>
+<p>I numeri non sono cambiati. Il determinismo che avevamo osservato empiricamente era dunque reale — ma reggeva per fortuna, non per costruzione. Su 132 500 passi anziché su tre epoche di prova, quella fortuna non era una base accettabile.</p>
+<p>Effetto collaterale misurato: il picco di memoria GPU scende da 2715 a <strong>1087 MB</strong>, perché disattivare l'autotuning di cuDNN elimina i buffer di prova degli algoritmi candidati.</p>
+<div class="box info">
+  <p class="box-t">La lezione, che è la stessa di stamattina</p>
+  <p>Tre bug di riproducibilità erano emersi confrontando percorsi che dovevano coincidere. Questo è emerso <strong>leggendo i log del primo lancio vero</strong>. Nessuna quantità di test avrebbe potuto trovarlo, perché i test passavano: la falla era nella <em>garanzia</em>, non nel comportamento osservato.</p>
+  <p>È il motivo per cui vale la pena leggere gli avvisi invece di lasciarli scorrere.</p>
+</div>
+
 <h3>11.4 Disciplina sperimentale</h3>
 <ul>
   <li><strong>≥ 3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Motivazione empirica: nella Tabella 3 del paper l'ablation sui token non è monotona (16 → 97,53 %, 25 → 97,20 %, 36 → 97,94 %) su singolo seed, il che suggerisce un rumore di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse.</li>

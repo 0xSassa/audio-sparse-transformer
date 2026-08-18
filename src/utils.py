@@ -27,7 +27,10 @@ def seed_everything(seed: int, *, deterministic: bool = False) -> None:
     if deterministic:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        torch.use_deterministic_algorithms(True, warn_only=True)
+        # warn_only=False: un'operazione non deterministica diventa un
+        # ERRORE invece di un avviso che scorre nei log. Meglio non partire
+        # che scoprire dopo 2 ore che la garanzia non valeva.
+        torch.use_deterministic_algorithms(True, warn_only=False)
     else:
         torch.backends.cudnn.benchmark = True
 
@@ -146,9 +149,13 @@ def provenance() -> dict[str, Any]:
             ["git", "rev-parse", "HEAD"], cwd=root, text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
+        # `results/` e' escluso: il run crea i propri file di output PRIMA
+        # che questa funzione giri, e senza l'esclusione si segnalerebbe
+        # sporco da solo. Un flag di riproducibilita' che da' falsi positivi
+        # e' peggio che non averlo, perche' smetti di fidartene.
         info["dirty"] = bool(subprocess.check_output(
-            ["git", "status", "--porcelain"], cwd=root, text=True,
-            stderr=subprocess.DEVNULL,
+            ["git", "status", "--porcelain", "--", ".", ":(exclude)results"],
+            cwd=root, text=True, stderr=subprocess.DEVNULL,
         ).strip())
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         info["commit"] = None
