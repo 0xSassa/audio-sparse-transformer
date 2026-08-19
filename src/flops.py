@@ -106,8 +106,17 @@ def _count_native(model: nn.Module, x: torch.Tensor) -> float | None:
         from torch.utils.flop_counter import FlopCounterMode
     except ImportError:
         return None
+    # NIENTE torch.no_grad() qui, ed e' voluto. FlopCounterMode usa
+    # ModuleTracker, che registra hook sui tensori d'ingresso di ogni
+    # modulo: sotto no_grad un Parameter espanso (le regioni iniziali del
+    # modello sparso) non ha ne' grad_fn ne' accumulatore, e la
+    # registrazione fallisce con un AssertionError poco parlante.
+    #
+    # Contare con il grafo attivo non cambia il risultato — FlopCounterMode
+    # conta le op del forward, e il backward verrebbe contato solo
+    # chiamando .backward() — e costa un grafo per un singolo campione.
     counter = FlopCounterMode(display=False)
-    with torch.no_grad(), counter:
+    with counter:
         model(x)
     return float(counter.get_total_flops())
 
