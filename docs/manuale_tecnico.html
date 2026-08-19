@@ -890,6 +890,15 @@ bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
 <p>Si registrano per epoca: loss di training, <strong>norma globale del gradiente</strong>, learning rate, accuratezza di validation sul modello EMA <em>e</em> sui pesi correnti, secondi per epoca. La norma del gradiente costa nulla — <code>clip_grad_norm_</code> con soglia infinita la misura senza tagliare — e una norma che esplode o collassa segnala un problema molto prima che si veda sulla loss.</p>
 <p>Il divario fra accuratezza EMA e non-EMA è a sua volta una diagnostica: se si allarga, l'ottimizzazione sta oscillando e la media mobile sta lavorando; se coincidono, la traiettoria è già liscia.</p>
 
+<h4>Configurazione di W&amp;B, e perché l'entity resta libera</h4>
+<p>Il tracciamento è <strong>online</strong>: i run si sincronizzano mentre girano, così le curve sono consultabili da qualunque dispositivo senza attendere la fine. Con rete instabile basta <code>mode: offline</code>, e si recupera dopo con <code>wandb sync results/&lt;tag&gt;/wandb/offline-*</code> — il sync usa il login attivo <em>in quel momento</em>, il che permette anche di scegliere l'account dopo aver lanciato.</p>
+<p><code>entity</code> è lasciata a <code>null</code> di proposito, cioè «l'entity di default di chi è loggato». Fissarla renderebbe il repository <strong>non eseguibile da altri</strong>: chi lo clona non ha accesso alla nostra, e <code>wandb.init</code> fallirebbe. Poiché la consegna prevede che il docente possa eseguire il codice, la portabilità ha la precedenza sull'esplicitezza — e l'entity effettiva resta comunque registrata in ogni <code>summary.json</code>.</p>
+<p>Verificato end-to-end che il <code>summary</code> arrivi al server completo dei campi che contano:</p>
+<pre>best_val_accuracy = 0.2747      balanced_val_accuracy
+gflops = 0.574231616            gmacs
+provenance = {commit, dirty, gpu, torch, platform}</pre>
+<p>Sono le informazioni che rendono un run confrontabile: accuratezza, costo computazionale e stato del codice, tutti nello stesso posto. Senza i FLOPs accanto all'accuratezza, il grafico centrale del progetto — la curva accuratezza contro costo — andrebbe ricostruito a mano sperando che le configurazioni fossero quelle giuste.</p>
+
 <h3>11.3-quater Analisi per classe</h3>
 <p>A fine training si ricarica il checkpoint migliore e si produce, <strong>su validation</strong>, un rapporto per classe con accuratezza, supporto, classi peggiori e coppie più confuse (<code>validation_report.json</code>). Lo stesso avviene sul test set in <code>scripts/evaluate.py</code>.</p>
 <p>Si riporta anche l'<strong>accuratezza bilanciata</strong>, cioè la media delle accuratezze per classe. Con uno sbilanciamento di 2,6× può divergere sensibilmente da quella globale, e la coppia di numeri dice più di ciascuno dei due.</p>

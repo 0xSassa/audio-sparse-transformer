@@ -690,6 +690,16 @@ you must set CUBLAS_WORKSPACE_CONFIG=:4096:8</pre>
   <p><strong>W&amp;B passato a <code>mode: offline</code></strong>, per disaccoppiare la scelta dell'account dal lancio: i run restano in locale e si sincronizzano dopo, sull'account attivo in quel momento, con <code>wandb sync results/&lt;tag&gt;/wandb/offline-*</code>. Le curve dal vivo restano su TensorBoard, che non dipende da alcun account.</p>
 </div>
 
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Tracciamento W&amp;B online, verificato end-to-end</p>
+  <p>Risolto il problema di accesso — era una questione di sessione del browser, non di credenziali: la CLI era già autenticata come <code>alessandro-simone001</code> sull'entity <code>alessandro-simone001-universit-di-firenze</code>, dove esiste già il progetto di un altro corso.</p>
+  <p>Riportato <code>mode: online</code>. <code>entity</code> resta <code>null</code> di proposito: fissarla renderebbe il repository non eseguibile da altri, e la consegna prevede che il docente possa eseguirlo. La portabilità ha la precedenza sull'esplicitezza; l'entity effettiva finisce comunque in ogni <code>summary.json</code>.</p>
+  <p>Verificato interrogando l'API che il summary arrivi al server completo:</p>
+  <pre>best_val_accuracy = 0.2747    gflops = 0.574231616
+provenance = commit 9e314e62, dirty=True</pre>
+  <p>Due conferme in un colpo solo. L'accuratezza è <strong>identica</strong> a quella del run precedente alla correzione su cuBLAS, quindi il determinismo regge. E <code>dirty=True</code> è un <em>vero</em> positivo — la modifica alla configurazione non era ancora committata: dopo la correzione di ieri il flag non mente più.</p>
+</div>
+
 <!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>

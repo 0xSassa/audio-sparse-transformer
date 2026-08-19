@@ -80,9 +80,14 @@ log:
   wandb:
     enabled: true
     project: audio-sparse-transformer
-    entity: null                # null = account personale
-    mode: offline               # i run restano in locale; si sincronizzano
-                                # dopo con `wandb sync results/<tag>/wandb/offline-*`
-                                # sull'account attivo in quel momento
+    entity: null                # null = entity di default dell'utente loggato.
+                                # Lasciato tale di proposito: fissarla renderebbe
+                                # il repo non eseguibile da altri. Per questo
+                                # account risolve a
+                                # alessandro-simone001-universit-di-firenze
+    mode: online                # i run si sincronizzano mentre girano.
+                                # "offline" se la rete non e' stabile: si
+                                # recupera dopo con
+                                # `wandb sync results/<tag>/wandb/offline-*`
     log_checkpoints: false      # caricare best.pt a ogni run occupa spazio
                                 # e serve solo se si lavora da piu' macchine
