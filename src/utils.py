@@ -149,14 +149,27 @@ def provenance() -> dict[str, Any]:
             ["git", "rev-parse", "HEAD"], cwd=root, text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
-        # `results/` e' escluso: il run crea i propri file di output PRIMA
-        # che questa funzione giri, e senza l'esclusione si segnalerebbe
-        # sporco da solo. Un flag di riproducibilita' che da' falsi positivi
+        # `dirty` conta SOLO le modifiche a file TRACCIATI: sono le uniche
+        # che cambiano il codice eseguito e quindi le uniche che rendono un
+        # risultato non riproducibile dal solo commit.
+        #
+        # Escludere `results/` non bastava: qualunque file di appunti nella
+        # radice (uno script di prova, un notebook) faceva risultare sporco
+        # ogni run. Il primo run completo, prodotto da un albero pulito, era
+        # marcato dirty=True per la presenza di `results/` e di uno script
+        # non tracciato. Un flag di riproducibilita' che da' falsi positivi
         # e' peggio che non averlo, perche' smetti di fidartene.
+        #
+        # I file non tracciati si contano a parte: non incidono sul codice
+        # eseguito, ma vederli elencati evita di nascondere informazione.
         info["dirty"] = bool(subprocess.check_output(
-            ["git", "status", "--porcelain", "--", ".", ":(exclude)results"],
+            ["git", "status", "--porcelain", "--untracked-files=no"],
             cwd=root, text=True, stderr=subprocess.DEVNULL,
         ).strip())
+        info["untracked"] = len(subprocess.check_output(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=root, text=True, stderr=subprocess.DEVNULL,
+        ).split())
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         info["commit"] = None
         info["dirty"] = None

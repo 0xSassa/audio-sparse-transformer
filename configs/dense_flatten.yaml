@@ -1,0 +1,46 @@
+# Dense-transformer, variante `flatten`: il secondo estremo del bracketing.
+#
+# Identica a dense.yaml tranne che per `seq_mode`. Le due varianti
+# racchiudono l'incertezza sulla ricostruzione, perche' nessuna
+# configurazione soddisfa entrambi i vincoli del paper e le due sbagliano
+# in direzioni opposte:
+#
+#                  parametri              costo
+#   pool_freq   4.899.147  (+2,1 %)   0,5742 GFLOP  (-11,0 %)
+#   flatten     5.221.707  (+8,8 %)   0,6071 GFLOP  ( -5,9 %)
+#   dichiarati  4,80 M                0,645  GFLOP
+#
+# La differenza sostanziale non e' pero' nei numeri: e' che `pool_freq`
+# MEDIA VIA l'asse frequenza, quindi ogni token porta 96 valori (i canali
+# della convoluzione), mentre `flatten` conserva la struttura spettrale e
+# ogni token ne porta 1536 (96 canali x 16 bin).
+#
+# Perche' conta: il baseline denso verra' confrontato con un modello che
+# campiona nel piano tempo-frequenza. Se il denso ha buttato via la
+# frequenza, il confronto e' sbilanciato a suo sfavore. `pool_freq` era la
+# nostra scelta MENO SICURA di tutta la ricostruzione; questo run la mette
+# alla prova.
+#
+# Primo risultato di riferimento: pool_freq, seed 0, 100 epoche -> 94,67 %
+# di validation contro i 96,67 % dichiarati dal paper (su test).
+
+defaults: base.yaml
+
+model:
+  kind: dense
+  channel_reading: c196_proj96
+  stem: paper
+  num_conv_layers: 1
+  norm: layernorm
+  pool_stride: [2, 1]
+
+  seq_mode: flatten            # <-- l'unica differenza da dense.yaml
+
+  dim: 224
+  depth: 8
+  num_heads: 7
+  ffn_ratio: 4
+  pos_encoding: none
+  dropout: 0.0
+
+# Sequenza risultante: [C=96, F=16, T=51] -> 51 token di dimensione 1536

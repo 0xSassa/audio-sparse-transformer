@@ -80,9 +80,10 @@
   <h1>Manuale tecnico</h1>
   <p class="sub">Riproduzione di <em>Audio Sparse-Transformer for Speech Classification</em><br>Kavaki &amp; Mandel, ICASSP 2025</p>
   <p class="sub" style="font-size:9.8pt">Progetto d'esame — B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Versione 1.2 — 18 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
+  <p class="meta">Versione 1.3 — 19 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
   <em>v1.1: consultato il codice di SparseFormer e di EAT. Corrette le formule di <code>mixing</code> e <code>phasemix</code>, la sequenza dello stem e il default della normalizzazione; risolte la formula degli offset e l'inizializzazione a griglia.<br>
-  v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.</em></p>
+  v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.<br>
+  v1.3: nuovo capitolo 12 con il primo run completo (94,67 %), la saturazione della curva ben prima delle 100 epoche, il comportamento dell'EMA lungo lo schedule e il profilo fonologico degli errori; corretta l'osservazione sulla norma del gradiente.</em></p>
 </header>
 
 <div class="box info" style="margin-top:6mm">
@@ -106,6 +107,7 @@
   <li>Catalogo delle assunzioni <span class="s">— ognuna con la sua evidenza</span></li>
   <li>Il codice, file per file</li>
   <li>Protocollo sperimentale e misura</li>
+  <li><strong>Risultati</strong> <span class="s">— primo run completo, saturazione della curva, profilo degli errori</span></li>
   <li>Riferimenti</li>
 </ol>
 
@@ -992,7 +994,89 @@ epoca 3  loss 0.14688354</pre>
 </table>
 
 <!-- ================================================================= -->
-<h2>12 · Riferimenti</h2>
+<h2>12 · Risultati</h2>
+
+<h3>12.1 Primo run completo — dense-transformer, seed 0</h3>
+<table>
+  <thead><tr><th style="width:52mm">Misura</th><th class="c">Nostro</th><th class="c">Paper</th><th class="c">Scarto</th></tr></thead>
+  <tbody>
+    <tr><td>Accuratezza (validation, EMA)</td><td class="c"><strong>94,67 %</strong></td><td class="c">96,67 %<sup>†</sup></td><td class="c">−2,00</td></tr>
+    <tr><td>Accuratezza bilanciata</td><td class="c">94,31 %</td><td class="c">—</td><td class="c">—</td></tr>
+    <tr><td>Parametri</td><td class="c">4 899 147</td><td class="c">4,80 M</td><td class="c">+2,1 %</td></tr>
+    <tr><td>Costo</td><td class="c">0,5742 GFLOP</td><td class="c">0,645 G</td><td class="c">−11,0 %</td></tr>
+    <tr><td>Picco memoria GPU</td><td class="c">1 087 MB</td><td class="c">—</td><td class="c">—</td></tr>
+    <tr><td>Tempo</td><td class="c">1,80 h (65 s/epoca)</td><td class="c">—</td><td class="c">—</td></tr>
+  </tbody>
+</table>
+<p style="font-size:8.6pt;color:var(--muted)"><sup>†</sup> Il numero del paper è su <em>test</em>, il nostro su <em>validation</em>: non sono direttamente confrontabili. Il test set non è ancora stato toccato.</p>
+<p>Provenienza registrata nel run: commit <code>e6106907</code>, torch 2.9.1+cu128, RTX 5050 Laptop, CUDA 12.8, Windows 11. Determinismo attivo, precisione fp32.</p>
+
+<h3>12.2 La curva satura molto prima di 100 epoche <span class="tag t-evi">evidenza</span></h3>
+<table>
+  <thead><tr><th class="c">epoca</th><th class="c">lr</th><th class="c">val EMA</th><th class="c">val raw</th><th class="c">EMA − raw</th></tr></thead>
+  <tbody>
+    <tr><td class="c">5</td><td class="c">1,56·10⁻⁴</td><td class="c">81,51 %</td><td class="c">77,75 %</td><td class="c">+3,76</td></tr>
+    <tr><td class="c">10</td><td class="c">3,00·10⁻⁴</td><td class="c">88,89 %</td><td class="c">84,60 %</td><td class="c">+4,29</td></tr>
+    <tr><td class="c">30</td><td class="c">2,65·10⁻⁴</td><td class="c">93,45 %</td><td class="c">91,84 %</td><td class="c">+1,61</td></tr>
+    <tr><td class="c">50</td><td class="c">1,76·10⁻⁴</td><td class="c">94,06 %</td><td class="c">93,61 %</td><td class="c">+0,45</td></tr>
+    <tr><td class="c">70</td><td class="c">7,50·10⁻⁵</td><td class="c">94,49 %</td><td class="c">93,97 %</td><td class="c">+0,52</td></tr>
+    <tr><td class="c">90</td><td class="c">9,05·10⁻⁶</td><td class="c">94,61 %</td><td class="c">94,60 %</td><td class="c">+0,01</td></tr>
+    <tr><td class="c">100</td><td class="c">1,20·10⁻⁹</td><td class="c">94,67 %</td><td class="c">94,67 %</td><td class="c">0,00</td></tr>
+  </tbody>
+</table>
+<div class="box info">
+  <p class="box-t">La conseguenza più importante di tutto il run</p>
+  <p>Dall'epoca 30 alla 100 — cioè nel <strong>70 % del budget di training</strong> — il modello guadagna <strong>1,22 punti</strong>. Dalla 50 alla 100, mezzo run intero, ne guadagna <strong>0,61</strong>. Le ultime dieci epoche hanno un'escursione di <strong>0,06 punti</strong>: la curva è piatta.</p>
+  <p>Questo <strong>elimina «poche epoche» come spiegazione dei 2 punti mancanti</strong>. Non è un problema di durata dell'addestramento: il modello ha smesso di migliorare molto prima della fine. Il residuo è di natura architetturale o configurativa, e va cercato altrove.</p>
+  <p>Ha anche una conseguenza pratica notevole per le ablation della Fase 5: <strong>50 epoche darebbero conclusioni identiche a 100</strong> a metà del costo. Con 27 run previsti fra ablation su N e su P, è la differenza fra ~50 e ~25 ore.</p>
+</div>
+
+<h3>12.3 L'EMA si guadagna lo spazio solo ad alto learning rate <span class="tag t-evi">evidenza</span></h3>
+<p>Il divario fra modello EMA e pesi correnti si comporta esattamente come la teoria prevede, ed è una delle illustrazioni empiriche più pulite prodotte dal progetto:</p>
+<pre>epoca  10:  +4,29 punti      lr al massimo, traiettoria molto rumorosa
+epoca  30:  +1,61 punti      lr in discesa
+epoca  50:  +0,45 punti
+epoca  90:  +0,01 punti
+epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
+<p>La media mobile serve a smorzare l'oscillazione dovuta al rumore dei minibatch. Quando il learning rate si annulla, i pesi smettono di muoversi e la media di una traiettoria ferma <em>è</em> il punto stesso: il divario si chiude per costruzione.</p>
+<p>Ne segue una nota operativa: <strong>a fine schedule valutare l'EMA o i pesi correnti è indifferente</strong>. L'EMA conta se si interrompe prima, o con schedule che tengono il learning rate alto fino in fondo. Con one-cycle portato a termine, è un'assicurazione che non serve — ma che costa nulla.</p>
+
+<h3>12.4 Due correzioni a osservazioni precedenti</h3>
+<div class="box warn">
+  <p class="box-t">La norma del gradiente non cresce</p>
+  <p>Guardando lo <em>sparkline</em> di W&amp;B avevo concluso che <code>train_grad_norm</code> crescesse lungo il training. <strong>Sbagliato.</strong> I valori dal CSV: 0,26 all'epoca 1, picco di 0,92 alla 5 mentre il learning rate sale, poi discesa e <strong>piatta a ~0,24 dall'epoca 20 fino alla fine</strong>.</p>
+  <p>Lo sparkline è una serie binnata e riscalata: con una metrica quasi costante amplifica il rumore fino a farlo sembrare una tendenza. <strong>Per leggere l'andamento di una metrica si usa il CSV, non la miniatura.</strong> È il motivo per cui il CSV resta la fonte di verità del progetto.</p>
+</div>
+<div class="box">
+  <p class="box-t">Il picco di memoria è meno della metà del previsto</p>
+  <p>1 087 MB contro i 2 715 misurati negli smoke test. La differenza è il <strong>determinismo</strong>: <code>cudnn.benchmark = False</code> impedisce a cuDNN di provare algoritmi alternativi, alcuni dei quali usano molta più memoria di lavoro in cambio di velocità. Si paga in tempo e si guadagna in memoria — su 8 GB nessuna delle due cose è un vincolo.</p>
+</div>
+
+<h3>12.5 Che errori fa il modello</h3>
+<pre>classi peggiori                    confusioni piu' frequenti
+  forward   86,99%  (146)            off     -> up      10
+  learn     88,28%  (128)            go      -> down    10
+  go        90,32%  (372)            tree    -> three    9
+  backward  90,85%  (153)            go      -> two      9
+  no        91,38%  (406)            three   -> tree     8
+  down      91,51%  (377)            forward -> four     8</pre>
+<p>Le confusioni sono <strong>tutte fonologicamente motivate</strong>. <em>tree</em> ↔ <em>three</em> è la coppia minima classica /t/ contro /θ/, ed è simmetrica in entrambe le direzioni — il modello non ha un bias, semplicemente non distingue una fricativa dentale sorda da un'occlusiva alveolare in una parola di 500 ms. <em>forward</em> → <em>four</em> condivide l'attacco; <em>go</em> → <em>down</em> e <em>no</em> → <em>go</em> hanno vocali posteriori simili.</p>
+<p>È il controllo qualitativo che conta più dell'accuratezza aggregata: se il modello sbagliasse coppie senza somiglianza acustica, ci sarebbe un difetto nella pipeline dei dati. Qui il profilo di errore è quello di un sistema che ha imparato la fonetica e si ferma dove si fermerebbe un ascoltatore umano su clip brevi e rumorose.</p>
+<p>Le classi peggiori sono anche fra le <strong>meno rappresentate</strong> — <em>forward</em> 146 campioni, <em>learn</em> 128 contro i ~400 delle classi frequenti — ma non solo: <em>go</em>, <em>no</em> e <em>down</em> hanno supporto abbondante e sbagliano lo stesso. Lo sbilanciamento spiega una parte del fenomeno, la somiglianza acustica il resto. Coerente con lo scarto contenuto fra accuratezza globale (94,67 %) e bilanciata (94,31 %).</p>
+
+<h3>12.6 Dove cercare i due punti mancanti</h3>
+<p>Con «poche epoche» escluso da §12.2, restano quattro ipotesi, in ordine di plausibilità:</p>
+<table>
+  <thead><tr><th style="width:44mm">Ipotesi</th><th>Come la si verifica</th></tr></thead>
+  <tbody>
+    <tr><td><strong><code>pool_freq</code> è la scelta sbagliata</strong></td><td>È la nostra decisione meno sicura: media via la struttura in frequenza. La variante <code>flatten</code> è già progettata e fitta meglio il costo dichiarato (−5,9 % contro −11,0 %). <strong>Un run, 1,8 ore.</strong></td></tr>
+    <tr><td>Assenza di regolarizzazione</td><td><code>dropout=0</code> e nessun label smoothing: entrambi non dichiarati dal paper. Un run con dropout 0,1 direbbe se il modello è in sovradattamento — ma la loss di training continua a scendere fino alla fine, quindi è poco probabile.</td></tr>
+    <tr><td>Differenza validation/test</td><td>Parte dello scarto potrebbe non esistere: confrontiamo il nostro validation col loro test. Verificabile solo alla fine, e <strong>una volta sola</strong>.</td></tr>
+    <tr><td>Ricostruzione imperfetta del denso</td><td>Lo scarto dell'11 % sui FLOPs, mai spiegato, indica che il loro modello non è esattamente il nostro. Non risolvibile senza il loro codice.</td></tr>
+  </tbody>
+</table>
+
+<h2>13 · Riferimenti</h2>
 
 <h4>Paper del progetto</h4>
 <ul>

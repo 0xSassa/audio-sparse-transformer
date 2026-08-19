@@ -80,7 +80,7 @@
   <h1>Diario di bordo</h1>
   <p class="sub">Progetto d'esame — riproduzione di <em>Audio Sparse-Transformer</em> (Kavaki &amp; Mandel, ICASSP 2025)</p>
   <p class="sub" style="font-size:9.6pt">B031278 Deep Learning, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Ultimo aggiornamento: 18 agosto 2026</p>
+  <p class="meta">Ultimo aggiornamento: 19 agosto 2026</p>
 </header>
 
 <div class="box info">
@@ -701,6 +701,80 @@ provenance = commit 9e314e62, dirty=True</pre>
 </div>
 
 <!-- ==================================================================== -->
+<h2 class="brk">Giorno 4 — mercoledì 19 agosto 2026</h2>
+<p class="meta" style="margin-bottom:4mm">Primo run completo del dense-transformer.</p>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Riconciliazione: il repository era avanti rispetto al mio contesto</p>
+  <p>Riprendendo il lavoro ho trovato l'albero <strong>pulito</strong> ma tre commit oltre quelli che avevo in memoria: <code>f7b73c6</code> (riproducibilità del resume, <em>tre</em> bug corretti), <code>9e314e6</code> (determinismo con <code>CUBLAS_WORKSPACE_CONFIG</code>) ed <code>e610690</code> (W&amp;B online verificato end-to-end).</p>
+  <p>La verifica pre-lancio che avevo avviato era in realtà <strong>arrivata in fondo</strong> — risultava «interrotta» solo perché il processo era uscito senza lasciare il record — e aveva trovato ciò che cercava:</p>
+  <pre>ininterrotto : loss 0.135670  val 79.922%
+ripreso      : loss 0.135585  val 79.752%
+-> resume NON trasparente: un'interruzione cambia il risultato</pre>
+  <p>Quei tre commit chiudono esattamente quel problema. Le modifiche che avevo in corso vi sono confluite: nessun lavoro duplicato da scartare.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Il flag <code>dirty</code> della provenienza dava falsi positivi</p>
+  <p>Il primo run completo, lanciato da un albero senza alcuna modifica al codice, ha registrato <code>dirty: true</code>. Causa: <code>git status --porcelain</code> conta anche i <strong>file non tracciati</strong>, e nella radice c'erano <code>results/</code> e uno script di appunti.</p>
+  <p>Una precedente correzione escludeva <code>results/</code>, ma non bastava: qualunque file di prova nella cartella avrebbe riprodotto il problema. <strong>Un flag di riproducibilità che grida al lupo è peggio che non averlo</strong>, perché smetti di guardarlo proprio quando conta.</p>
+  <p>Corretto con <code>--untracked-files=no</code>: <code>dirty</code> riflette ora solo le modifiche ai file <em>tracciati</em>, che sono le uniche a cambiare il codice eseguito. I file non tracciati si contano a parte in <code>untracked</code>, così l'informazione non viene nascosta ma nemmeno confusa con l'altra.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Primo run completo: 94,67 %</p>
+  <p>100 epoche, <strong>1,80 ore</strong> a 65 s per epoca, picco GPU 1 087 MB. Il run è stato spezzato in due sessioni con <code>--stop-after 50</code> e poi <code>--resume</code>, e ha completato senza problemi.</p>
+  <pre>validation (EMA)   94,67 %        parametri  4.899.147
+bilanciata         94,31 %        costo      0,5742 GFLOP
+paper (test)       96,67 %        scarto     -2,00 punti</pre>
+  <p>Il confronto non è diretto — il nostro numero è su <em>validation</em>, il loro su <em>test</em>, che non abbiamo ancora toccato — ma siamo al limite del criterio di successo pieno che ci eravamo dati («entro 1-2 punti»).</p>
+  <p>Stima dei tempi finalmente esatta: 65 s/epoca contro i 110 previsti. I ~100 s dei run di prova erano avvio dei worker e cache fredda ammortizzati su una o due epoche soltanto.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>La curva satura a un terzo del budget — la scoperta che conta</p>
+  <pre>ep  30:  93,45 %
+ep  50:  94,06 %      +0,61 dalla 30
+ep  70:  94,49 %
+ep 100:  94,67 %      +1,22 dalla 30, in 70 epoche
+ultime 10 epoche: escursione 0,06 punti</pre>
+  <p><strong>«Poche epoche» è eliminato come spiegazione dei due punti mancanti.</strong> Il modello smette di migliorare molto prima della fine: il residuo è architetturale o configurativo.</p>
+  <p>Conseguenza pratica notevole per la Fase 5: <strong>50 epoche darebbero le stesse conclusioni di 100</strong>. Con 27 run previsti fra le ablation su N e su P, è la differenza fra ~50 e ~25 ore di GPU.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>L'EMA si guadagna lo spazio solo ad alto learning rate</p>
+  <pre>ep  10:  +4,29 punti      lr al massimo
+ep  30:  +1,61
+ep  50:  +0,45
+ep  90:  +0,01
+ep 100:   0,00           lr = 1,2e-09</pre>
+  <p>Esattamente ciò che la teoria prevede: la media mobile smorza l'oscillazione dovuta al rumore dei minibatch, e quando il learning rate si annulla i pesi smettono di muoversi — la media di una traiettoria ferma <em>è</em> il punto stesso.</p>
+  <p>Nota operativa: con one-cycle portato a termine, valutare EMA o pesi correnti è indifferente. L'EMA conta se si interrompe prima. È un'assicurazione che non è servita, ma che costava nulla.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Avevo letto male lo sparkline: la norma del gradiente non cresce</p>
+  <p>Dallo sparkline di W&amp;B avevo concluso che <code>train_grad_norm</code> crescesse lungo il training, e l'avevo pure commentato come «osservazione da avere pronta». I valori dal CSV dicono altro: 0,26 all'epoca 1, picco 0,92 alla 5 mentre il learning rate sale, poi <strong>piatta a ~0,24 dall'epoca 20 alla fine</strong>.</p>
+  <p>Lo sparkline è binnato e riscalato sul proprio intervallo: con una metrica quasi costante amplifica il rumore fino a farlo sembrare una tendenza. <strong>Per l'andamento di una metrica si legge il CSV, non la miniatura.</strong> È esattamente il motivo per cui il CSV è la fonte di verità del progetto e non un ripiego.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Il profilo degli errori è fonologico</p>
+  <pre>tree    -> three   9        three -> tree    8
+forward -> four    8        go    -> down   10
+no      -> go      7        off   -> up     10</pre>
+  <p><em>tree</em> ↔ <em>three</em> è la coppia minima /t/ contro /θ/, e la confusione è <strong>simmetrica</strong>: non un bias del modello, ma l'incapacità di distinguere una fricativa dentale sorda da un'occlusiva alveolare in mezzo secondo di audio. <em>forward</em> → <em>four</em> condivide l'attacco, <em>go</em>/<em>down</em>/<em>no</em> hanno vocali posteriori simili.</p>
+  <p>È il controllo qualitativo che vale più dell'accuratezza aggregata: un modello che sbagliasse coppie senza somiglianza acustica segnalerebbe un difetto nella pipeline dei dati. Qui il profilo è quello di un sistema che ha imparato la fonetica e si ferma dove si fermerebbe un ascoltatore umano.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Prima <code>flatten</code>, poi i seed</p>
+  <p>L'istinto sarebbe lanciare i seed 1 e 2. Sconsigliato: <code>pool_freq</code> è la scelta <strong>meno sicura</strong> dell'intera ricostruzione, e la variante <code>flatten</code> fitta meglio il costo dichiarato (−5,9 % contro −11,0 %).</p>
+  <p>Se <code>flatten</code> arrivasse più vicino al 96,67 %, sarebbe la ricostruzione migliore e i tre seed andrebbero spesi su quella. Fare ora i seed di <code>pool_freq</code> significa rischiare 3,6 ore su una configurazione da abbandonare. <strong>Un run di <code>flatten</code> costa 1,8 ore e decide la questione.</strong></p>
+</div>
+
+<!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
   <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:52mm">Decisione</th><th>Motivazione</th></tr></thead>
@@ -753,6 +827,9 @@ provenance = commit 9e314e62, dirty=True</pre>
     <tr><td class="c">18/08</td><td>Documento Pipeline fermo alla v2.0, in contraddizione col manuale</td><td>§3.4 riscritta come riepilogo di stato; stabilita una regola di precedenza fra i tre documenti.</td></tr>
     <tr><td class="c">18/08</td><td><strong>Doppia codifica: 800 righe di documentazione corrotte</strong></td><td>Round-trip PowerShell <code>Get-Content</code>/<code>Set-Content</code> senza <code>-Encoding</code>. Riparate tutte. <strong>Mai più round-trip di PowerShell su file di testo.</strong></td></tr>
     <tr><td class="c">18/08</td><td>Stima del tempo per epoca sbagliata di un fattore 3,3</td><td>Il benchmark misurava il solo encoder su dati sintetici. Budget rivisto da 4 a ~13 ore per la Fase 3.</td></tr>
+    <tr><td class="c">19/08</td><td>Flag <code>dirty</code> della provenienza: falsi positivi sui file non tracciati</td><td>Corretto con <code>--untracked-files=no</code>; i non tracciati si contano a parte.</td></tr>
+    <tr><td class="c">19/08</td><td>Norma del gradiente «crescente» letta dallo sparkline</td><td><strong>Errata</strong>: dal CSV e' piatta a ~0,24 dall'epoca 20. Gli sparkline sono binnati e riscalati.</td></tr>
+    <tr><td class="c">19/08</td><td>Stima di 110 s/epoca</td><td>Reali <strong>65 s</strong>: i run di prova pagavano avvio worker e cache fredda su 1-2 epoche.</td></tr>
   </tbody>
 </table>
 
@@ -763,7 +840,7 @@ provenance = commit 9e314e62, dirty=True</pre>
     <tr><td class="c">0</td><td>Lettura paper + ancestor, setup</td><td>paper letti; <strong>SparseFormer ancora da leggere</strong>; form risorse e ricevimento da fare</td></tr>
     <tr><td class="c">1</td><td>Prerequisiti teorici</td><td>in corso, in parallelo</td></tr>
     <tr><td class="c"><strong>2</strong></td><td>Dati, split, contatore FLOPs</td><td><strong>COMPLETATA</strong> — split esatti, cache costruita, 19/19 test, ~3,5 s/epoca di dati</td></tr>
-    <tr><td class="c"><strong>3</strong></td><td>Early conv + dense transformer</td><td><strong>in corso</strong> — moduli 1–3 scritti e verificati, configurazione ricostruita; manca <code>train.py</code></td></tr>
+    <tr><td class="c"><strong>3</strong></td><td>Early conv + dense transformer</td><td><strong>primo run completo: 94,67 %</strong> (seed 0, 100 epoche, 1,80 h). Da fare: variante <code>flatten</code>, poi 3 seed sulla configurazione vincente</td></tr>
     <tr><td class="c">4</td><td>Sparse feature extractor</td><td>da fare</td></tr>
     <tr><td class="c">4-bis</td><td>EAT-S <em>(opzionale)</em></td><td>da fare</td></tr>
     <tr><td class="c">5</td><td>Ablation, seed multipli, HPO</td><td>da fare</td></tr>
