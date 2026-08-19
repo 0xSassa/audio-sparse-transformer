@@ -1,0 +1,20 @@
+# Normalizzazione dei fine riga.
+#
+# Su Windows git converte LF in CRLF nella copia di lavoro; senza questo
+# file, ogni file di testo verrebbe archiviato con i fine riga della
+# macchina che l'ha committato. Il repository sara' clonato anche da Linux
+# (il docente), e un diff pieno di ^M rende illeggibile qualunque revisione.
+#
+# `text=auto` archivia SEMPRE in LF e riconverte in locale secondo la
+# piattaforma. E' la configurazione neutra.
+* text=auto eol=lf
+
+# Gli script PowerShell restano CRLF: alcune versioni di Windows
+# PowerShell non gestiscono bene i qui-documenti con soli LF.
+*.ps1 text eol=crlf
+
+# Binari: nessuna conversione, e diff non testuale.
+*.pdf  binary
+*.pt   binary
+*.npy  binary
+*.wav  binary
