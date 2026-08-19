@@ -102,11 +102,25 @@ class RegionAdjust(nn.Module):
         nn.init.zeros_(self.to_delta.weight)
         nn.init.zeros_(self.to_delta.bias)
 
+    # Limite sul delta logaritmico prima dell'esponenziale.  [NOSTRA AGGIUNTA]
+    #
+    # Ne' il paper ne' SparseFormer lo prevedono, e nel regime normale NON
+    # SI ATTIVA MAI: `to_delta` parte da zero e i delta restano dell'ordine
+    # dell'unita'. Ma exp() in float32 va a infinito oltre ~88, e un solo
+    # passo anomalo produrrebbe regioni di dimensione inf o 0, quindi NaN
+    # nel gradiente e un run di ore perso.
+    #
+    # exp(4) ~ 55x di crescita per ripetizione, cioe' ~163.000x sulle tre:
+    # enormemente piu' di qualunque variazione sensata per regioni che
+    # vivono in [0,1]. E' una rete di sicurezza, non un vincolo sul modello.
+    MAX_LOG_SCALE = 4.0
+
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
         delta = self.to_delta(tokens)                      # [B, N, 4]
         center, size = boxes_to_cwh(boxes)
         center = center + delta[..., :2] * size
-        size = size * delta[..., 2:].exp()
+        log_scale = delta[..., 2:].clamp(-self.MAX_LOG_SCALE, self.MAX_LOG_SCALE)
+        size = size * log_scale.exp()
         return cwh_to_boxes(center, size)
 
 

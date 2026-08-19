@@ -80,10 +80,11 @@
   <h1>Manuale tecnico</h1>
   <p class="sub">Riproduzione di <em>Audio Sparse-Transformer for Speech Classification</em><br>Kavaki &amp; Mandel, ICASSP 2025</p>
   <p class="sub" style="font-size:9.8pt">Progetto d'esame — B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Versione 1.3 — 19 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
+  <p class="meta">Versione 1.4 — 19 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
   <em>v1.1: consultato il codice di SparseFormer e di EAT. Corrette le formule di <code>mixing</code> e <code>phasemix</code>, la sequenza dello stem e il default della normalizzazione; risolte la formula degli offset e l'inizializzazione a griglia.<br>
   v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.<br>
-  v1.3: nuovo capitolo 12 con il primo run completo (94,67 %), la saturazione della curva ben prima delle 100 epoche, il comportamento dell'EMA lungo lo schedule e il profilo fonologico degli errori; corretta l'osservazione sulla norma del gradiente.</em></p>
+  v1.3: nuovo capitolo 12 con il primo run completo (94,67 %), la saturazione della curva ben prima delle 100 epoche, il comportamento dell'EMA lungo lo schedule e il profilo fonologico degli errori; corretta l'osservazione sulla norma del gradiente.<br>
+  v1.4: implementato l'estrattore sparso; i suoi FLOPs sciolgono la contraddizione «96 vs 196 kernels» a favore di <code>c96</code> (§12.7-12.8).</em></p>
 </header>
 
 <div class="box info" style="margin-top:6mm">
@@ -704,7 +705,7 @@ relative_offset_xy = (relative_offset_xy - offset_mean) / (3 * offset_std)</pre>
 <p><strong>Ipotesi confutata, e nettamente.</strong> Una convoluzione 3×3 con 196 canali alla risoluzione piena (32×51) costa da sola più di 1 GFLOP: aggiungere strati non colma lo scarto, lo travolge. Lo scarto dell'11 % resta <strong>non spiegato</strong>, e va riportato come tale.</p>
 
 <h3>8.7 La configurazione adottata</h3>
-<pre>lettura canali    c196_proj96     196 kernel poi proiezione 1x1 a 96
+<pre>lettura canali    c96             "96 dimensional feature"; il 196 e' un refuso (vedi 12.7)
 stem              paper           una conv 7x7 stride 2, ReLU, maxpool
 pool stride       (2, 1)          solo sull'asse frequenza  ->  N = 51
 sequenza          pool_freq       media sulla frequenza, N = T
@@ -712,8 +713,8 @@ dimensione        d = 224
 profondita'       L = 8           dichiarata dal paper
 teste             h = 7           d_h = 32
 ---------------------------------------------------------------------
-parametri         4.899.147       dichiarati 4,80 M   ->  +2,1 %
-costo             0,574 GFLOP     dichiarati 0,645    ->  -11,0 %</pre>
+parametri         4.875.235       dichiarati 4,80 M   ->  +1,6 %
+costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
 <p>Si addestra <strong>anche</strong> la variante <code>flatten</code>, che fitta meglio il costo (−5,9 %) ma peggio i parametri: le due bracketizzano l'incertezza. <code>pool_freq</code> resta la scelta meno sicura di tutte, perché media via la struttura in frequenza proprio nel baseline che verrà confrontato con un modello che campiona nel piano tempo-frequenza.</p>
 
 <div class="box">
@@ -736,7 +737,8 @@ costo             0,574 GFLOP     dichiarati 0,645    ->  -11,0 %</pre>
     <tr><td>Parametri STFT di <code>phasemix</code></td><td>400 / 160, come il front-end</td><td><span class="tag t-ass">assunzione</span> EAT non li dichiara.</td></tr>
     <tr><td>Normalizzazione degli offset «a tre deviazioni standard»</td><td>standardizzazione sull'asse dei punti, poi divisione per 3</td><td><span class="tag t-evi">evidenza</span> formula esatta dal codice di SparseFormer.</td></tr>
     <tr><td>Inizializzazione di token e regioni</td><td>trunc-normal std 1; griglia √N × √N</td><td><span class="tag t-evi">evidenza</span> dal codice di SparseFormer. Spiega perché nel paper N è sempre un quadrato perfetto.</td></tr>
-    <tr><td>Contraddizione 96 / 196</td><td><code>c196_proj96</code></td><td><span class="tag t-evi">evidenza</span> è la lettura in cui entrambe le cifre sono vere, ed è in testa alla ricerca.</td></tr>
+    <tr><td>Contraddizione 96 / 196</td><td><strong><code>c96</code></strong></td><td><span class="tag t-evi">evidenza</span> <strong>risolta</strong> dai FLOPs del modello sparso (§12.7): <code>c196_proj96</code> li sbaglia del +73 %, <code>c96</code> tiene tutti e quattro i vincoli entro il 18 %. «96 dimensional feature» è vero, «196 kernels» è il refuso.</td></tr>
+    <tr><td>Limite sul delta logaritmico delle regioni</td><td><code>MAX_LOG_SCALE = 4</code></td><td><span class="tag t-ass">assunzione</span> nostra aggiunta, assente dal paper e da SparseFormer. Rete di sicurezza contro l'overflow di <code>exp()</code>; verificato che non si attivi mai nel regime normale.</td></tr>
     <tr><td>Stride del max pooling</td><td>(2, 1) → <span class="v">N</span> = 51</td><td><span class="tag t-evi">evidenza</span> forzato dal vincolo di costo; la famiglia <span class="v">N</span>=26 sbaglia del 30 %.</td></tr>
     <tr><td>Formazione della sequenza</td><td><code>pool_freq</code> + <code>flatten</code></td><td><span class="tag t-ass">assunzione</span> la meno sicura. Si addestrano entrambe.</td></tr>
     <tr><td>Numero di teste</td><td><span class="v">h</span> = 7, <span class="v">d<sub>h</sub></span> = 32</td><td><span class="tag t-evi">evidenza</span> parametri e FLOPs identici per 4/7/8/14 teste: scelta libera, si prende la convenzionale.</td></tr>
@@ -1009,6 +1011,7 @@ epoca 3  loss 0.14688354</pre>
   </tbody>
 </table>
 <p style="font-size:8.6pt;color:var(--muted)"><sup>†</sup> Il numero del paper è su <em>test</em>, il nostro su <em>validation</em>: non sono direttamente confrontabili. Il test set non è ancora stato toccato.</p>
+<div class="box warn"><p class="box-t">Questo run usa una lettura dei canali poi superata</p><p>Il run e' stato eseguito con <code>c196_proj96</code>. La §12.7 mostra che la lettura corretta e' <code>c96</code>, e per un confronto denso-contro-sparso controllato il front-end deve essere lo stesso nei due modelli: <strong>il denso va rifatto con <code>c96</code></strong>. Il risultato resta valido come primo run completo e come verifica della pipeline, ma non e' il riferimento definitivo.</p></div>
 <p>Provenienza registrata nel run: commit <code>e6106907</code>, torch 2.9.1+cu128, RTX 5050 Laptop, CUDA 12.8, Windows 11. Determinismo attivo, precisione fp32.</p>
 
 <h3>12.2 La curva satura molto prima di 100 epoche <span class="tag t-evi">evidenza</span></h3>
@@ -1075,6 +1078,42 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
     <tr><td>Ricostruzione imperfetta del denso</td><td>Lo scarto dell'11 % sui FLOPs, mai spiegato, indica che il loro modello non è esattamente il nostro. Non risolvibile senza il loro codice.</td></tr>
   </tbody>
 </table>
+
+<h3>12.7 I FLOPs dello sparso sciolgono la contraddizione del paper <span class="tag t-evi">evidenza</span></h3>
+<p>La sezione 3.2 del paper si contraddice: «extract <strong>96 dimensional</strong> feature» ma «the convolutional layers have <strong>196 kernels</strong>». Finora avevamo adottato <code>c196_proj96</code> — la lettura in cui entrambe le cifre sono vere — sulla base dei soli vincoli del modello denso. Implementato il modello sparso, i suoi due vincoli separano nettamente le letture:</p>
+<table>
+  <thead><tr><th style="width:32mm">lettura</th><th class="c">DENSO<br>parametri</th><th class="c">DENSO<br>costo</th><th class="c">SPARSO<br>parametri</th><th class="c">SPARSO<br>costo</th><th class="c">errore<br>massimo</th></tr></thead>
+  <tbody>
+    <tr><td><strong><code>c96</code></strong></td><td class="c">+1,6 %</td><td class="c">−18,2 %</td><td class="c">−1,6 %</td><td class="c">−11,8 %</td><td class="c"><strong>18,2 %</strong></td></tr>
+    <tr><td><code>c196_proj96</code></td><td class="c">+2,1 %</td><td class="c">−11,0 %</td><td class="c">−0,8 %</td><td class="c"><strong>+73,1 %</strong></td><td class="c">73,1 %</td></tr>
+  </tbody>
+</table>
+<div class="box info">
+  <p class="box-t">Perché è lo sparso a discriminare, e il denso no</p>
+  <p>La early convolution vale l'<strong>11 % del costo del modello denso</strong> e il <strong>65 % di quello sparso</strong>. La ragione è strutturale: lo sparso scarta quasi tutto il calcolo a valle — 4 token invece di 51 frame — e il front-end diventa il termine dominante.</p>
+  <p>Ne segue che <strong>i due modelli vincolano cose diverse</strong>: i numeri del denso sono dominati dal transformer e fissano <span class="v">d</span> e <span class="v">L</span>, quelli dello sparso sono dominati dal front-end e fissano la lettura dei canali. Usarli insieme è ciò che scioglie l'ambiguità; nessuno dei due da solo ci sarebbe riuscito.</p>
+  <p><strong>Conclusione: «96 dimensional feature» è l'affermazione vera, «196 kernels» è il refuso</strong> — verosimilmente per «96 kernels».</p>
+</div>
+<p><strong>Onestà sul residuo.</strong> Con <code>c96</code> nessun vincolo è centrato: il costo del denso resta a −18,2 %. Ma un sottostimare <em>sistematico</em> su tutti e quattro i vincoli è la firma plausibile di una ricostruzione un filo più leggera dell'originale; un +73 % su un solo modello no. È la differenza fra un errore di scala e un errore di struttura.</p>
+
+<h3>12.8 Verifica dell'implementazione sparsa</h3>
+<table>
+  <thead><tr><th style="width:52mm">Misura</th><th class="c">Nostro</th><th class="c">Paper</th><th class="c">Scarto</th></tr></thead>
+  <tbody>
+    <tr><td>Parametri</td><td class="c">2 822 711</td><td class="c">2,87 M</td><td class="c">−1,6 %</td></tr>
+    <tr><td>Costo</td><td class="c">0,0485 GFLOP</td><td class="c">0,055 G</td><td class="c">−11,8 %</td></tr>
+    <tr><td><code>grid_sample</code> (contato a mano)</td><td class="c">0,29 MFLOP</td><td class="c">—</td><td class="c">0,3 % del totale</td></tr>
+  </tbody>
+</table>
+<p>Il conteggio dei parametri era stato <strong>predetto a −0,8 %</strong> sommando i componenti a mano, prima di scrivere una riga di codice (§8). L'implementazione lo conferma. È l'evidenza più forte che la lettura del metodo sia corretta.</p>
+<p>Nota sul <code>grid_sample</code>: vale lo 0,3 % del totale, quindi il fatto che nessun contatore lo veda è irrilevante <em>numericamente</em>. Resta importante contarlo perché è il meccanismo che si sta difendendo, e ometterlo sarebbe una scorrettezza metodologica anche se innocua.</p>
+
+<h4>Una nostra aggiunta: il limite sul delta logaritmico <span class="tag t-ass">assunzione</span></h4>
+<p>Un test con delta patologici ha mostrato che <code>exp()</code> in float32 esplode oltre ~88, producendo regioni di dimensione infinita o nulla e quindi NaN nel gradiente. Né il paper né SparseFormer prevedono un limite.</p>
+<p>Abbiamo aggiunto <code>MAX_LOG_SCALE = 4</code>, cioè al più 55× di crescita per ripetizione e ~163 000× sulle tre — enormemente più di qualunque variazione sensata per regioni che vivono in [0, 1]. Un test dedicato verifica che <strong>nel regime normale il limite non si attivi mai</strong>, quindi non è una deviazione dal metodo ma una protezione contro la perdita di un run di ore.</p>
+
+<h4>Un dettaglio del contatore di FLOPs</h4>
+<p><code>FlopCounterMode</code> falliva sul modello sparso con un <code>AssertionError</code> opaco: sotto <code>no_grad</code> il suo <code>ModuleTracker</code> non riesce a registrare gli hook su un <code>Parameter</code> espanso, e le regioni iniziali sono esattamente questo. Si conta con il grafo attivo — il risultato non cambia, perché si contano le operazioni del forward.</p>
 
 <h2>13 · Riferimenti</h2>
 

@@ -41,6 +41,7 @@ from src.data.features import LogMelSpectrogram
 from src.data.speech_commands import LABELS
 from src.metrics import classification_summary, print_summary, save_summary
 from src.models.dense import DenseAudioTransformer
+from src.models.sparse_model import SparseAudioTransformer
 from src.tracking import RunTracker
 from src.utils import (
     ModelEMA,
@@ -71,11 +72,24 @@ def build_frontend(cfg: dict[str, Any]) -> LogMelSpectrogram:
     )
 
 
+MODELS = {"dense": DenseAudioTransformer, "sparse": SparseAudioTransformer}
+
+
 def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
+    """Costruisce il modello dalla config, scegliendo su `model.kind`.
+
+    I due modelli espongono la stessa interfaccia — spettrogramma in,
+    logits fuori, piu' `seq_len` e `feature_shape` — quindi il training
+    loop, la valutazione e il contatore di FLOPs non li distinguono. E' il
+    motivo per cui il denso e' stato costruito per primo: quando si arriva
+    allo sparso l'unica variabile nuova e' l'estrattore.
+    """
     m = dict(cfg["model"])
-    m.pop("kind", None)
+    kind = m.pop("kind", "dense")
+    if kind not in MODELS:
+        raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
     pool = m.pop("pool_stride", (2, 2))
-    return DenseAudioTransformer(
+    return MODELS[kind](
         num_classes=cfg["data"]["num_classes"],
         n_mels=n_mels, n_frames=n_frames,
         pool_stride=tuple(pool), **m,

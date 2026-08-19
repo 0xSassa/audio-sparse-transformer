@@ -6,8 +6,8 @@
 # in direzioni opposte:
 #
 #                  parametri              costo
-#   pool_freq   4.899.147  (+2,1 %)   0,5742 GFLOP  (-11,0 %)
-#   flatten     5.221.707  (+8,8 %)   0,6071 GFLOP  ( -5,9 %)
+#   pool_freq   4.875.235  (+1,6 %)   0,5275 GFLOP  (-18,2 %)
+#   flatten     5.197.795  (+8,3 %)   0,5604 GFLOP  (-13,1 %)
 #   dichiarati  4,80 M                0,645  GFLOP
 #
 # La differenza sostanziale non e' pero' nei numeri: e' che `pool_freq`
@@ -21,14 +21,14 @@
 # nostra scelta MENO SICURA di tutta la ricostruzione; questo run la mette
 # alla prova.
 #
-# Primo risultato di riferimento: pool_freq, seed 0, 100 epoche -> 94,67 %
-# di validation contro i 96,67 % dichiarati dal paper (su test).
+# Nota: il primo run di riferimento (94,67 % di validation) usava ancora
+# c196_proj96 e va rifatto con c96 per un confronto controllato.
 
 defaults: base.yaml
 
 model:
   kind: dense
-  channel_reading: c196_proj96
+  channel_reading: c96         # vedi dense.yaml: il 196 e' un refuso
   stem: paper
   num_conv_layers: 1
   norm: layernorm

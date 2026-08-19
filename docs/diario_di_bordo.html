@@ -775,6 +775,30 @@ no      -> go      7        off   -> up     10</pre>
 </div>
 
 <!-- ==================================================================== -->
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Estrattore sparso implementato</p>
+  <p><code>src/models/sparse.py</code> e <code>sparse_model.py</code>: i tre passi del metodo — aggiustamento delle regioni con parametrizzazione Faster R-CNN, campionamento con offset appresi e normalizzazione a tre deviazioni standard, decoding adattivo con M<sub>c</sub> e M<sub>s</sub> generati dal token — più l'assemblaggio con early conv, ponte 64→128 e 8 encoder senza codifica posizionale.</p>
+  <p>Verificato che il gradiente raggiunga <strong>token e regioni iniziali</strong>: se <code>box_init</code> non ricevesse gradiente verrebbe a mancare il meccanismo centrale del paper, quello per cui il modello impara <em>dove</em> guardare.</p>
+  <p>I parametri confermano la predizione fatta prima di implementare: <strong>2 822 711 contro 2,87 M, −1,6 %</strong>. Aggiunti 13 test sull'estrattore; suite a 43.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>I FLOPs dello sparso risolvono la contraddizione «96 vs 196»</p>
+  <pre>                DENSO par.  DENSO cost  SPARSO par.  SPARSO cost  err.max
+c96                  +1,6%      -18,2%       -1,6%       -11,8%     18,2%
+c196_proj96          +2,1%      -11,0%       -0,8%       +73,1%     73,1%</pre>
+  <p>Avevamo scelto <code>c196_proj96</code> sui soli vincoli del denso. Lo sparso la demolisce, e per una ragione strutturale: la early convolution è l'<strong>11 % del costo del denso ma il 65 % dello sparso</strong>, perché scartando il calcolo a valle il front-end diventa il termine dominante.</p>
+  <p><strong>I due modelli vincolano cose diverse</strong> — il denso fissa <em>d</em> e <em>L</em>, lo sparso la lettura dei canali. Nessuno dei due da solo avrebbe sciolto l'ambiguità. «96 dimensional feature» è vero, «196 kernels» è il refuso.</p>
+  <p>Conseguenza: il primo run del denso (94,67 %) usa la lettura superata e <strong>va rifatto con <code>c96</code></strong>, perché il confronto denso-contro-sparso richiede lo stesso front-end.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Due difetti trovati dai test dell'estrattore</p>
+  <p><strong>Overflow di <code>exp()</code>.</strong> Un test con delta patologici ha prodotto regioni di dimensione infinita o nulla: <code>exp()</code> in float32 esplode oltre ~88. Né il paper né SparseFormer prevedono un limite. Aggiunto <code>MAX_LOG_SCALE = 4</code> — al più 55× per ripetizione — con un test che verifica che <strong>nel regime normale non si attivi mai</strong>, quindi è una protezione e non una deviazione. Nel regime normale i delta stanno sotto un quarto del limite.</p>
+  <p><strong>Il contatore di FLOPs falliva.</strong> <code>FlopCounterMode</code> sollevava un <code>AssertionError</code> opaco sul modello sparso: sotto <code>no_grad</code> il suo <code>ModuleTracker</code> non riesce ad agganciare gli hook a un <code>Parameter</code> espanso, e le regioni iniziali sono esattamente questo. Si conta con il grafo attivo.</p>
+</div>
+
+<!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
   <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:52mm">Decisione</th><th>Motivazione</th></tr></thead>

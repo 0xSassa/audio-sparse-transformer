@@ -5,8 +5,8 @@
 # RICOSTRUZIONE, ottenuta cercando fra 432 combinazioni quelle compatibili
 # con quei due numeri. Vedi Manuale_tecnico.pdf, cap. 8.
 #
-#   parametri  4.899.147   dichiarati 4,80 M   ->  +2,1 %
-#   costo      0,574 GFLOP dichiarati 0,645    ->  -11,0 %
+#   parametri  4.875.235   dichiarati 4,80 M   ->  +1,6 %
+#   costo      0,5275 GFLOP dichiarati 0,645   ->  -18,2 %
 #
 # Lo scarto sul costo resta NON SPIEGATO. L'ipotesi degli strati convolutivi
 # aggiuntivi e' stata testata e confutata (2 conv -> +164 %). Il front-end
@@ -19,9 +19,11 @@ model:
   kind: dense
 
   # --- front-end convolutivo ------------------------------------------
-  channel_reading: c196_proj96 # 196 kernel poi proiezione 1x1 a 96: e' la
-                               # lettura in cui ENTRAMBE le cifre contraddittorie
-                               # della sez. 3.2 del paper sono vere
+  channel_reading: c96         # "96 dimensional feature". Il "196 kernels"
+                               # della sez. 3.2 e' un refuso: lo dimostrano i
+                               # FLOPs del modello SPARSO, dove la early conv
+                               # e' il 65% del costo (contro l'11% nel denso)
+                               # e c196_proj96 sbaglia del +73%.
   stem: paper                  # conv 7x7 stride 2 (bias) -> ReLU -> maxpool
   num_conv_layers: 1
   norm: layernorm              # LayerNorm sui canali DOPO il pooling,

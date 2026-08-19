@@ -473,3 +473,209 @@ def test_ema_moves_towards_model_and_lags_it():
     assert not torch.allclose(after, start)
     # ...ma di 1 - decay, non fino in fondo: e' il senso della media mobile
     assert torch.allclose(after, start + 0.1, atol=1e-6)
+
+
+# ==========================================================================
+# Estrattore sparso — il metodo di Kavaki & Mandel
+# ==========================================================================
+
+ADOPTED_SPARSE = {"channel_reading": "c96", "stem": "paper", "pool_stride": (2, 1)}
+
+
+def test_boxes_round_trip():
+    """(x1,y1,x2,y2) <-> (centro, dimensione) senza perdite."""
+    from src.models.sparse import boxes_to_cwh, cwh_to_boxes
+
+    boxes = torch.tensor([[0.1, 0.2, 0.7, 0.9], [0.0, 0.0, 1.0, 1.0]])
+    center, size = boxes_to_cwh(boxes)
+    assert torch.allclose(cwh_to_boxes(center, size), boxes, atol=1e-6)
+
+
+def test_grid_init_covers_the_plane_and_rejects_non_squares():
+    """Le regioni iniziali coprono [0,1]^2 su una griglia sqrt(N) x sqrt(N).
+
+    Il vincolo sul quadrato perfetto non e' nostro: discende dalla griglia,
+    ed e' il motivo per cui l'ablation del paper usa 4, 9, 16, 25, 36.
+    """
+    from src.models.sparse import init_boxes_on_grid
+
+    boxes = init_boxes_on_grid(4, unit=0.5)
+    assert boxes.shape == (4, 4)
+    assert float(boxes.min()) == 0.0 and float(boxes.max()) == 1.0
+    # quattro quadranti, ciascuno di lato 0.5
+    _, size = __import__("src.models.sparse", fromlist=["boxes_to_cwh"]).boxes_to_cwh(boxes)
+    assert torch.allclose(size, torch.full((4, 2), 0.5), atol=1e-6)
+
+    for bad in (2, 5, 10):
+        with pytest.raises(ValueError, match="quadrato perfetto"):
+            init_boxes_on_grid(bad)
+
+
+def test_region_adjust_starts_from_the_identity():
+    """A pesi inizializzati a zero le regioni non si muovono.
+
+    Serve: le regioni iniziali sono su una griglia scelta con cura, e farle
+    schizzare via alla prima iterazione sprecherebbe quell'inizializzazione.
+    """
+    from src.models.sparse import RegionAdjust, init_boxes_on_grid
+
+    adj = RegionAdjust(64)
+    boxes = init_boxes_on_grid(4).unsqueeze(0)
+    out = adj(torch.randn(1, 4, 64), boxes)
+    assert torch.allclose(out, boxes, atol=1e-6)
+
+
+def test_region_adjust_survives_pathological_deltas():
+    """Positivita' E finitezza anche con delta assurdi.
+
+    La forma w*exp(t) garantisce w > 0 per costruzione — e' la ragione per
+    cui il paper la preferisce a w+t, che richiederebbe un clamp capace di
+    azzerare il gradiente. Ma exp() in float32 esplode oltre ~88, e senza
+    limite sul delta logaritmico si otterrebbero regioni di dimensione inf
+    o 0, quindi NaN nel gradiente.
+
+    Il limite MAX_LOG_SCALE e' una NOSTRA aggiunta, non prevista dal paper
+    ne' da SparseFormer, ed e' verificato piu' sotto che non si attiva mai
+    nel regime normale.
+    """
+    from src.models.sparse import RegionAdjust, boxes_to_cwh, init_boxes_on_grid
+
+    torch.manual_seed(0)
+    adj = RegionAdjust(64)
+    torch.nn.init.normal_(adj.to_delta.weight, std=3.0)   # delta patologici
+    torch.nn.init.normal_(adj.to_delta.bias, std=3.0)
+    boxes = init_boxes_on_grid(4).unsqueeze(0).expand(16, -1, -1)
+    out = adj(torch.randn(16, 4, 64) * 3.0, boxes)
+    _, size = boxes_to_cwh(out)
+    assert (size > 0).all(), "regioni degenerate: exp e' andato a zero"
+    assert torch.isfinite(out).all(), "regioni infinite: exp e' esploso"
+
+
+def test_region_clamp_never_binds_in_the_normal_regime():
+    """La rete di sicurezza non deve alterare il modello quando serve.
+
+    Con l'inizializzazione reale (to_delta a zero) e token di scala normale
+    i delta restano molto lontani dal limite: il clamp e' inerte, quindi
+    non e' una deviazione dal metodo ma solo una protezione.
+    """
+    from src.models.sparse import RegionAdjust
+
+    torch.manual_seed(0)
+    adj = RegionAdjust(64)                     # inizializzazione reale: zeri
+    delta = adj.to_delta(torch.randn(256, 4, 64))
+    assert float(delta[..., 2:].abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
+
+
+def test_sampler_shapes_and_three_sigma_normalisation():
+    """[B,N,P,C] in uscita, e i punti cadono quasi tutti dentro la regione.
+
+    Gli offset vengono standardizzati sull'asse dei P punti e divisi per 3:
+    dopo, la deviazione vale 1/3, quindi per una distribuzione quasi normale
+    circa il 99,7% della massa sta in [-1,1], cioe' dentro la regione.
+    """
+    from src.models.sparse import SparseSampler, init_boxes_on_grid
+
+    torch.manual_seed(0)
+    sampler = SparseSampler(64, 36)
+    boxes = init_boxes_on_grid(4).unsqueeze(0).expand(8, -1, -1)
+    feats = torch.randn(8, 96, 16, 51)
+    out = sampler(torch.randn(8, 4, 64), boxes, feats)
+    assert out.shape == (8, 4, 36, 96)
+    assert torch.isfinite(out).all()
+
+    # gli offset normalizzati devono avere deviazione ~1/3 sull'asse dei punti
+    off = sampler.to_offsets(sampler.norm(torch.randn(64, 4, 64)))
+    off = off.view(64, 4, 36, 2)
+    off = (off - off.mean(-2, keepdim=True)) / (3 * (off.std(-2, keepdim=True) + 1e-7))
+    assert abs(float(off.std(dim=-2).mean()) - 1 / 3) < 0.02
+    assert float((off.abs() <= 1.0).float().mean()) > 0.95
+
+
+def test_decoder_update_is_residual():
+    """t' = t + Linear(...): il token accumula, non viene riscritto."""
+    from src.models.sparse import AdaptiveDecoder
+
+    dec = AdaptiveDecoder(64, 96, 36)
+    torch.nn.init.zeros_(dec.out.weight)
+    torch.nn.init.zeros_(dec.out.bias)
+    tokens = torch.randn(4, 4, 64)
+    out = dec(tokens, torch.randn(4, 4, 36, 96))
+    assert torch.allclose(out, tokens, atol=1e-6)
+
+
+def test_extractor_learns_where_to_look():
+    """Il gradiente raggiunge token E regioni iniziali.
+
+    Se `box_init` non ricevesse gradiente, il modello non imparerebbe DOVE
+    guardare — cioe' verrebbe a mancare il meccanismo centrale del paper.
+    """
+    from src.models.sparse import SparseFeatureExtractor
+
+    ex = SparseFeatureExtractor(num_tokens=4, num_points=36, token_dim=64,
+                                channels=96, repeats=3)
+    out = ex(torch.randn(2, 96, 16, 51))
+    assert out.shape == (2, 4, 64)
+    out.sum().backward()
+    assert ex.token_init.grad is not None and ex.token_init.grad.abs().sum() > 0
+    assert ex.box_init.grad is not None and ex.box_init.grad.abs().sum() > 0
+
+
+def test_sparse_model_matches_the_declared_budget():
+    """Guardia di regressione sui due vincoli dichiarati dal paper.
+
+    2,87 M parametri e 0,055 G FLOPs. I parametri erano stati PREDETTI a
+    -0,8% prima di implementare; i FLOPs sono il terzo vincolo indipendente
+    e sono cio' che ha sciolto la contraddizione "96 vs 196 kernels".
+    """
+    from src.flops import analyze
+    from src.models.sparse_model import SparseAudioTransformer
+
+    model = SparseAudioTransformer(**ADOPTED_SPARSE)
+    assert model.seq_len == 4
+    assert model.feature_shape.channels == 96
+
+    rep = analyze(model, (1, 64, 101))
+    assert abs(rep.params - 2.87e6) / 2.87e6 < 0.05
+    assert abs(rep.native_flops - 0.055e9) / 0.055e9 < 0.20
+
+
+def test_c196_would_blow_the_sparse_cost():
+    """La lettura scartata sbaglia il costo dello sparso di oltre il 50%.
+
+    Documenta l'evidenza che ha risolto la contraddizione del paper: nel
+    modello sparso la early convolution e' il 65% del costo, quindi i suoi
+    FLOPs discriminano fra le due letture molto piu' di quelli del denso.
+    """
+    from src.flops import analyze
+    from src.models.sparse_model import SparseAudioTransformer
+
+    bad = analyze(SparseAudioTransformer(channel_reading="c196_proj96",
+                                         stem="paper", pool_stride=(2, 1)),
+                  (1, 64, 101))
+    assert (bad.native_flops - 0.055e9) / 0.055e9 > 0.5
+
+
+def test_sparse_model_is_batch_independent():
+    from src.models.sparse_model import SparseAudioTransformer
+
+    torch.manual_seed(0)
+    model = SparseAudioTransformer(**ADOPTED_SPARSE)
+    spec = torch.randn(4, 1, 64, 101)
+    with torch.no_grad():
+        model.train()
+        a = model(spec)
+        model.eval()
+        b = model(spec)
+    assert torch.equal(a, b)
+
+
+def test_sampling_trace_shows_three_stages():
+    """La traccia serve a riprodurre la Figura 2 del paper."""
+    from src.models.sparse_model import SparseAudioTransformer
+
+    model = SparseAudioTransformer(**ADOPTED_SPARSE).eval()
+    trace = model.sampling_trace(torch.randn(1, 1, 64, 101))
+    assert len(trace) == 3
+    for stage in trace:
+        assert stage["boxes"].shape == (1, 4, 4)
+        assert stage["tokens"].shape == (1, 4, 64)
