@@ -80,7 +80,7 @@
   <h1>Diario di bordo</h1>
   <p class="sub">Progetto d'esame — riproduzione di <em>Audio Sparse-Transformer</em> (Kavaki &amp; Mandel, ICASSP 2025)</p>
   <p class="sub" style="font-size:9.6pt">B031278 Deep Learning, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Ultimo aggiornamento: 19 agosto 2026</p>
+  <p class="meta">Ultimo aggiornamento: 20 agosto 2026</p>
 </header>
 
 <div class="box info">
@@ -796,6 +796,43 @@ c196_proj96          +2,1%      -11,0%       -0,8%       +73,1%     73,1%</pre>
   <p class="entry-h"><span class="tag t-err">errore</span>Due difetti trovati dai test dell'estrattore</p>
   <p><strong>Overflow di <code>exp()</code>.</strong> Un test con delta patologici ha prodotto regioni di dimensione infinita o nulla: <code>exp()</code> in float32 esplode oltre ~88. Né il paper né SparseFormer prevedono un limite. Aggiunto <code>MAX_LOG_SCALE = 4</code> — al più 55× per ripetizione — con un test che verifica che <strong>nel regime normale non si attivi mai</strong>, quindi è una protezione e non una deviazione. Nel regime normale i delta stanno sotto un quarto del limite.</p>
   <p><strong>Il contatore di FLOPs falliva.</strong> <code>FlopCounterMode</code> sollevava un <code>AssertionError</code> opaco sul modello sparso: sotto <code>no_grad</code> il suo <code>ModuleTracker</code> non riesce ad agganciare gli hook a un <code>Parameter</code> espanso, e le regioni iniziali sono esattamente questo. Si conta con il grafo attivo.</p>
+</div>
+
+<!-- ==================================================================== -->
+<h2 class="brk">Giorno 5 — giovedì 20 agosto 2026</h2>
+<p class="meta" style="margin-bottom:4mm">Primo addestramento del modello sparso.</p>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Il modello sparso non parte in determinismo stretto</p>
+  <pre>RuntimeError: grid_sampler_2d_backward_cuda does not have a deterministic
+implementation, but you set 'torch.use_deterministic_algorithms(True)'</pre>
+  <p>Non un difetto nostro: <strong><code>grid_sample</code>, il meccanismo centrale del paper, non ha un backward deterministico su CUDA</strong>. Il gradiente accumula i contributi dei P punti campionati con <code>atomicAdd</code>, e l'ordine delle somme in virgola mobile varia fra esecuzioni.</p>
+  <p><strong>La scelta di far fallire invece di avvisare ha pagato.</strong> Avevamo messo <code>warn_only=False</code> ragionando che fosse «meglio non partire che scoprire dopo due ore che la garanzia non valeva»: con <code>warn_only=True</code> il run sarebbe partito, avrebbe stampato un avviso perso fra migliaia di righe, e avremmo creduto bit-riproducibili dei risultati che non lo erano.</p>
+  <p>Risolto rilassando a <code>warn_only</code> <em>solo</em> per lo sparso, deciso da <code>model.kind</code>: tutto ciò che può restare deterministico lo resta. Il livello effettivo finisce nel <code>summary.json</code>.</p>
+  <p><strong>Per l'orale</strong>: il metodo proposto è intrinsecamente meno riproducibile del proprio baseline. Rende l'ablation a singolo seed della Tabella 3 ancora più fragile — gli autori non potevano avere run bit-riproducibili nemmeno volendo.</p>
+</div>
+
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Diagnostica sul movimento delle regioni</p>
+  <p>Il rischio silenzioso del metodo è che le regioni non si muovano: il modello degraderebbe a campionamento fisso, si addestrerebbe comunque e produrrebbe un numero plausibile <strong>senza che nulla nei log lo segnali</strong>.</p>
+  <p>Aggiunte due misure gratuite per epoca: <code>region_init_drift</code> (spostamento delle regioni apprese dalla griglia) e <code>region_adjust_norm</code> (norma dei pesi dell'aggiustamento per-campione, che partono da <em>esattamente</em> zero). Entrambe nulle stampano <code>&lt;-- MECCANISMO INERTE</code>.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Smoke dello sparso: il meccanismo è vivo</p>
+  <pre>epoca 1/2  loss 0.2140  val(EMA) 35,65%   spostamento 0,0165  |W_adjust| 4,3160
+epoca 2/2  loss 0.1684  val(EMA) 50,59%   spostamento 0,0165  |W_adjust| 4,3445</pre>
+  <p><code>|W_adjust|</code> passa da <strong>esattamente zero a 4,32</strong> dopo una sola epoca: il ramo di aggiustamento riceve gradiente e sta imparando. Era il rischio numero uno del progetto ed è escluso.</p>
+  <p>Lo spostamento identico fra le due epoche non è un problema: con <code>--epochs 2</code> one-cycle comprime tutto lo schedule e alla seconda epoca il learning rate è 1,3·10⁻⁹.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Il modello che costa un decimo in FLOPs è più lento del 20 %</p>
+  <pre>denso    0,5275 GFLOP    65 s/epoca    1.087 MB
+sparso   0,0485 GFLOP    78 s/epoca      596 MB
+         -91% di FLOPs   +20% di tempo   -45% di memoria</pre>
+  <p>È la <strong>quarta misura indipendente</strong> che converge sulla stessa spiegazione: il carico è limitato dal lancio dei kernel, non dall'aritmetica. L'estrattore sparso sostituisce pochi grandi prodotti matriciali con moltissime operazioni minuscole, e ogni lancio CUDA costa più del calcolo che esegue.</p>
+  <p>Non invalida il paper — la riduzione di FLOPs è reale, e su un acceleratore per edge device il profilo di costo può essere diverso — ma <strong>qualifica il claim in modo sostanziale</strong>, con una misura fatta sui due modelli del paper stesso. La riduzione di memoria invece si traduce direttamente.</p>
 </div>
 
 <!-- ==================================================================== -->

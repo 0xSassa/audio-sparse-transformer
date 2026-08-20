@@ -76,12 +76,48 @@ class SparseAudioTransformer(nn.Module):
         self.encoder = TransformerEncoder(dim, depth, num_heads, ffn_ratio, dropout)
         self.head = nn.Linear(dim, num_classes)
 
+        # copia immutabile della griglia iniziale, per misurare quanto le
+        # regioni si sono spostate durante il training (vedi `diagnostics`).
+        # E' un buffer non persistente: non finisce nei checkpoint e non
+        # sporca lo state_dict.
+        self.register_buffer("_box_init_0", self.extractor.box_init.detach().clone(),
+                             persistent=False)
+
     def forward(self, spec: torch.Tensor) -> torch.Tensor:
         """spec [B, 1, n_mels, n_frames] -> logits [B, num_classes]."""
         features = self.frontend(spec)
         tokens = self.extractor(features)
         tokens = self.encoder(self.bridge(tokens))
         return self.head(tokens.mean(dim=1))
+
+    @torch.no_grad()
+    def diagnostics(self) -> dict[str, float]:
+        """Il meccanismo centrale del paper sta funzionando?
+
+        Il rischio silenzioso di questo metodo e' che le regioni NON si
+        muovano: il gradiente rispetto alle coordinate e' una differenza
+        finita fra celle adiacenti, e se non porta segnale utile le regioni
+        restano dove la griglia le ha messe. Il modello si addestrerebbe
+        comunque — degradando a un campionamento fisso — e produrrebbe un
+        numero plausibile senza che nulla nei log lo segnali.
+
+        Due misure, entrambe gratuite (nessun forward):
+
+        `region_init_drift` — quanto le regioni APPRESE si sono spostate
+            dalla griglia iniziale. Zero significa che il modello non ha
+            imparato dove guardare.
+
+        `region_adjust_norm` — norma dei pesi che generano l'aggiustamento
+            per-campione. Partono da ESATTAMENTE zero (inizializzazione
+            all'identita'), quindi qualunque valore > 0 dice che il ramo di
+            aggiustamento sta ricevendo gradiente e imparando.
+
+        Entrambe a zero dopo qualche epoca = il meccanismo e' morto.
+        """
+        drift = (self.extractor.box_init - self._box_init_0).norm(dim=-1).mean()
+        adjust = sum(float(s["adjust"].to_delta.weight.abs().sum())
+                     for s in self.extractor.stages)
+        return {"region_init_drift": float(drift), "region_adjust_norm": adjust}
 
     @torch.no_grad()
     def sampling_trace(self, spec: torch.Tensor) -> list[dict]:

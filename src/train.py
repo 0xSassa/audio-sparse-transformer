@@ -289,7 +289,17 @@ def main() -> int:
     deterministic = (cfg.get("deterministic", False) if args.deterministic is None
                      else args.deterministic)
     cfg["deterministic"] = deterministic
-    seed_everything(args.seed, deterministic=deterministic)
+
+    # Il modello sparso usa `grid_sample`, il cui backward su CUDA non ha
+    # implementazione deterministica: in modalita' stretta PyTorch solleva un
+    # errore invece di procedere. Si rilassa a `warn_only` SOLO per lui, e lo
+    # si dichiara: tutto cio' che puo' restare deterministico lo resta, e il
+    # livello ottenuto finisce nel summary, cosi' un run non bit-riproducibile
+    # non si spaccia per tale.
+    needs_relaxed = cfg["model"].get("kind") == "sparse"
+    determinism = seed_everything(args.seed, deterministic=deterministic,
+                                  warn_only=needs_relaxed)
+    cfg["determinism_level"] = determinism
 
     tag = args.tag or f"{args.config.stem}_seed{args.seed}"
     run_dir = ROOT / cfg["log"]["dir"] / tag
@@ -344,7 +354,9 @@ def main() -> int:
           f"val {len(val_loader.dataset):,} · batch {batch}")
     print(f"training     : {epochs} epoche · lr max {cfg['optim']['lr']} · "
           f"EMA {cfg['optim']['ema_decay']} · augment {cfg['augment']['names']}")
-    print(f"riproducibile: deterministic={deterministic} · amp={cfg['optim']['amp']}")
+    note = {"strict": "bit-riproducibile", "warn_only": "grid_sample non deterministico",
+            "off": "non riproducibile"}[determinism]
+    print(f"riproducibile: determinismo={determinism} ({note}) · amp={cfg['optim']['amp']}")
     print()
 
     start_epoch, best_acc = 1, 0.0
@@ -404,8 +416,17 @@ def main() -> int:
               f"val(EMA) {100*ev_ema['accuracy']:.2f}%  "
               f"val(raw) {100*ev_raw['accuracy']:.2f}%  {tr['seconds']:.0f}s{mark}")
 
+        # diagnostiche specifiche del modello (per lo sparso: le regioni si
+        # stanno muovendo?). Gratuite, e l'unico modo di accorgersi che il
+        # meccanismo centrale del paper e' inerte.
+        diag = model.diagnostics() if hasattr(model, "diagnostics") else {}
+        if diag:
+            inerte = "   <-- MECCANISMO INERTE" if diag["region_adjust_norm"] == 0 else ""
+            print(f"           regioni: spostamento {diag['region_init_drift']:.4f}  "
+                  f"|W_adjust| {diag['region_adjust_norm']:.4f}{inerte}")
+
         tracker.log(epoch, {
-            **tr,
+            **tr, **diag,
             "val_accuracy_ema": ev_ema["accuracy"],
             "val_accuracy_raw": ev_raw["accuracy"],
             "val_loss_ema": ev_ema["loss"],
@@ -448,7 +469,7 @@ def main() -> int:
         seq_len=model.seq_len,
         gflops=cost.native_flops / 1e9,
         gmacs=(cost.fvcore_macs / 1e9) if cost.fvcore_macs else None,
-        provenance=prov,
+        provenance=prov, determinism=determinism,
     )
     if cfg["log"].get("wandb", {}).get("log_checkpoints", False):
         tracker.save_artifact(ckpt_best)

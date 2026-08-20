@@ -11,28 +11,51 @@ from typing import Any
 import numpy as np
 import torch
 
+# Operazioni senza implementazione deterministica su CUDA che il progetto
+# usa davvero. `grid_sample` e' il campionamento bilineare del modello
+# sparso: il suo backward accumula con atomicAdd, e l'ordine delle somme in
+# virgola mobile varia fra esecuzioni.
+NONDETERMINISTIC_OPS = {"sparse": ("grid_sampler_2d_backward_cuda",)}
 
-def seed_everything(seed: int, *, deterministic: bool = False) -> None:
-    """Fissa i seed. `deterministic=True` costa velocita' ma rende i run ripetibili.
 
-    Nota per l'orale: anche con lo stesso seed, kernel cuDNN non deterministici
-    producono run diversi. Per questo si riportano media e deviazione standard
-    su >= 3 seed, non un singolo numero.
+def seed_everything(seed: int, *, deterministic: bool = False,
+                    warn_only: bool = False) -> str:
+    """Fissa i seed. Ritorna il livello di determinismo effettivamente ottenuto.
+
+    `deterministic=True` costa velocita' ma rende i run ripetibili.
+
+    IL CASO DEL MODELLO SPARSO. `grid_sampler_2d_backward_cuda` non ha una
+    implementazione deterministica: il backward dell'interpolazione bilineare
+    accumula i contributi dei punti campionati con atomicAdd, e l'ordine delle
+    somme in virgola mobile cambia da un'esecuzione all'altra. Con
+    `warn_only=False` PyTorch solleva un errore invece di procedere — ed e'
+    esattamente cosi' che vogliamo scoprirlo, ma significa che il modello
+    sparso NON PUO' essere addestrato in determinismo stretto su GPU.
+
+    `warn_only=True` e' la risposta giusta e non una rinuncia: ogni operazione
+    che PUO' essere deterministica lo resta, e solo `grid_sample` ricade nel
+    comportamento non deterministico, con un avviso. Il livello ottenuto viene
+    restituito e registrato accanto ai risultati, cosi' un run non
+    bit-riproducibile non si spaccia per tale.
+
+    Osservazione che vale per l'orale: il metodo del paper e' INTRINSECAMENTE
+    meno riproducibile del suo baseline denso, perche' il suo meccanismo
+    centrale ha un backward non deterministico. Rende l'ablation a singolo
+    seed della Tabella 3 ancora meno solida di quanto gia' sospettassimo.
     """
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    if deterministic:
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        # warn_only=False: un'operazione non deterministica diventa un
-        # ERRORE invece di un avviso che scorre nei log. Meglio non partire
-        # che scoprire dopo 2 ore che la garanzia non valeva.
-        torch.use_deterministic_algorithms(True, warn_only=False)
-    else:
+    if not deterministic:
         torch.backends.cudnn.benchmark = True
+        return "off"
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True, warn_only=warn_only)
+    return "warn_only" if warn_only else "strict"
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
