@@ -836,6 +836,19 @@ sparso   0,0485 GFLOP    78 s/epoca      596 MB
 </div>
 
 <!-- ==================================================================== -->
+<div class="entry doc">
+  <p class="entry-h"><span class="tag t-doc">artefatto</span>Manuale completato: le quattro lacune chiuse</p>
+  <p>Revisione sistematica del manuale contro il contenuto reale del progetto. Quattro lacune, di cui una seria:</p>
+  <ul>
+    <li><strong>EAT aveva un solo paragrafo</strong>, pur essendo uno dei <em>due</em> paper assegnati. Nuovo §1.4 che lo copre per intero: la tesi end-to-end contro le rappresentazioni tempo-frequenza, l'architettura con le due varianti, il contributo vero (le augmentation), i risultati riportati, e il suo doppio ruolo nel nostro progetto — fonte della ricetta di training e riferimento citato ma non rimisurato.</li>
+    <li><strong>Mancava il contesto della letteratura</strong>, che la presentazione richiede esplicitamente. Nuovo §1.5 con KWT, AST, HTS-AT, EAT-S e SimPF: cosa fa ciascuno e dove si colloca la proposta. Il punto chiave è che tutti processano l'audio in modo denso e uniforme, e il paper rompe lo schema decidendo <em>a priori</em> dove guardare invece di ridurre a posteriori.</li>
+    <li><strong>Il §10 documentava 11 file su 19.</strong> Mancavano l'estrattore sparso, il modello sparso, le metriche, il tracciamento, gli script e — non banale — <code>src/__init__.py</code>, che non è vuoto e imposta <code>CUBLAS_WORKSPACE_CONFIG</code> prima di qualunque import di torch.</li>
+    <li><strong>Numerazioni rotte</strong>: due sezioni erano entrambe «10.10», e il capitolo 11 aveva la catena <code>11.3-bis / ter / quater / quinquies / sexies</code>, impossibile da citare. Rinumerato in 11.1–11.10.</li>
+  </ul>
+  <p>Manuale alla v1.6.</p>
+</div>
+
+<!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
   <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:52mm">Decisione</th><th>Motivazione</th></tr></thead>

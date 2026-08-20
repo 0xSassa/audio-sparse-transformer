@@ -80,12 +80,13 @@
   <h1>Manuale tecnico</h1>
   <p class="sub">Riproduzione di <em>Audio Sparse-Transformer for Speech Classification</em><br>Kavaki &amp; Mandel, ICASSP 2025</p>
   <p class="sub" style="font-size:9.8pt">Progetto d'esame — B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Versione 1.5 — 20 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
+  <p class="meta">Versione 1.6 — 20 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
   <em>v1.1: consultato il codice di SparseFormer e di EAT. Corrette le formule di <code>mixing</code> e <code>phasemix</code>, la sequenza dello stem e il default della normalizzazione; risolte la formula degli offset e l'inizializzazione a griglia.<br>
   v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.<br>
   v1.3: nuovo capitolo 12 con il primo run completo (94,67 %), la saturazione della curva ben prima delle 100 epoche, il comportamento dell'EMA lungo lo schedule e il profilo fonologico degli errori; corretta l'osservazione sulla norma del gradiente.<br>
   v1.4: implementato l'estrattore sparso; i suoi FLOPs sciolgono la contraddizione «96 vs 196 kernels» a favore di <code>c96</code> (§12.7-12.8).<br>
-  v1.5: il metodo sparso non è deterministico su GPU (§12.9); diagnostica sul movimento delle regioni (§12.10); il guadagno in FLOPs non si traduce in velocità (§12.11).</em></p>
+  v1.5: il metodo sparso non è deterministico su GPU (§12.9); diagnostica sul movimento delle regioni (§12.10); il guadagno in FLOPs non si traduce in velocità (§12.11).<br>
+  v1.6: EAT documentato per intero (§1.4) e panorama della letteratura su Speech Commands (§1.5); §10 completato con tutti i moduli e script; rinumerate le sezioni del cap. 11.</em></p>
 </header>
 
 <div class="box info" style="margin-top:6mm">
@@ -98,7 +99,7 @@
 
 <h4>Indice</h4>
 <ol class="toc">
-  <li>Il problema e l'inquadramento <span class="s">— keyword spotting, i due paper, la catena di ancestors</span></li>
+  <li>Il problema e l'inquadramento <span class="s">— keyword spotting, i due paper assegnati, EAT in dettaglio, il panorama su Speech Commands, la catena di ancestors</span></li>
   <li>Dalla forma d'onda allo spettrogramma <span class="s">— STFT, scala mel, logaritmo, normalizzazione</span></li>
   <li>Il transformer <span class="s">— attenzione, scaling, complessità, pre-norm, codifica posizionale</span></li>
   <li>Convoluzione e early convolution <span class="s">— aritmetica, campo recettivo, perché serve</span></li>
@@ -107,7 +108,7 @@
   <li>Il metodo sparso, per intero <span class="s">— regioni, campionamento, decoding adattivo</span></li>
   <li>La ricostruzione del modello denso <span class="s">— vincoli numerici, ricerca, risultati</span></li>
   <li>Catalogo delle assunzioni <span class="s">— ognuna con la sua evidenza</span></li>
-  <li>Il codice, file per file</li>
+  <li>Il codice, file per file <span class="s">— tutti i 19 moduli e script</span></li>
   <li>Protocollo sperimentale e misura</li>
   <li><strong>Risultati</strong> <span class="s">— primo run completo, saturazione della curva, profilo degli errori</span></li>
   <li>Riferimenti</li>
@@ -142,7 +143,69 @@
 </table>
 <p>Leggere SparseFormer non è opzionale: le cinque pagine ICASSP comprimono in tre formule ciò che lì è esposto per esteso.</p>
 
-<h3>1.4 Il codice di riferimento: cosa abbiamo consultato, e per cosa</h3>
+<h3>1.4 EAT in dettaglio — l'altro paper assegnato</h3>
+<p>EAT è assegnato allo stesso titolo di Kavaki &amp; Mandel, e all'esame va saputo per intero, non solo come fornitore di augmentation. La sua tesi è <strong>opposta</strong> a quella del filone dominante, ed è questo che lo rende interessante da mettere accanto all'altro.</p>
+
+<h4>La tesi: end-to-end contro rappresentazioni tempo-frequenza</h4>
+<p>Il riconoscimento audio si basa quasi ovunque sul trasformare il segnale in uno spettrogramma mel e poi trattarlo come un'immagine. EAT rifiuta questo passaggio e opera sulla <strong>forma d'onda grezza</strong>, con due argomenti:</p>
+<ul>
+  <li>il mel-spettrogramma «comes at the cost of having to carefully adjust the parameters for time-frequency resolution and compression» — cioè introduce iperparametri che vanno tarati per ogni compito, ed è esattamente il problema in cui ci siamo imbattuti noi (§2.5, dove il paper sparso non li dichiara affatto);</li>
+  <li>l'assenza di pre-processing «streamlines the system, by requiring fewer parameters to tune, and facilitates shifting between tasks with distinct signal content».</li>
+</ul>
+<p>EAT riconosce però che i sistemi basati su mel <em>vincono empiricamente</em>, e cita una comparazione sistematica fra rappresentazioni che ne deduce la superiorità. La sua scommessa è che il divario si possa colmare con architettura e augmentation invece che con la rappresentazione.</p>
+
+<h4>L'architettura</h4>
+<p>Stack di convoluzioni 1D sulla forma d'onda — depth-wise con kernel lunghi sull'asse temporale, poi 1×1 channel-wise, filtro passa-basso fisso, downsampling di un fattore ≈256 — seguito da un encoder transformer e da una testa lineare. Due varianti:</p>
+<table>
+  <thead><tr><th>Variante</th><th class="c">Canali</th><th class="c">Layer / teste</th><th class="c">Embedding</th><th class="c">Parametri</th></tr></thead>
+  <tbody>
+    <tr><td><strong>EAT-S</strong></td><td class="c">16</td><td class="c">4 / 8</td><td class="c">128</td><td class="c">5,3 M</td></tr>
+    <tr><td>EAT-M</td><td class="c">32</td><td class="c">6 / 16</td><td class="c">256</td><td class="c">25,5 M</td></tr>
+  </tbody>
+</table>
+<p>La struttura è concettualmente parallela a quella di Kavaki &amp; Mandel — front-end convolutivo più transformer — ma il front-end lavora in una dimensione invece che in due, e sostituisce lo spettrogramma invece di prepararlo.</p>
+
+<h4>Il contributo vero: le augmentation</h4>
+<p>Il paper è esplicito nel collocare qui il proprio contributo, non nell'architettura. Due famiglie:</p>
+<ul>
+  <li><strong>Label-mixing</strong> — <em>mixup</em> (che è in realtà il between-class learning di Tokozume et al., §6.3.1), <em>FreqMix</em> (scambio di bin FFT fra due campioni a un cutoff), <em>PhaseMix</em> (§6.3.2), <em>TimeMix/CutMix</em> in versione 1D;</li>
+  <li><strong>Label-preserving</strong> — gain, rumore bianco e colorato, time shift, filtraggio, inversione di polarità, time masking, quantizzazione, resampling.</li>
+</ul>
+<p>Kavaki &amp; Mandel ne adottano <strong>due sole</strong> — <em>mixing</em> e <em>phasemix</em> — insieme all'intera ricetta di ottimizzazione: stesso AdamW con β=(0,9 · 0,99), stesso lr 3·10⁻⁴, stesso one-cycle, stesso weight decay 10⁻⁵, stesso EMA 0,995. È questa aderenza che ci ha autorizzato a ricavare da EAT i dettagli che il paper sparso tace (§5.2, §5.3, §6.3).</p>
+
+<h4>Risultati riportati</h4>
+<table>
+  <thead><tr><th>Dataset</th><th>Modello</th><th class="c">Risultato</th></tr></thead>
+  <tbody>
+    <tr><td>ESC-50 (from scratch)</td><td>EAT-S</td><td class="c">92,15 %</td></tr>
+    <tr><td>ESC-50 (pretrain AudioSet)</td><td>EAT-M</td><td class="c">96,3 %</td></tr>
+    <tr><td>UrbanSound8K (from scratch)</td><td>EAT-S</td><td class="c">85,5 %</td></tr>
+    <tr><td><strong>Speech Commands</strong></td><td><strong>EAT-S</strong></td><td class="c"><strong>98,15 %</strong></td></tr>
+    <tr><td>AudioSet</td><td>EAT-M</td><td class="c">42,6 mAP</td></tr>
+  </tbody>
+</table>
+<div class="box info">
+  <p class="box-t">Il ruolo di EAT nel nostro progetto</p>
+  <p>Kavaki &amp; Mandel lo usano come <strong>termine di paragone citato</strong>, non rimisurato: il 98,15 % e gli 0,373 G di EAT-S nella loro Tabella 2 vengono dal paper di EAT, non da un loro esperimento. Per noi EAT è quindi <strong>due cose</strong>: la fonte della ricetta di training e delle augmentation, e il riferimento di alto livello contro cui il metodo sparso si posiziona.</p>
+  <p>Riprodurre EAT non è richiesto ed è classificato come opzionale nel piano. L'unica ragione per farlo sarebbe rimisurare i suoi 0,373 G col <em>nostro</em> contatore, per confrontarsi con EAT-S senza mescolare convenzioni — ma quella calibrazione l'abbiamo già ottenuta per altra via (§8.4).</p>
+</div>
+
+<h3>1.5 Il panorama su Speech Commands</h3>
+<p>La presentazione richiede di «introduce and motivate the problem being addressed in the context of the relevant literature». Questi sono i modelli che il paper cita, e cosa fa ciascuno:</p>
+<table>
+  <thead><tr><th style="width:26mm">Modello</th><th style="width:44mm">Come tratta l'audio</th><th class="c">Acc.</th><th class="c">Params</th><th>Nota</th></tr></thead>
+  <tbody>
+    <tr><td><strong>KWT</strong><br>Berg 2021</td><td>Patch di mel-spettrogramma <em>non sovrapposti</em>, alla ViT, con class embedding</td><td class="c">97,7 %</td><td class="c">—</td><td>Il più vicino al nostro compito: keyword spotting con transformer</td></tr>
+    <tr><td><strong>AST</strong><br>Gong 2021</td><td>Patch 16×16 <em>sovrapposti</em> di spettrogramma 2D</td><td class="c">98,1 %</td><td class="c">—</td><td>Il migliore, ma con <strong>pretraining ImageNet</strong> e augmentation pesanti</td></tr>
+    <tr><td><strong>HTS-AT</strong><br>Chen 2022</td><td>Patch con struttura <em>gerarchica</em>: i token si riducono di 2<sup><span class="v">i</span>−1</sup> per encoder</td><td class="c">98,0 %</td><td class="c">28,8 M</td><td>Riduce token progressivamente, ma resta grande e costoso</td></tr>
+    <tr><td><strong>EAT-S</strong><br>Gazneli 2022</td><td>Forma d'onda grezza, conv 1D</td><td class="c">98,15 %</td><td class="c">5,3 M</td><td>Nessuno spettrogramma</td></tr>
+    <tr><td><strong>SimPF</strong><br>Liu 2023</td><td>Front-end di pooling semplificato</td><td class="c">95,6 %</td><td class="c">3,4 M</td><td>Efficienza, a prezzo di accuratezza</td></tr>
+  </tbody>
+</table>
+<p><strong>Il posizionamento di Kavaki &amp; Mandel.</strong> Tutti i modelli sopra processano l'audio in modo <em>denso e uniforme</em>: ogni patch, ogni frame, ogni campione. HTS-AT è l'unico che riduce i token, ma lo fa gerarchicamente e a posteriori. La proposta è di rompere questo schema alla radice — <strong>non processare tutto e poi ridurre, ma decidere fin dall'inizio dove guardare</strong>, con un numero di token fissato a priori e indipendente dalla lunghezza dell'ingresso.</p>
+<p>Il compromesso dichiarato è chiaro: 96,88 % contro il 98,1 % dei migliori, cioè <strong>circa un punto e mezzo in meno</strong>, a fronte di un costo che è un settantacinquesimo di HTS-AT e un settimo di EAT-S. La tesi non è «siamo i più bravi» ma «si può buttare via quasi tutto il calcolo pagando poco».</p>
+
+<h3>1.6 Il codice di riferimento: cosa abbiamo consultato, e per cosa</h3>
 <p>La consegna chiede di reimplementare il metodo <em>in modo autonomo</em>. La pagina del corso prevede però esplicitamente che «reading other ancestors in the citation graph may be necessary», specialmente «when dealing with the details of the experimental procedures». Questa sezione dichiara esattamente cosa è stato consultato e a quale scopo. <strong>Nessuna riga è stata copiata.</strong></p>
 <table>
   <thead><tr><th style="width:34mm">Paper</th><th style="width:44mm">Repository</th><th>Uso</th></tr></thead>
@@ -823,10 +886,49 @@ costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
 </div>
 <p>Scrive in <code>results/&lt;tag&gt;/</code>: <code>metrics.csv</code> per epoca, <code>best.pt</code> e <code>last.pt</code>, <code>summary.json</code>, log TensorBoard. I checkpoint si salvano in modo <strong>atomico</strong> (scrittura su file temporaneo e rinomina), così un'interruzione — su un portatile, per surriscaldamento o chiusura del coperchio — non lascia mai un checkpoint corrotto. <code>--resume</code> riparte da <code>last.pt</code> ripristinando anche stato dell'ottimizzatore e dello scheduler.</p>
 
-<h3>10.11 <code>scripts/evaluate.py</code></h3>
-<p>Valutazione finale sul test set, con <strong>guardia contro l'uso ripetuto</strong>. Vedi §11.4.</p>
+<h3>10.11 <code>src/models/sparse.py</code></h3>
+<p>L'estrattore sparso: i tre passi di §7 come moduli separati e componibili.</p>
+<ul>
+  <li><code>RegionAdjust</code> — <code>Linear(t)</code> più la parametrizzazione esponenziale di Faster R-CNN. I pesi partono da <strong>zero</strong>, così alla prima iterazione le regioni restano sulla griglia scelta con cura invece di schizzare via. Contiene <code>MAX_LOG_SCALE</code>, la rete di sicurezza contro l'overflow di <code>exp()</code> (§12.8).</li>
+  <li><code>SparseSampler</code> — offset appresi, standardizzazione sull'asse dei <span class="v">P</span> punti, divisione per 3, e <code>grid_sample</code> bilineare. Converte da coordinate [0,1] a [−1,1], che è la convenzione di <code>grid_sample</code>.</li>
+  <li><code>AdaptiveDecoder</code> — <span class="mat">M<sub>c</sub></span> e <span class="mat">M<sub>s</sub></span> generati dal token, doppio mixing con GELU, aggiornamento residuo. L'ultimo <code>Linear</code> opera sul tensore appiattito <span class="v">P</span>·<span class="v">C</span> → <span class="v">d</span>, dedotto dal budget di parametri.</li>
+  <li><code>SparseFeatureExtractor</code> — <span class="v">L</span><sub>rep</sub> ripetizioni con pesi <strong>non condivisi</strong>, più i parametri appresi <code>token_init</code> e <code>box_init</code>.</li>
+  <li><code>init_boxes_on_grid</code> — griglia √<span class="v">N</span> × √<span class="v">N</span>, che <strong>rifiuta esplicitamente</strong> gli <span class="v">N</span> non quadrati perfetti con un messaggio che spiega perché.</li>
+</ul>
 
-<h3>10.10 <code>tests/test_pipeline.py</code></h3>
+<h3>10.12 <code>src/models/sparse_model.py</code></h3>
+<p>Assembla front-end, estrattore, ponte 64→128, encoder e testa. Espone la <strong>stessa interfaccia del modello denso</strong> — spettrogramma in, logits fuori, più <code>seq_len</code> e <code>feature_shape</code> — così training loop, valutazione e contatore di FLOPs non li distinguono.</p>
+<p>Due metodi diagnostici che non esistono nel denso:</p>
+<ul>
+  <li><code>diagnostics()</code> — <code>region_init_drift</code> e <code>region_adjust_norm</code>, le due misure che rivelano se il meccanismo centrale è inerte (§12.10). Gratuite, nessun forward.</li>
+  <li><code>sampling_trace()</code> — regioni e token a ogni stadio, per riprodurre la Figura 2 del paper.</li>
+</ul>
+<p>Il buffer non persistente <code>_box_init_0</code> conserva la griglia iniziale per misurare lo spostamento: non finisce nei checkpoint e non sporca lo <code>state_dict</code>.</p>
+
+<h3>10.13 <code>src/metrics.py</code></h3>
+<p>Accuratezza per classe, accuratezza <strong>bilanciata</strong> (media delle accuratezze per classe, che con 2,6× di sbilanciamento può divergere da quella globale), classi peggiori e coppie più confuse. Scelta deliberata: l'elenco delle coppie invece di una mappa di calore 35×35, che a quella dimensione è quasi illeggibile e dice molto meno (§12.5).</p>
+
+<h3>10.14 <code>src/tracking.py</code></h3>
+<p>CSV, TensorBoard e Weights &amp; Biases dietro una sola interfaccia, con <strong>degrado controllato</strong>: senza wandb, senza login o senza rete il run prosegue e scrive comunque CSV e TensorBoard. Un esperimento da ore non deve morire perché un servizio esterno non risponde. L'id del run si conserva in <code>wandb_id.txt</code> così <code>--resume</code> riprende la stessa curva. Vedi §11.5.</p>
+
+<h3>10.15 <code>src/__init__.py</code></h3>
+<p>Non è un file vuoto, ed è l'unico posto in cui la cosa che fa abbia effetto: imposta <code>CUBLAS_WORKSPACE_CONFIG</code> <strong>prima di qualunque import di torch</strong>. cuBLAS riusa un'area di memoria di lavoro condivisa fra chiamate, e senza questa variabile <code>use_deterministic_algorithms</code> non può garantire nulla su matmul, einsum, Linear e sull'intero backward. PyTorch lo segnala con un <code>UserWarning</code> per ogni operazione coinvolta — un avviso che scorre nei log senza che nessuno lo noti.</p>
+
+<h3>10.16 <code>scripts/evaluate.py</code></h3>
+<p>Valutazione finale sul test set, con <strong>guardia contro l'uso ripetuto</strong>: scrive <code>TEST_EVALUATED.json</code> al primo utilizzo e si rifiuta di ripartire. Con <code>--force</code> si può insistere, ma l'evento finisce nello storico. Vedi §11.9.</p>
+
+<h3>10.17 <code>scripts/run_seeds.py</code></h3>
+<p>Esegue la stessa configurazione su più seed, <strong>salta quelli già completati</strong> — quindi è interrompibile e riprendibile — e aggrega media e deviazione standard in un JSON. È il protocollo dei ≥3 seed ridotto a un comando.</p>
+<p>Attenzione al prefisso: i tag sono <code>&lt;prefisso&gt;_seed&lt;N&gt;</code> e il default è il nome della configurazione. Un run precedente con lo stesso nome ma configurazione diversa verrebbe <strong>saltato e aggregato in silenzio</strong>; si usa <code>--prefix</code> per separarli.</p>
+
+<h3>10.18 <code>scripts/check_env.py</code> e <code>scripts/prepare_data.py</code></h3>
+<p>Il primo verifica i due punti che su questa macchina possono far perdere giornate: la build CUDA giusta per Blackwell (sm_120) e il backend audio. Non si limita a leggere i metadati — lancia un <code>matmul</code> reale sulla GPU, che è l'unico modo di sapere che i kernel ci sono per l'architettura giusta.</p>
+<p>Il secondo scarica Speech Commands, <strong>verifica gli split e si ferma con errore</strong> se non danno 84 843 / 9 981 / 11 005, poi costruisce la cache memmap.</p>
+
+<h3>10.19 <code>scripts/build_docs.ps1</code></h3>
+<p>Rigenera i tre PDF dai sorgenti HTML in <code>docs/</code> usando Edge in modalità headless — preinstallato su Windows, quindi nessuna dipendenza da installare. Contiene annotate le due trappole che sono costate tempo: serve un <code>--user-data-dir</code> dedicato, altrimenti un'istanza di Edge già aperta tiene il profilo bloccato e il PDF non viene prodotto <em>senza alcun messaggio d'errore</em>; e un flag inventato fa fallire il comando in silenzio.</p>
+
+<h3>10.16 <code>tests/test_pipeline.py</code></h3>
 <p>19 test, nessuno dei quali richiede il dataset. Coprono: costanti del protocollo, forme del front-end, normalizzazione per-campione, invarianti delle augmentation, picklabilità del Dataset, rapporto 2× fra i contatori, comportamento dell'EMA, riproducibilità dei seed.</p>
 
 <!-- ================================================================= -->
@@ -872,7 +974,7 @@ picco memoria GPU   59 MB (solo front-end) su 8192 disponibili</pre>
   <p><strong>Budget rivisto</strong>: ~2,8 ore per un run da 100 epoche, quindi circa <strong>17 ore</strong> per i sei run della Fase 3 (due varianti di codifica posizionale × tre seed) invece delle 4 stimate.</p>
 </div>
 
-<h3>11.3-bis La precisione mista non serve <span class="tag t-evi">evidenza</span></h3>
+<h3>11.4 La precisione mista non serve <span class="tag t-evi">evidenza</span></h3>
 <p>Ipotesi ragionevole: attivare l'autocast <strong>bf16</strong> dovrebbe ridurre i tempi in modo sensibile. Implementata e misurata su un'epoca completa:</p>
 <pre>fp32:  101,7 s/epoca   val 31,81%   loss 0,2015
 bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
@@ -885,7 +987,7 @@ bf16:  101,7 s/epoca   val 31,91%   loss 0,2015</pre>
   <p><strong>Conseguenza</strong>: <code>amp</code> resta <code>none</code>. Il codice è pronto e testato, ma attivarlo aggiungerebbe una variabile numerica in cambio di nulla. La leva per la velocità, se servisse, sarebbe un batch più grande — ma 64 è dichiarato dal paper.</p>
 </div>
 
-<h3>11.3-ter Tracciamento degli esperimenti</h3>
+<h3>11.5 Tracciamento degli esperimenti</h3>
 <p>Tre destinazioni dietro una sola interfaccia (<code>src/tracking.py</code>), con degrado controllato: se W&amp;B non è installato, non c'è login o cade la rete, <strong>il run prosegue</strong> e scrive comunque CSV e TensorBoard. Un esperimento da tre ore non deve morire perché un servizio esterno non risponde.</p>
 <ul>
   <li><strong>CSV</strong> — l'unica fonte che sopravvive a tutto, nella cartella del run;</li>
@@ -904,7 +1006,7 @@ gflops = 0.574231616            gmacs
 provenance = {commit, dirty, gpu, torch, platform}</pre>
 <p>Sono le informazioni che rendono un run confrontabile: accuratezza, costo computazionale e stato del codice, tutti nello stesso posto. Senza i FLOPs accanto all'accuratezza, il grafico centrale del progetto — la curva accuratezza contro costo — andrebbe ricostruito a mano sperando che le configurazioni fossero quelle giuste.</p>
 
-<h3>11.3-quater Analisi per classe</h3>
+<h3>11.6 Analisi per classe</h3>
 <p>A fine training si ricarica il checkpoint migliore e si produce, <strong>su validation</strong>, un rapporto per classe con accuratezza, supporto, classi peggiori e coppie più confuse (<code>validation_report.json</code>). Lo stesso avviene sul test set in <code>scripts/evaluate.py</code>.</p>
 <p>Si riporta anche l'<strong>accuratezza bilanciata</strong>, cioè la media delle accuratezze per classe. Con uno sbilanciamento di 2,6× può divergere sensibilmente da quella globale, e la coppia di numeri dice più di ciascuno dei due.</p>
 <div class="box">
@@ -912,7 +1014,7 @@ provenance = {commit, dirty, gpu, torch, platform}</pre>
   <p>Una matrice 35×35 disegnata è quasi illeggibile. L'elenco delle coppie più confuse è più utile in diagnosi e all'orale: se il modello scambia <em>seven</em> con <em>six</em> o <em>forward</em> con <em>four</em> sta facendo errori fonologicamente sensati, e la cosa si commenta; se scambia coppie senza somiglianza acustica, c'è qualcosa che non va nella pipeline. Già dopo una sola epoca di prova le confusioni osservate erano del primo tipo, il che è un segnale che la catena funziona.</p>
 </div>
 
-<h3>11.3-quinquies Riproducibilità del resume: tre bug e una lezione</h3>
+<h3>11.7 Riproducibilità del resume: tre bug e una lezione</h3>
 <p>Prima di lanciare i run lunghi abbiamo verificato una proprietà che sembrava già acquisita: <em>un run interrotto e ripreso deve dare gli stessi numeri di uno mai interrotto</em>. Non era vero, e scoprirlo ha richiesto tre correzioni.</p>
 
 <div class="box warn">
@@ -950,7 +1052,7 @@ loc_part   epoca 3  loss 0.14688354  val 72.6981%</pre>
   <p>Con differenze fra configurazioni che nel paper valgono 0,21 punti (96,88 contro 96,67), un pavimento di rumore di 0,02 non è trascurabile e crescerebbe su 100 epoche. Azzerandolo, l'unica varianza che resta è quella <em>fra seed</em>, che è esattamente ciò che vogliamo misurare e riportare.</p>
 </div>
 
-<h3>11.3-sexies Il determinismo era un avviso, non una garanzia</h3>
+<h3>11.8 Il determinismo era un avviso, non una garanzia</h3>
 <p>Al primo lancio vero, con <code>deterministic=True</code> già attivo, il log ha rivelato un problema che nessuna delle verifiche precedenti aveva intercettato:</p>
 <pre>UserWarning: Deterministic behavior was enabled ... but this operation is not
 deterministic because it uses CuBLAS and you have CUDA >= 10.2. To enable
@@ -975,7 +1077,7 @@ epoca 3  loss 0.14688354</pre>
   <p>È il motivo per cui vale la pena leggere gli avvisi invece di lasciarli scorrere.</p>
 </div>
 
-<h3>11.4 Disciplina sperimentale</h3>
+<h3>11.9 Disciplina sperimentale</h3>
 <ul>
   <li><strong>≥ 3 seed</strong> per ogni configurazione riportata, con media e deviazione standard. Motivazione empirica: nella Tabella 3 del paper l'ablation sui token non è monotona (16 → 97,53 %, 25 → 97,20 %, 36 → 97,94 %) su singolo seed, il che suggerisce un rumore di 0,3–0,4 punti, paragonabile a diverse delle differenze discusse.</li>
   <li><strong>Il test set si tocca una volta sola</strong>, alla fine, sul modello selezionato in validation. La guardia non è un promemoria ma un meccanismo: <code>scripts/evaluate.py</code> scrive <code>TEST_EVALUATED.json</code> nella cartella del run al primo utilizzo e si rifiuta di ripartire. Con <code>--force</code> si può insistere, ma l'evento viene registrato nello storico del file, così resta traccia di quante volte è successo. Motivazione: valutare ripetutamente il test cambiando qualcosa in mezzo equivale a selezionare su di esso, e l'errore <em>non produce alcun sintomo visibile</em> — il numero sembra buono, semplicemente non è più una stima onesta della generalizzazione.</li>
@@ -984,7 +1086,7 @@ epoca 3  loss 0.14688354</pre>
   <li>Ogni run è riproducibile dal solo file di configurazione, che viene archiviato accanto ai risultati.</li>
 </ul>
 
-<h3>11.5 Target di riproduzione</h3>
+<h3>11.10 Target di riproduzione</h3>
 <table>
   <thead><tr><th>Modello</th><th class="c">Params</th><th class="c">FLOPs</th><th class="c">Accuratezza</th><th>Nota</th></tr></thead>
   <tbody>
