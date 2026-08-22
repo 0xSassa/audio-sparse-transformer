@@ -551,12 +551,27 @@ def test_region_adjust_survives_pathological_deltas():
     assert torch.isfinite(out).all(), "regioni infinite: exp e' esploso"
 
 
-def test_region_clamp_never_binds_in_the_normal_regime():
-    """La rete di sicurezza non deve alterare il modello quando serve.
+def test_region_clamp_does_not_bind_at_initialisation():
+    """Il clamp e' inerte ALL'INIZIALIZZAZIONE — e solo li'.
 
-    Con l'inizializzazione reale (to_delta a zero) e token di scala normale
-    i delta restano molto lontani dal limite: il clamp e' inerte, quindi
-    non e' una deviazione dal metodo ma solo una protezione.
+    >>> ATTENZIONE: QUESTO TEST NON DICE CHE IL CLAMP SIA INNOCUO <<<
+
+    Con `to_delta` inizializzato a zero i delta partono nulli, quindi il
+    limite non puo' attivarsi: e' cio' che questo test verifica, ed e' tutto
+    cio' che verifica. Per un lungo periodo la documentazione ha dedotto da
+    qui che il clamp "nel regime normale non si attiva mai" — deduzione
+    SBAGLIATA, perche' un test sull'inizializzazione non dice nulla sul
+    modello addestrato.
+
+    Misurato sul checkpoint di `sparse_seed0` (22/08): dopo 100 epoche il
+    clamp e' attivo sul 46% delle componenti alla seconda ripetizione e sul
+    50% alla terza, dove |delta| medio vale 5468 contro un limite di 4. La
+    "rete di sicurezza che non si attiva mai" e' in realta' l'unica ragione
+    per cui quel run non ha prodotto NaN.
+
+    Un test su un modello addestrato non e' scrivibile qui — servirebbe il
+    checkpoint, e questa suite gira senza dati ne' pesi — quindi la verifica
+    vive in `scripts/plot_sampling.py`, che stampa la geometria per stadio.
     """
     from src.models.sparse import RegionAdjust
 
@@ -679,3 +694,97 @@ def test_sampling_trace_shows_three_stages():
     for stage in trace:
         assert stage["boxes"].shape == (1, 4, 4)
         assert stage["tokens"].shape == (1, 4, 64)
+        # i P punti effettivamente campionati: senza di questi la figura
+        # mostrerebbe le regioni ma non cio' che il modello legge dentro
+        assert stage["points"].shape == (1, 4, 36, 2)
+        assert torch.isfinite(stage["points"]).all()
+
+
+def test_trace_does_not_change_the_training_path():
+    """`return_coords` e' opt-in: il percorso normale resta un solo tensore.
+
+    La traccia e' stata aggiunta a campionamento gia' addestrato. Se avesse
+    cambiato la forma dell'uscita di `SparseSampler`, avrebbe rotto il
+    training in modo silenzioso — quindi si verifica che il ramo di default
+    sia rimasto identico.
+    """
+    from src.models.sparse import SparseSampler, init_boxes_on_grid
+
+    torch.manual_seed(0)
+    sampler = SparseSampler(64, 36)
+    boxes = init_boxes_on_grid(4).unsqueeze(0)
+    feats = torch.randn(1, 96, 16, 51)
+    tokens = torch.randn(1, 4, 64)
+
+    plain = sampler(tokens, boxes, feats)
+    assert isinstance(plain, torch.Tensor)
+
+    sampled, coords = sampler(tokens, boxes, feats, return_coords=True)
+    assert torch.equal(plain, sampled)
+    assert coords.shape == (1, 4, 36, 2)
+
+
+def test_sampled_points_lie_inside_their_region():
+    """I punti restituiti stanno dentro il riquadro del proprio token.
+
+    E' la coerenza fra le due cose che la figura disegna: se i punti non
+    cadessero nella regione che li accompagna, il disegno racconterebbe una
+    storia diversa da quella del modello. Il limite non e' netto — la regola
+    dei tre sigma lascia fuori circa lo 0,3% — quindi si verifica la
+    frazione, non ogni singolo punto.
+    """
+    from src.models.sparse import SparseSampler, boxes_to_cwh, init_boxes_on_grid
+
+    torch.manual_seed(0)
+    sampler = SparseSampler(64, 36)
+    boxes = init_boxes_on_grid(4).unsqueeze(0).expand(16, -1, -1)
+    feats = torch.randn(16, 96, 16, 51)
+    _, coords = sampler(torch.randn(16, 4, 64), boxes, feats, return_coords=True)
+
+    center, size = boxes_to_cwh(boxes)
+    dist = (coords - center.unsqueeze(-2)).abs()
+    inside = (dist <= 0.5 * size.unsqueeze(-2)).all(dim=-1).float().mean()
+    assert float(inside) > 0.95
+
+
+# --------------------------------------------------------------------------
+# Override della configurazione da riga di comando
+# --------------------------------------------------------------------------
+
+def test_override_sets_a_nested_value_and_casts_it():
+    from src.utils import apply_overrides
+
+    cfg = {"model": {"num_tokens": 4, "unit": 0.5}, "optim": {"epochs": 100}}
+    applied = apply_overrides(cfg, ["model.num_tokens=9", "optim.epochs=50"])
+    assert cfg["model"]["num_tokens"] == 9
+    assert isinstance(cfg["model"]["num_tokens"], int)
+    assert cfg["optim"]["epochs"] == 50
+    assert len(applied) == 2
+
+    # int accettato dove c'e' un float: 1 al posto di 1.0 e' innocuo
+    apply_overrides(cfg, ["model.unit=1"])
+    assert cfg["model"]["unit"] == 1
+
+
+def test_override_refuses_an_unknown_key():
+    """Un refuso creerebbe una chiave che nessuno legge: l'ablation girerebbe
+    con il valore di default fingendo di essere un'ablation."""
+    from src.utils import apply_overrides
+
+    cfg = {"model": {"num_tokens": 4}}
+    with pytest.raises(KeyError):
+        apply_overrides(cfg, ["model.num_token=9"])
+    with pytest.raises(KeyError):
+        apply_overrides(cfg, ["modello.num_tokens=9"])
+    assert cfg == {"model": {"num_tokens": 4}}
+
+
+def test_override_refuses_a_wrong_type():
+    from src.utils import apply_overrides
+
+    cfg = {"optim": {"epochs": 100}}
+    with pytest.raises(TypeError):
+        apply_overrides(cfg, ["optim.epochs=cinquanta"])
+    with pytest.raises(ValueError):
+        apply_overrides(cfg, ["optim.epochs"])
+    assert cfg["optim"]["epochs"] == 100

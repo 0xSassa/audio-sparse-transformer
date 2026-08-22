@@ -45,6 +45,7 @@ from src.models.sparse_model import SparseAudioTransformer
 from src.tracking import RunTracker
 from src.utils import (
     ModelEMA,
+    apply_overrides,
     grad_global_norm,
     load_config,
     load_rng_state,
@@ -273,6 +274,11 @@ def main() -> int:
                     action="store_false", help="disattiva il determinismo")
     ap.add_argument("--amp", choices=["none", "bf16"], default=None,
                     help="sovrascrive optim.amp; la valutazione resta in fp32")
+    ap.add_argument("--set", dest="overrides", action="append", default=[],
+                    metavar="CHIAVE=VALORE",
+                    help="sovrascrive una voce della config, es. "
+                         "--set model.num_tokens=9. Ripetibile. Richiede "
+                         "--tag, per non sovrascrivere il run di base")
     ap.add_argument("--stop-after", type=int, default=None, metavar="N",
                     help="ferma dopo N epoche in QUESTA invocazione, lasciando "
                          "lo schedule configurato per il totale. Serve a "
@@ -286,6 +292,30 @@ def main() -> int:
         cfg["optim"]["epochs"] = args.epochs
     if args.amp is not None:
         cfg["optim"]["amp"] = args.amp
+
+    # Gli override si applicano PRIMA di archiviare resolved_config.json, cosi'
+    # il file accanto ai risultati riporta i valori realmente usati e non quelli
+    # del YAML di partenza. Senza --tag ci si rifiuta di partire: un'ablation
+    # che scrive nella cartella del run di base lo distrugge in silenzio, e
+    # sarebbe la peggiore delle perdite — quella che si scopre dopo.
+    if args.overrides:
+        if args.tag is None:
+            print("[errore] --set richiede --tag: senza, questo run scriverebbe "
+                  "nella cartella del run di base e lo sovrascriverebbe.")
+            print(f"         Esempio: --tag {args.config.stem}_"
+                  f"{args.overrides[0].split('=')[0].split('.')[-1]}"
+                  f"{args.overrides[0].split('=')[1]}_seed{args.seed}")
+            return 2
+        try:
+            for line in apply_overrides(cfg, args.overrides):
+                print(f"[override] {line}")
+        except (KeyError, TypeError, ValueError) as exc:
+            # Un traceback qui non aggiunge nulla: l'errore e' nella riga di
+            # comando dell'utente, non nel codice, e il messaggio di
+            # apply_overrides elenca gia' le chiavi disponibili.
+            print(f"[errore] {exc}")
+            return 2
+
     deterministic = (cfg.get("deterministic", False) if args.deterministic is None
                      else args.deterministic)
     cfg["deterministic"] = deterministic

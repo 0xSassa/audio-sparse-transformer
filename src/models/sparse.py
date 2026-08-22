@@ -163,8 +163,17 @@ class SparseSampler(nn.Module):
         self.to_offsets = nn.Linear(token_dim, num_points * 2)
 
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor,
-                features: torch.Tensor) -> torch.Tensor:
-        """tokens [B,N,d] · boxes [B,N,4] · features [B,C,F,T] -> [B,N,P,C]."""
+                features: torch.Tensor, *, return_coords: bool = False):
+        """tokens [B,N,d] · boxes [B,N,4] · features [B,C,F,T] -> [B,N,P,C].
+
+        `return_coords=True` restituisce anche le coordinate normalizzate dei
+        P punti, [B,N,P,2], in [0,1] sugli assi (tempo, frequenza) nell'ordine
+        che vuole `grid_sample`. Servono a disegnare la Figura 2 del paper —
+        i punti campionati sovrapposti allo spettrogramma — e senza di esse la
+        traccia mostrerebbe le regioni ma non ciò che il modello legge davvero
+        al loro interno. Il percorso di training non le chiede e resta
+        identico.
+        """
         b, n, _ = tokens.shape
         offsets = self.to_offsets(self.norm(tokens))
         offsets = offsets.view(b, n, self.num_points, 2)
@@ -181,7 +190,8 @@ class SparseSampler(nn.Module):
         grid = 2.0 * coords - 1.0                          # [B,N,P,2]
         sampled = F.grid_sample(features, grid, mode="bilinear",
                                 padding_mode="border", align_corners=False)
-        return rearrange(sampled, "b c n p -> b n p c")
+        out = rearrange(sampled, "b c n p -> b n p c")
+        return (out, coords) if return_coords else out
 
 
 class AdaptiveDecoder(nn.Module):
@@ -275,9 +285,11 @@ class SparseFeatureExtractor(nn.Module):
                 return_trace: bool = False):
         """features [B,C,F,T] -> token [B,N,d].
 
-        `return_trace=True` restituisce anche le regioni e i punti di ogni
-        stadio: servono a riprodurre la Figura 2 del paper, in cui si vede
-        il campionamento passare da uniforme a concentrato.
+        `return_trace=True` restituisce anche, per ogni stadio, le regioni
+        (`boxes`), i token e le coordinate dei P punti campionati
+        (`points`, [B,N,P,2] in [0,1]): servono a riprodurre la Figura 2 del
+        paper, in cui si vede il campionamento passare da uniforme a
+        concentrato sulle zone informative.
         """
         b = features.shape[0]
         tokens = self.token_init.unsqueeze(0).expand(b, -1, -1)
@@ -286,9 +298,14 @@ class SparseFeatureExtractor(nn.Module):
 
         for stage in self.stages:
             boxes = stage["adjust"](tokens, boxes)
-            sampled = stage["sample"](tokens, boxes, features)
+            if return_trace:
+                sampled, coords = stage["sample"](tokens, boxes, features,
+                                                  return_coords=True)
+            else:
+                sampled = stage["sample"](tokens, boxes, features)
             tokens = stage["decode"](tokens, sampled)
             if return_trace:
-                trace.append({"boxes": boxes.detach(), "tokens": tokens.detach()})
+                trace.append({"boxes": boxes.detach(), "tokens": tokens.detach(),
+                              "points": coords.detach()})
 
         return (tokens, trace) if return_trace else tokens

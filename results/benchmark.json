@@ -1,0 +1,39 @@
+{
+  "device": "cuda",
+  "iters": 300,
+  "warmup": 50,
+  "provenance": {
+    "python": "3.12.4",
+    "torch": "2.9.1+cu128",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "cuda": "12.8",
+    "commit": "73cce25d7d03e8b1eee3d8866013369a82d341fb",
+    "dirty": true,
+    "untracked": 11
+  },
+  "models": {
+    "dense": {
+      "kind": "dense",
+      "params": 4875235,
+      "gflops": 0.527530304,
+      "gmacs": 0.265125888,
+      "seq_len": 51,
+      "latency_ms": {
+        "1": 2.947730000014417,
+        "64": 11.08145333341478
+      }
+    },
+    "sparse": {
+      "kind": "sparse",
+      "params": 2822711,
+      "gflops": 0.048511744,
+      "gmacs": 0.024860446,
+      "seq_len": 4,
+      "latency_ms": {
+        "1": 4.64639133346888,
+        "64": 6.485166000008273
+      }
+    }
+  }
+}

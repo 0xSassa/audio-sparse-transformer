@@ -140,16 +140,29 @@ def benchmark_latency(
     device: str | torch.device = "cuda",
     warmup: int = 20,
     iters: int = 100,
+    batch_size: int = 1,
 ) -> float:
-    """Latenza media in ms per un forward con batch 1.
+    """Latenza media in ms per un forward, sul solo modello.
 
     Serve a mostrare che il guadagno in FLOPs non si traduce
     automaticamente in latenza: e' un'osservazione che vale una slide.
+
+    `batch_size` sposta la domanda. A 1 si misura lo scenario dichiarato dal
+    paper — un dispositivo che classifica una parola alla volta — dove il
+    costo dei lanci di kernel non e' ammortizzato da nulla e i FLOPs
+    predicono male. A 64 si misura il regime di training, dove la GPU ha
+    lavoro sufficiente a nasconderli e il rapporto si avvicina a quello
+    aritmetico. Riportare le due misure insieme e' l'unico modo onesto di
+    rispondere a "quanto e' piu' veloce".
+
+    Il `warmup` non e' un dettaglio: le prime esecuzioni pagano
+    l'allocazione della cache di memoria, la scelta degli algoritmi cuDNN e
+    la compilazione dei kernel. Misurarle significa misurare l'avvio.
     """
     import time
 
     model = model.to(device).eval()
-    x = torch.zeros(1, *input_shape, device=device)
+    x = torch.zeros(batch_size, *input_shape, device=device)
     is_cuda = torch.device(device).type == "cuda"
 
     with torch.no_grad():

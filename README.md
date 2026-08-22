@@ -23,13 +23,42 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 0 | Lettura paper + ancestor, setup | in corso |
-| 1 | Prerequisiti teorici | in corso |
-| **2** | **Dati, split ufficiali, contatore FLOPs** | **codice pronto, da eseguire** |
-| 3 | Baseline: early conv + dense transformer | da fare |
-| 4 | Sparse feature extractor | da fare |
+| 0 | Lettura paper + ancestor, setup | completata (restano form risorse e ricevimento) |
+| 1 | Prerequisiti teorici | in corso, in parallelo |
+| 2 | Dati, split ufficiali, contatore FLOPs | **completata** |
+| 3 | Baseline: early conv + dense transformer | run di riferimento fatto (94,09 % su validation); restano `flatten` e i seed 1-2 |
+| 4 | Sparse feature extractor | **completata (seed 0): 95,57 %, +1,48 sul denso** |
 | 5 | Ablation, seed multipli, HPO | da fare |
 | 6 | Presentazione | da fare |
+
+### Risultati finora (validation, modello EMA, seed 0)
+
+| Run | Front-end | Accuratezza | Params | GFLOP |
+|---|---|---|---|---|
+| **`sparse_seed0`** — il metodo del paper | `c96` | **95,57 %** | 2 822 711 | 0,0485 |
+| `dense_c96_seed0` — baseline controllato | `c96` | 94,09 % | 4 875 235 | 0,5275 |
+| `dense_seed0` — lettura dei canali superata | `c196_proj96` | 94,67 % | 4 899 147 | 0,5742 |
+
+Il modello sparso batte il baseline denso di **1,48 punti** con il 58 % dei
+parametri e il 9,2 % dei FLOPs: il claim qualitativo del paper (+0,21 nella
+loro Tabella 2) è riprodotto, con un margine più ampio. Il test set non è
+ancora stato toccato, e i seed 1–2 mancano.
+
+### Latenza: il guadagno in FLOPs cambia segno col batch
+
+```
+python scripts/benchmark_models.py
+```
+
+| Modello | GFLOP | ms @ batch 1 | ms @ batch 64 |
+|---|---|---|---|
+| Denso `c96` | 0,5275 | 2,95 | 11,08 |
+| Sparso | 0,0485 | **4,65** | **6,49** |
+| rapporto | 0,092× | 1,58× (più lento) | 0,59× (più veloce) |
+
+Un fattore 10,9 sui FLOPs vale 0,63 a batch 1 e 1,71 a batch 64. Il regime
+in cui il metodo perde è batch 1 — cioè il dispositivo edge che motiva il
+lavoro. Dettagli e spiegazione in `Manuale_tecnico.pdf`, §12.13.
 
 Il piano completo è in `Pipeline_progetto_DL.pdf`.
 

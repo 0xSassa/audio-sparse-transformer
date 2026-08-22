@@ -80,13 +80,16 @@
   <h1>Manuale tecnico</h1>
   <p class="sub">Riproduzione di <em>Audio Sparse-Transformer for Speech Classification</em><br>Kavaki &amp; Mandel, ICASSP 2025</p>
   <p class="sub" style="font-size:9.8pt">Progetto d'esame — B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Versione 1.6 — 20 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
+  <p class="meta">Versione 1.9 — 22 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
   <em>v1.1: consultato il codice di SparseFormer e di EAT. Corrette le formule di <code>mixing</code> e <code>phasemix</code>, la sequenza dello stem e il default della normalizzazione; risolte la formula degli offset e l'inizializzazione a griglia.<br>
   v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.<br>
   v1.3: nuovo capitolo 12 con il primo run completo (94,67 %), la saturazione della curva ben prima delle 100 epoche, il comportamento dell'EMA lungo lo schedule e il profilo fonologico degli errori; corretta l'osservazione sulla norma del gradiente.<br>
-  v1.4: implementato l'estrattore sparso; i suoi FLOPs sciolgono la contraddizione «96 vs 196 kernels» a favore di <code>c96</code> (§12.7-12.8).<br>
-  v1.5: il metodo sparso non è deterministico su GPU (§12.9); diagnostica sul movimento delle regioni (§12.10); il guadagno in FLOPs non si traduce in velocità (§12.11).<br>
-  v1.6: EAT documentato per intero (§1.4) e panorama della letteratura su Speech Commands (§1.5); §10 completato con tutti i moduli e script; rinumerate le sezioni del cap. 11.</em></p>
+  v1.4: implementato l'estrattore sparso; i suoi FLOPs sciolgono la contraddizione «96 vs 196 kernels» a favore di <code>c96</code> (§12.9-12.10).<br>
+  v1.5: il metodo sparso non è deterministico su GPU (§12.11); diagnostica sul movimento delle regioni (§12.12); il guadagno in FLOPs non si traduce in velocità (§12.13).<br>
+  v1.6: EAT documentato per intero (§1.4) e panorama della letteratura su Speech Commands (§1.5); §10 completato con tutti i moduli e script; rinumerate le sezioni del cap. 11.<br>
+v1.7: nuovo run di riferimento del denso con front-end <code>c96</code> (§12.1) e confronto con la lettura superata; quadro dei run (§12.13); nuovo capitolo 13, <em>Preparazione all'orale</em>: numeri a memoria, derivazioni, e le domande attese con la risposta.<br>
+v1.8: <strong>run completo del modello sparso, 95,57 %</strong> &#8212; il claim qualitativo del paper &#232; riprodotto con un margine di +1,48 sul denso (&#167;12.2); la traiettoria completa delle regioni, che si muovono per 70 epoche e poi si fermano (&#167;12.12); la latenza rimisurata come si deve, e il guadagno che <em>cambia segno</em> col batch (&#167;12.13).<br>
+v1.9: la Figura 2, generata dai pesi del run, mostra che <strong>il campionamento degenera dopo la prima ripetizione</strong> &#8212; met&#224; dei punti finisce fuori dal piano (&#167;12.12); corretta l'affermazione, falsa, secondo cui il nostro limite su <code>exp()</code> non si attivasse mai (&#167;12.10).</em></p>
 </header>
 
 <div class="box info" style="margin-top:6mm">
@@ -110,7 +113,8 @@
   <li>Catalogo delle assunzioni <span class="s">— ognuna con la sua evidenza</span></li>
   <li>Il codice, file per file <span class="s">— tutti i 19 moduli e script</span></li>
   <li>Protocollo sperimentale e misura</li>
-  <li><strong>Risultati</strong> <span class="s">— primo run completo, saturazione della curva, profilo degli errori</span></li>
+  <li><strong>Risultati</strong> <span class="s">— i due run di riferimento, il confronto centrale, il movimento delle regioni, la latenza</span></li>
+  <li><strong>Preparazione all'orale</strong> <span class="s">— numeri a memoria, derivazioni, domande attese con risposta</span></li>
   <li>Riferimenti</li>
 </ol>
 
@@ -769,7 +773,7 @@ relative_offset_xy = (relative_offset_xy - offset_mean) / (3 * offset_std)</pre>
 <p><strong>Ipotesi confutata, e nettamente.</strong> Una convoluzione 3×3 con 196 canali alla risoluzione piena (32×51) costa da sola più di 1 GFLOP: aggiungere strati non colma lo scarto, lo travolge. Lo scarto dell'11 % resta <strong>non spiegato</strong>, e va riportato come tale.</p>
 
 <h3>8.7 La configurazione adottata</h3>
-<pre>lettura canali    c96             "96 dimensional feature"; il 196 e' un refuso (vedi 12.7)
+<pre>lettura canali    c96             "96 dimensional feature"; il 196 e' un refuso (vedi 12.8)
 stem              paper           una conv 7x7 stride 2, ReLU, maxpool
 pool stride       (2, 1)          solo sull'asse frequenza  ->  N = 51
 sequenza          pool_freq       media sulla frequenza, N = T
@@ -779,12 +783,12 @@ teste             h = 7           d_h = 32
 ---------------------------------------------------------------------
 parametri         4.875.235       dichiarati 4,80 M   ->  +1,6 %
 costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
-<p>Si addestra <strong>anche</strong> la variante <code>flatten</code>, che fitta meglio il costo (−5,9 %) ma peggio i parametri: le due bracketizzano l'incertezza. <code>pool_freq</code> resta la scelta meno sicura di tutte, perché media via la struttura in frequenza proprio nel baseline che verrà confrontato con un modello che campiona nel piano tempo-frequenza.</p>
+<p>Si addestra <strong>anche</strong> la variante <code>flatten</code>, che fitta meglio il costo (−13,1 % contro −18,2 %) ma peggio i parametri (+8,3 %): le due bracketizzano l'incertezza. <code>pool_freq</code> resta la scelta meno sicura di tutte, perché media via la struttura in frequenza proprio nel baseline che verrà confrontato con un modello che campiona nel piano tempo-frequenza.</p>
 
 <div class="box">
   <p class="box-t">Perché ci fermiamo qui</p>
   <p>Nessuna configurazione soddisfa <em>entrambi</em> i vincoli, e i due tirano in direzioni opposte. Continuare ad aggiungere gradi di libertà finché i numeri combaciano significherebbe fare <strong>overfitting su una cifra riportata senza convenzione dichiarata</strong>, in un paper che nello stesso paragrafo si contraddice. Un accordo ottenuto così non sarebbe una verifica ma una tautologia.</p>
-  <p>La posizione difendibile è: parametri entro il 2 %, costo entro l'11 %, un'ipotesi sul residuo formulata e confutata, tutto dichiarato.</p>
+  <p>La posizione difendibile è: parametri entro il 2 %, costo entro il 18 %, un'ipotesi sul residuo formulata e confutata, tutto dichiarato. Il risultato di questa configurazione è in §12.1.</p>
 </div>
 
 <!-- ================================================================= -->
@@ -801,7 +805,7 @@ costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
     <tr><td>Parametri STFT di <code>phasemix</code></td><td>400 / 160, come il front-end</td><td><span class="tag t-ass">assunzione</span> EAT non li dichiara.</td></tr>
     <tr><td>Normalizzazione degli offset «a tre deviazioni standard»</td><td>standardizzazione sull'asse dei punti, poi divisione per 3</td><td><span class="tag t-evi">evidenza</span> formula esatta dal codice di SparseFormer.</td></tr>
     <tr><td>Inizializzazione di token e regioni</td><td>trunc-normal std 1; griglia √N × √N</td><td><span class="tag t-evi">evidenza</span> dal codice di SparseFormer. Spiega perché nel paper N è sempre un quadrato perfetto.</td></tr>
-    <tr><td>Contraddizione 96 / 196</td><td><strong><code>c96</code></strong></td><td><span class="tag t-evi">evidenza</span> <strong>risolta</strong> dai FLOPs del modello sparso (§12.7): <code>c196_proj96</code> li sbaglia del +73 %, <code>c96</code> tiene tutti e quattro i vincoli entro il 18 %. «96 dimensional feature» è vero, «196 kernels» è il refuso.</td></tr>
+    <tr><td>Contraddizione 96 / 196</td><td><strong><code>c96</code></strong></td><td><span class="tag t-evi">evidenza</span> <strong>risolta</strong> dai FLOPs del modello sparso (§12.10): <code>c196_proj96</code> li sbaglia del +73 %, <code>c96</code> tiene tutti e quattro i vincoli entro il 18 %. «96 dimensional feature» è vero, «196 kernels» è il refuso.</td></tr>
     <tr><td>Limite sul delta logaritmico delle regioni</td><td><code>MAX_LOG_SCALE = 4</code></td><td><span class="tag t-ass">assunzione</span> nostra aggiunta, assente dal paper e da SparseFormer. Rete di sicurezza contro l'overflow di <code>exp()</code>; verificato che non si attivi mai nel regime normale.</td></tr>
     <tr><td>Stride del max pooling</td><td>(2, 1) → <span class="v">N</span> = 51</td><td><span class="tag t-evi">evidenza</span> forzato dal vincolo di costo; la famiglia <span class="v">N</span>=26 sbaglia del 30 %.</td></tr>
     <tr><td>Formazione della sequenza</td><td><code>pool_freq</code> + <code>flatten</code></td><td><span class="tag t-ass">assunzione</span> la meno sicura. Si addestrano entrambe.</td></tr>
@@ -889,7 +893,7 @@ costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
 <h3>10.11 <code>src/models/sparse.py</code></h3>
 <p>L'estrattore sparso: i tre passi di §7 come moduli separati e componibili.</p>
 <ul>
-  <li><code>RegionAdjust</code> — <code>Linear(t)</code> più la parametrizzazione esponenziale di Faster R-CNN. I pesi partono da <strong>zero</strong>, così alla prima iterazione le regioni restano sulla griglia scelta con cura invece di schizzare via. Contiene <code>MAX_LOG_SCALE</code>, la rete di sicurezza contro l'overflow di <code>exp()</code> (§12.8).</li>
+  <li><code>RegionAdjust</code> — <code>Linear(t)</code> più la parametrizzazione esponenziale di Faster R-CNN. I pesi partono da <strong>zero</strong>, così alla prima iterazione le regioni restano sulla griglia scelta con cura invece di schizzare via. Contiene <code>MAX_LOG_SCALE</code>, la rete di sicurezza contro l'overflow di <code>exp()</code> (§12.10).</li>
   <li><code>SparseSampler</code> — offset appresi, standardizzazione sull'asse dei <span class="v">P</span> punti, divisione per 3, e <code>grid_sample</code> bilineare. Converte da coordinate [0,1] a [−1,1], che è la convenzione di <code>grid_sample</code>.</li>
   <li><code>AdaptiveDecoder</code> — <span class="mat">M<sub>c</sub></span> e <span class="mat">M<sub>s</sub></span> generati dal token, doppio mixing con GELU, aggiornamento residuo. L'ultimo <code>Linear</code> opera sul tensore appiattito <span class="v">P</span>·<span class="v">C</span> → <span class="v">d</span>, dedotto dal budget di parametri.</li>
   <li><code>SparseFeatureExtractor</code> — <span class="v">L</span><sub>rep</sub> ripetizioni con pesi <strong>non condivisi</strong>, più i parametri appresi <code>token_init</code> e <code>box_init</code>.</li>
@@ -900,13 +904,13 @@ costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
 <p>Assembla front-end, estrattore, ponte 64→128, encoder e testa. Espone la <strong>stessa interfaccia del modello denso</strong> — spettrogramma in, logits fuori, più <code>seq_len</code> e <code>feature_shape</code> — così training loop, valutazione e contatore di FLOPs non li distinguono.</p>
 <p>Due metodi diagnostici che non esistono nel denso:</p>
 <ul>
-  <li><code>diagnostics()</code> — <code>region_init_drift</code> e <code>region_adjust_norm</code>, le due misure che rivelano se il meccanismo centrale è inerte (§12.10). Gratuite, nessun forward.</li>
+  <li><code>diagnostics()</code> — <code>region_init_drift</code> e <code>region_adjust_norm</code>, le due misure che rivelano se il meccanismo centrale è inerte (§12.12). Gratuite, nessun forward.</li>
   <li><code>sampling_trace()</code> — regioni e token a ogni stadio, per riprodurre la Figura 2 del paper.</li>
 </ul>
 <p>Il buffer non persistente <code>_box_init_0</code> conserva la griglia iniziale per misurare lo spostamento: non finisce nei checkpoint e non sporca lo <code>state_dict</code>.</p>
 
 <h3>10.13 <code>src/metrics.py</code></h3>
-<p>Accuratezza per classe, accuratezza <strong>bilanciata</strong> (media delle accuratezze per classe, che con 2,6× di sbilanciamento può divergere da quella globale), classi peggiori e coppie più confuse. Scelta deliberata: l'elenco delle coppie invece di una mappa di calore 35×35, che a quella dimensione è quasi illeggibile e dice molto meno (§12.5).</p>
+<p>Accuratezza per classe, accuratezza <strong>bilanciata</strong> (media delle accuratezze per classe, che con 2,6× di sbilanciamento può divergere da quella globale), classi peggiori e coppie più confuse. Scelta deliberata: l'elenco delle coppie invece di una mappa di calore 35×35, che a quella dimensione è quasi illeggibile e dice molto meno (§12.7).</p>
 
 <h3>10.14 <code>src/tracking.py</code></h3>
 <p>CSV, TensorBoard e Weights &amp; Biases dietro una sola interfaccia, con <strong>degrado controllato</strong>: senza wandb, senza login o senza rete il run prosegue e scrive comunque CSV e TensorBoard. Un esperimento da ore non deve morire perché un servizio esterno non risponde. L'id del run si conserva in <code>wandb_id.txt</code> così <code>--resume</code> riprende la stessa curva. Vedi §11.5.</p>
@@ -928,7 +932,7 @@ costo             0,5275 GFLOP    dichiarati 0,645    ->  -18,2 %</pre>
 <h3>10.19 <code>scripts/build_docs.ps1</code></h3>
 <p>Rigenera i tre PDF dai sorgenti HTML in <code>docs/</code> usando Edge in modalità headless — preinstallato su Windows, quindi nessuna dipendenza da installare. Contiene annotate le due trappole che sono costate tempo: serve un <code>--user-data-dir</code> dedicato, altrimenti un'istanza di Edge già aperta tiene il profilo bloccato e il PDF non viene prodotto <em>senza alcun messaggio d'errore</em>; e un flag inventato fa fallire il comando in silenzio.</p>
 
-<h3>10.16 <code>tests/test_pipeline.py</code></h3>
+<h3>10.20 <code>tests/test_pipeline.py</code></h3>
 <p>19 test, nessuno dei quali richiede il dataset. Coprono: costanti del protocollo, forme del front-end, normalizzazione per-campione, invarianti delle augmentation, picklabilità del Dataset, rapporto 2× fra i contatori, comportamento dell'EMA, riproducibilità dei seed.</p>
 
 <!-- ================================================================= -->
@@ -1101,7 +1105,137 @@ epoca 3  loss 0.14688354</pre>
 <!-- ================================================================= -->
 <h2>12 · Risultati</h2>
 
-<h3>12.1 Primo run completo — dense-transformer, seed 0</h3>
+<div class="box info">
+  <p class="box-t">Come leggere questo capitolo</p>
+  <p>Le sezioni sono in ordine cronologico di scoperta, non di importanza. Il <strong>run di riferimento</strong> del modello denso — quello che entrerà nel confronto finale col modello sparso — è §12.1. Il §12.2 documenta il primo run completo, eseguito con una lettura dei canali poi superata: resta nel manuale perché la differenza fra i due è essa stessa un risultato (§12.1, riquadro finale).</p>
+  <p><strong>Tutti i numeri di accuratezza di questo capitolo sono su <em>validation</em>.</strong> Il test set non è ancora stato toccato: si valuta una volta sola, a fine progetto, con <code>scripts/evaluate.py</code>.</p>
+</div>
+
+<h3>12.1 Il run di riferimento del denso — <code>c96</code>, seed 0</h3>
+<p>Configurazione <code>configs/dense.yaml</code>: early conv <code>c96</code> · stem <code>paper</code> · pool (2,1) · <code>seq_mode=pool_freq</code> · <var>d</var>=224 · <var>L</var>=8 · <var>h</var>=7 · 100 epoche · determinismo <strong>stretto</strong> (bit-riproducibile).</p>
+<table>
+  <thead><tr><th style="width:52mm">Misura</th><th class="c">Nostro</th><th class="c">Paper</th><th class="c">Scarto</th></tr></thead>
+  <tbody>
+    <tr><td>Accuratezza (validation, EMA)</td><td class="c"><strong>94,09 %</strong></td><td class="c">96,67 %<sup>†</sup></td><td class="c">−2,58</td></tr>
+    <tr><td>Accuratezza bilanciata</td><td class="c">93,68 %</td><td class="c">—</td><td class="c">—</td></tr>
+    <tr><td>Parametri</td><td class="c">4 875 235</td><td class="c">4,80 M</td><td class="c">+1,6 %</td></tr>
+    <tr><td>Costo</td><td class="c">0,5275 GFLOP</td><td class="c">0,645 G</td><td class="c">−18,2 %</td></tr>
+    <tr><td>Picco memoria GPU</td><td class="c">723 MB</td><td class="c">—</td><td class="c">—</td></tr>
+    <tr><td>Tempo</td><td class="c">1,61 h (55 s/epoca a regime)</td><td class="c">—</td><td class="c">—</td></tr>
+    <tr><td>Epoca del migliore</td><td class="c">63 su 100</td><td class="c">—</td><td class="c">—</td></tr>
+  </tbody>
+</table>
+<p style="font-size:8.6pt;color:var(--muted)"><sup>†</sup> Il numero del paper è su <em>test</em>, il nostro su <em>validation</em>: non sono direttamente confrontabili.</p>
+<p>Provenienza registrata nel run: commit <code>ebb9ff50</code>, <strong>albero pulito</strong>, torch 2.9.1+cu128, RTX 5050 Laptop, CUDA 12.8, Windows 11, fp32, <code>determinism: strict</code>.</p>
+
+<h4>Perché questo è il run di riferimento e l'altro no</h4>
+<p>Il confronto che il paper propone — denso contro sparso — è un <strong>confronto controllato</strong>: i due modelli devono differire <em>soltanto</em> per come producono i token. Il §12.9 mostra che la lettura corretta dei canali è <code>c96</code>; il primo run completo (§12.2) usava <code>c196_proj96</code>. Tenerlo come baseline significherebbe confrontare un denso con un front-end più ricco contro uno sparso con un front-end più povero, e attribuire all'estrattore una differenza che viene dalla convoluzione.</p>
+
+<div class="box">
+  <p class="box-t">Il costo del refuso: 23 912 parametri valgono 0,58 punti</p>
+  <table>
+    <thead><tr><th>Lettura dei canali</th><th class="c">parametri</th><th class="c">GFLOP</th><th class="c">val EMA</th><th class="c">picco GPU</th><th class="c">s/epoca</th></tr></thead>
+    <tbody>
+      <tr><td><code>c196_proj96</code> (§12.2)</td><td class="c">4 899 147</td><td class="c">0,5742</td><td class="c">94,67 %</td><td class="c">1 087 MB</td><td class="c">65</td></tr>
+      <tr><td><strong><code>c96</code></strong> (riferimento)</td><td class="c">4 875 235</td><td class="c">0,5275</td><td class="c"><strong>94,09 %</strong></td><td class="c">723 MB</td><td class="c">55</td></tr>
+      <tr><td>differenza</td><td class="c">−23 912 (−0,5 %)</td><td class="c">−8,1 %</td><td class="c">−0,58</td><td class="c">−33 %</td><td class="c">−15 %</td></tr>
+    </tbody>
+  </table>
+  <p>I 23 912 parametri si spiegano <em>esattamente</em>: la conv 7×7 passa da 196 a 96 kernel (−5 000) e sparisce la proiezione 1×1 da 196 a 96 canali (−18 912). Sono lo <strong>0,5 % del modello</strong>, tutti nel front-end, e valgono <strong>0,58 punti</strong> di accuratezza.</p>
+  <p><strong>Che cosa se ne impara.</strong> A parità di tutto il resto, la capacità spesa nel front-end convolutivo rende molto più di quella spesa nel transformer: il modello a 24 layer di §11.3 aveva 3 M parametri in più del baseline e non era migliore. È coerente con la tesi di Xiao et al. 2021 — il compito difficile è costruire buoni token, non elaborarli — ed è la stessa ragione per cui Kavaki &amp; Mandel campionano <em>dopo</em> la early convolution e non dallo spettrogramma.</p>
+  <p><strong>Onestà statistica.</strong> È un confronto a <em>un solo seed</em> per configurazione. La nostra stima del rumore da seed è 0,3–0,4 punti (dalla non monotonia della Tabella 3 del paper), quindi 0,58 è sopra il rumore ma non di molto: va riportato come indicazione, non come misura. Se serve deciderlo davvero, servono i 3 seed.</p>
+</div>
+
+<h4>La saturazione è ancora più netta che nel primo run</h4>
+<pre>ep  30:  93,03 %
+ep  50:  93,87 %      +0,84 dalla 30
+ep  63:  94,09 %      <-- migliore assoluto
+ep 100:  94,03 %      -0,06 dalla 63, in 37 epoche</pre>
+<p>Il massimo cade all'<strong>epoca 63 su 100</strong>: le ultime 37 epoche non producono nulla, e il valore finale è perfino un'inezia sotto il massimo. Insieme a §12.4 questo chiude la questione: <strong>50–60 epoche sono sufficienti per ogni conclusione sperimentale</strong>, e il budget delle ablation si dimezza.</p>
+
+<h4>Errori del run di riferimento</h4>
+<pre>classi peggiori                    confusioni piu' frequenti
+  learn     85,94%  (128)            go      -> down    16
+  backward  87,58%  (153)            tree    -> three   10
+  forward   89,04%  (146)            down    -> go       8
+  no        91,38%  (406)            off     -> up       7
+  go        91,40%  (372)            forward -> four     7
+  wow       91,71%  (193)            three   -> tree     6</pre>
+<p>Il profilo è lo stesso di §12.7 — coppie fonologicamente vicine, classi rare in fondo — con una differenza: <code>go → down</code> sale da 10 a 16 occorrenze ed è ora la confusione dominante, mentre la sua simmetrica <code>down → go</code> resta a 8. Con un front-end più povero il modello perde soprattutto sulle vocali posteriori, che è esattamente ciò che una risoluzione in canali dimezzata rende più difficile distinguere.</p>
+
+<h3>12.2 Il modello sparso, run completo — e il confronto centrale</h3>
+<p>Configurazione <code>configs/sparse.yaml</code>, cio&#232; la Tabella 1 del paper senza alcuna ricostruzione: <var>N</var>=4 &#183; <var>P</var>=36 &#183; <var>d</var><sub>tok</sub>=64 &#183; <var>d</var><sub>enc</sub>=128 &#183; <var>L</var><sub>rep</sub>=3 &#183; <var>L</var><sub>enc</sub>=8, front-end identico a quello del denso di riferimento. 100 epoche, 1,57 h, determinismo <code>warn_only</code>.</p>
+<table>
+  <thead><tr><th style="width:52mm">Misura</th><th class="c">Nostro</th><th class="c">Paper</th><th class="c">Scarto</th></tr></thead>
+  <tbody>
+    <tr><td>Accuratezza (validation, EMA)</td><td class="c"><strong>95,57 %</strong></td><td class="c">96,88 %<sup>&#8224;</sup></td><td class="c">&#8722;1,31</td></tr>
+    <tr><td>Accuratezza bilanciata</td><td class="c">95,12 %</td><td class="c">&#8212;</td><td class="c">&#8212;</td></tr>
+    <tr><td>Parametri</td><td class="c">2 822 711</td><td class="c">2,87 M</td><td class="c">&#8722;1,6 %</td></tr>
+    <tr><td>Costo</td><td class="c">0,0485 GFLOP</td><td class="c">0,055 G</td><td class="c">&#8722;11,8 %</td></tr>
+    <tr><td>Picco memoria GPU</td><td class="c">596 MB</td><td class="c">&#8212;</td><td class="c">&#8212;</td></tr>
+    <tr><td>Epoca del migliore</td><td class="c">97 su 100</td><td class="c">&#8212;</td><td class="c">&#8212;</td></tr>
+  </tbody>
+</table>
+<p style="font-size:8.6pt;color:var(--muted)"><sup>&#8224;</sup> Il numero del paper &#232; su <em>test</em>, il nostro su <em>validation</em>.</p>
+
+<h4>Il confronto che il paper propone, rifatto da noi</h4>
+<table>
+  <thead><tr><th>Modello</th><th class="c">parametri</th><th class="c">GFLOP</th><th class="c">accuratezza</th><th class="c">margine</th></tr></thead>
+  <tbody>
+    <tr><td>Denso <code>c96</code> (nostro)</td><td class="c">4 875 235</td><td class="c">0,5275</td><td class="c">94,09 %</td><td class="c">&#8212;</td></tr>
+    <tr><td><strong>Sparso (nostro)</strong></td><td class="c"><strong>2 822 711</strong> (0,58&#215;)</td><td class="c"><strong>0,0485</strong> (0,092&#215;)</td><td class="c"><strong>95,57 %</strong></td><td class="c"><strong>+1,48</strong></td></tr>
+    <tr><td>Denso (paper)</td><td class="c">4,80 M</td><td class="c">0,645</td><td class="c">96,67 %</td><td class="c">&#8212;</td></tr>
+    <tr><td>Sparso (paper)</td><td class="c">2,87 M</td><td class="c">0,055</td><td class="c">96,88 %</td><td class="c">+0,21</td></tr>
+  </tbody>
+</table>
+<div class="box info">
+  <p class="box-t">Il claim qualitativo &#232; riprodotto, e con un margine maggiore del loro</p>
+  <p>Con il <strong>58 % dei parametri</strong> e il <strong>9,2 % dei FLOPs</strong>, il modello sparso &#232; <strong>1,48 punti sopra</strong> il denso addestrato con la stessa identica pipeline, lo stesso front-end, la stessa ricetta e lo stesso seed. Il paper riporta +0,21. La direzione &#232; quella dichiarata; la nostra separazione &#232; sette volte pi&#249; ampia.</p>
+  <p>Va detto con la cautela che merita: &#232; <em>un</em> seed per configurazione, e la nostra stima del rumore &#232; 0,3&#8211;0,4 punti. 1,48 &#232; ben oltre quella soglia &#8212; a differenza dello 0,21 del paper, che <em>non lo &#232;</em> &#8212; ma i tre seed restano necessari per riportarlo come misura.</p>
+</div>
+
+<h4>Lo scarto dal paper &#232; met&#224; di quello del denso, e non &#232; un caso</h4>
+<table>
+  <thead><tr><th>Modello</th><th class="c">nostro</th><th class="c">paper</th><th class="c">scarto</th><th>quanto il paper ne dichiara</th></tr></thead>
+  <tbody>
+    <tr><td>Denso</td><td class="c">94,09 %</td><td class="c">96,67 %</td><td class="c">&#8722;2,58</td><td>due soli numeri: 4,80 M e 0,645 G. Tutto il resto <strong>ricostruito</strong></td></tr>
+    <tr><td>Sparso</td><td class="c">95,57 %</td><td class="c">96,88 %</td><td class="c"><strong>&#8722;1,31</strong></td><td>Tabella 1 completa: <strong>niente da ricostruire</strong></td></tr>
+  </tbody>
+</table>
+<p>La riproduzione &#232; <strong>pi&#249; fedele proprio dove il paper &#232; pi&#249; esplicito</strong>, e lo scarto raddoppia dove abbiamo dovuto indovinare. &#200; l'argomento pi&#249; forte che il residuo del denso sia <em>errore di ricostruzione</em> e non un difetto della nostra pipeline: se il problema fosse nei dati, nel front-end, nelle augmentation o nell'ottimizzatore &#8212; tutte cose condivise dai due modelli &#8212; i due scarti sarebbero simili.</p>
+<p>Resta l'1,31 del modello che non abbiamo ricostruito. I candidati sono quelli di &#167;12.8: il confronto validation-contro-test (non ancora verificabile), e le assunzioni che restano comuni a entrambi i modelli, in primo luogo i parametri dello spettrogramma.</p>
+
+<h4>Il modello sparso impara pi&#249; in fretta, e pi&#249; a lungo</h4>
+<table>
+  <thead><tr><th class="c">epoca</th><th class="c">denso <code>c96</code></th><th class="c">sparso</th><th class="c">differenza</th></tr></thead>
+  <tbody>
+    <tr><td class="c">5</td><td class="c">80,47 %</td><td class="c">82,61 %</td><td class="c">+2,14</td></tr>
+    <tr><td class="c">10</td><td class="c">88,50 %</td><td class="c">91,10 %</td><td class="c">+2,60</td></tr>
+    <tr><td class="c">30</td><td class="c">93,03 %</td><td class="c">93,38 %</td><td class="c">+0,35</td></tr>
+    <tr><td class="c">50</td><td class="c">93,87 %</td><td class="c">95,13 %</td><td class="c">+1,26</td></tr>
+    <tr><td class="c">massimo</td><td class="c">94,09 % <em>(ep. 63)</em></td><td class="c">95,57 % <em>(ep. 97)</em></td><td class="c">+1,48</td></tr>
+  </tbody>
+</table>
+<p>Il modello sparso &#232; avanti a <em>ogni</em> epoca controllata, e con un vantaggio gi&#224; di due punti a un decimo del budget. Ma la differenza pi&#249; istruttiva &#232; <strong>dove cade il massimo</strong>: epoca 63 per il denso, <strong>97</strong> per lo sparso. Il denso ha finito di imparare a due terzi dello schedule; lo sparso migliora quasi fino in fondo.</p>
+<div class="box warn">
+  <p class="box-t">Correzione alla decisione &#171;ablation a 50 epoche&#187;</p>
+  <p>&#167;12.1 aveva concluso che 50&#8211;60 epoche bastano, sulla base del <em>solo</em> modello denso. Sul modello sparso non &#232; del tutto vero: a 50 epoche siamo a 95,13 % contro i 95,57 % finali, cio&#232; <strong>0,44 punti sotto</strong>.</p>
+  <p>La decisione resta valida ma va enunciata con precisione: <strong>a 50 epoche l'ordinamento fra configurazioni si conserva, i valori assoluti sono ~0,4 punti pi&#249; bassi.</strong> Per un'ablation &#8212; che confronta configurazioni fra loro &#8212; va bene; per un numero da mettere in tabella accanto a quelli del paper, no. I due usi vanno tenuti separati.</p>
+  <p>Perch&#233; lo sparso impari pi&#249; a lungo &#232; visibile in &#167;12.12: le sue regioni continuano a spostarsi fino all'epoca ~70, quindi il modello sta ancora cambiando <em>dove guarda</em> mentre il denso ha gi&#224; solo pesi da limare.</p>
+</div>
+
+<h4>Errori del modello sparso</h4>
+<pre>classi peggiori                    confusioni piu' frequenti
+  forward   84,25%  (146)            forward -> four    17
+  learn     90,62%  (128)            three   -> tree    10
+  backward  91,50%  (153)            off     -> up      10
+  no        91,87%  (406)            tree    -> three    8
+  go        92,74%  (372)            no      -> nine     7</pre>
+<p>Stesso profilo fonologico del denso, con un accento diverso: <code>forward &#8594; four</code> passa da 7 a <strong>17</strong> occorrenze e diventa nettamente la confusione dominante, mentre <code>go &#8594; down</code> &#8212; che nel denso era la peggiore con 16 &#8212; esce dalle prime posizioni.</p>
+<p>L'interpretazione &#232; coerente con il meccanismo: <em>forward</em> e <em>four</em> condividono l'attacco /fɔː/ e differiscono nella <strong>coda</strong>. Un modello che riassume la clip in 4 token, ciascuno legato a una regione, ha meno risoluzione temporale disponibile per distinguere due parole che divergono solo alla fine &#8212; ed &#232; esattamente il tipo di errore che ci si aspetta da un campionamento sparso. &#200; anche la migliore giustificazione dell'ablation su <var>N</var>: con pi&#249; token, quella confusione dovrebbe calare.</p>
+
+<h3>12.3 Il primo run completo — <code>c196_proj96</code>, seed 0</h3>
+<p>Storico: è il primo run da 100 epoche del progetto, eseguito prima che i FLOPs del modello sparso sciogliessero l'ambiguità sui canali (§12.9). Le sezioni 12.3–12.7 analizzano <em>questo</em> run, e le loro conclusioni — saturazione della curva, comportamento dell'EMA, profilo fonologico degli errori — sono state tutte confermate dal run di riferimento.</p>
 <table>
   <thead><tr><th style="width:52mm">Misura</th><th class="c">Nostro</th><th class="c">Paper</th><th class="c">Scarto</th></tr></thead>
   <tbody>
@@ -1114,10 +1248,10 @@ epoca 3  loss 0.14688354</pre>
   </tbody>
 </table>
 <p style="font-size:8.6pt;color:var(--muted)"><sup>†</sup> Il numero del paper è su <em>test</em>, il nostro su <em>validation</em>: non sono direttamente confrontabili. Il test set non è ancora stato toccato.</p>
-<div class="box warn"><p class="box-t">Questo run usa una lettura dei canali poi superata</p><p>Il run e' stato eseguito con <code>c196_proj96</code>. La §12.7 mostra che la lettura corretta e' <code>c96</code>, e per un confronto denso-contro-sparso controllato il front-end deve essere lo stesso nei due modelli: <strong>il denso va rifatto con <code>c96</code></strong>. Il risultato resta valido come primo run completo e come verifica della pipeline, ma non e' il riferimento definitivo.</p></div>
+<div class="box warn"><p class="box-t">Questo run usa una lettura dei canali poi superata — sostituito, non cancellato</p><p>Il run è stato eseguito con <code>c196_proj96</code>. La §12.9 mostra che la lettura corretta è <code>c96</code>, e per un confronto denso-contro-sparso controllato il front-end deve essere lo stesso nei due modelli. <strong>Il denso è stato rifatto con <code>c96</code> il 20/08: è il run di §12.1, ed è quello che entra nel confronto finale.</strong> Questo resta agli atti perché il confronto fra i due è a sua volta un risultato, ed è l'unica misura che abbiamo del valore della capacità nel front-end.</p></div>
 <p>Provenienza registrata nel run: commit <code>e6106907</code>, torch 2.9.1+cu128, RTX 5050 Laptop, CUDA 12.8, Windows 11. Determinismo attivo, precisione fp32.</p>
 
-<h3>12.2 La curva satura molto prima di 100 epoche <span class="tag t-evi">evidenza</span></h3>
+<h3>12.4 La curva satura molto prima di 100 epoche <span class="tag t-evi">evidenza</span></h3>
 <table>
   <thead><tr><th class="c">epoca</th><th class="c">lr</th><th class="c">val EMA</th><th class="c">val raw</th><th class="c">EMA − raw</th></tr></thead>
   <tbody>
@@ -1137,7 +1271,7 @@ epoca 3  loss 0.14688354</pre>
   <p>Ha anche una conseguenza pratica notevole per le ablation della Fase 5: <strong>50 epoche darebbero conclusioni identiche a 100</strong> a metà del costo. Con 27 run previsti fra ablation su N e su P, è la differenza fra ~50 e ~25 ore.</p>
 </div>
 
-<h3>12.3 L'EMA si guadagna lo spazio solo ad alto learning rate <span class="tag t-evi">evidenza</span></h3>
+<h3>12.5 L'EMA si guadagna lo spazio solo ad alto learning rate <span class="tag t-evi">evidenza</span></h3>
 <p>Il divario fra modello EMA e pesi correnti si comporta esattamente come la teoria prevede, ed è una delle illustrazioni empiriche più pulite prodotte dal progetto:</p>
 <pre>epoca  10:  +4,29 punti      lr al massimo, traiettoria molto rumorosa
 epoca  30:  +1,61 punti      lr in discesa
@@ -1147,7 +1281,7 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
 <p>La media mobile serve a smorzare l'oscillazione dovuta al rumore dei minibatch. Quando il learning rate si annulla, i pesi smettono di muoversi e la media di una traiettoria ferma <em>è</em> il punto stesso: il divario si chiude per costruzione.</p>
 <p>Ne segue una nota operativa: <strong>a fine schedule valutare l'EMA o i pesi correnti è indifferente</strong>. L'EMA conta se si interrompe prima, o con schedule che tengono il learning rate alto fino in fondo. Con one-cycle portato a termine, è un'assicurazione che non serve — ma che costa nulla.</p>
 
-<h3>12.4 Due correzioni a osservazioni precedenti</h3>
+<h3>12.6 Due correzioni a osservazioni precedenti</h3>
 <div class="box warn">
   <p class="box-t">La norma del gradiente non cresce</p>
   <p>Guardando lo <em>sparkline</em> di W&amp;B avevo concluso che <code>train_grad_norm</code> crescesse lungo il training. <strong>Sbagliato.</strong> I valori dal CSV: 0,26 all'epoca 1, picco di 0,92 alla 5 mentre il learning rate sale, poi discesa e <strong>piatta a ~0,24 dall'epoca 20 fino alla fine</strong>.</p>
@@ -1158,7 +1292,7 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
   <p>1 087 MB contro i 2 715 misurati negli smoke test. La differenza è il <strong>determinismo</strong>: <code>cudnn.benchmark = False</code> impedisce a cuDNN di provare algoritmi alternativi, alcuni dei quali usano molta più memoria di lavoro in cambio di velocità. Si paga in tempo e si guadagna in memoria — su 8 GB nessuna delle due cose è un vincolo.</p>
 </div>
 
-<h3>12.5 Che errori fa il modello</h3>
+<h3>12.7 Che errori fa il modello</h3>
 <pre>classi peggiori                    confusioni piu' frequenti
   forward   86,99%  (146)            off     -> up      10
   learn     88,28%  (128)            go      -> down    10
@@ -1170,8 +1304,8 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
 <p>È il controllo qualitativo che conta più dell'accuratezza aggregata: se il modello sbagliasse coppie senza somiglianza acustica, ci sarebbe un difetto nella pipeline dei dati. Qui il profilo di errore è quello di un sistema che ha imparato la fonetica e si ferma dove si fermerebbe un ascoltatore umano su clip brevi e rumorose.</p>
 <p>Le classi peggiori sono anche fra le <strong>meno rappresentate</strong> — <em>forward</em> 146 campioni, <em>learn</em> 128 contro i ~400 delle classi frequenti — ma non solo: <em>go</em>, <em>no</em> e <em>down</em> hanno supporto abbondante e sbagliano lo stesso. Lo sbilanciamento spiega una parte del fenomeno, la somiglianza acustica il resto. Coerente con lo scarto contenuto fra accuratezza globale (94,67 %) e bilanciata (94,31 %).</p>
 
-<h3>12.6 Dove cercare i due punti mancanti</h3>
-<p>Con «poche epoche» escluso da §12.2, restano quattro ipotesi, in ordine di plausibilità:</p>
+<h3>12.8 Dove cercare i due punti mancanti</h3>
+<p>Con «poche epoche» escluso da §12.4, restano quattro ipotesi, in ordine di plausibilità:</p>
 <table>
   <thead><tr><th style="width:44mm">Ipotesi</th><th>Come la si verifica</th></tr></thead>
   <tbody>
@@ -1182,7 +1316,7 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
   </tbody>
 </table>
 
-<h3>12.7 I FLOPs dello sparso sciolgono la contraddizione del paper <span class="tag t-evi">evidenza</span></h3>
+<h3>12.9 I FLOPs dello sparso sciolgono la contraddizione del paper <span class="tag t-evi">evidenza</span></h3>
 <p>La sezione 3.2 del paper si contraddice: «extract <strong>96 dimensional</strong> feature» ma «the convolutional layers have <strong>196 kernels</strong>». Finora avevamo adottato <code>c196_proj96</code> — la lettura in cui entrambe le cifre sono vere — sulla base dei soli vincoli del modello denso. Implementato il modello sparso, i suoi due vincoli separano nettamente le letture:</p>
 <table>
   <thead><tr><th style="width:32mm">lettura</th><th class="c">DENSO<br>parametri</th><th class="c">DENSO<br>costo</th><th class="c">SPARSO<br>parametri</th><th class="c">SPARSO<br>costo</th><th class="c">errore<br>massimo</th></tr></thead>
@@ -1199,7 +1333,7 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
 </div>
 <p><strong>Onestà sul residuo.</strong> Con <code>c96</code> nessun vincolo è centrato: il costo del denso resta a −18,2 %. Ma un sottostimare <em>sistematico</em> su tutti e quattro i vincoli è la firma plausibile di una ricostruzione un filo più leggera dell'originale; un +73 % su un solo modello no. È la differenza fra un errore di scala e un errore di struttura.</p>
 
-<h3>12.8 Verifica dell'implementazione sparsa</h3>
+<h3>12.10 Verifica dell'implementazione sparsa</h3>
 <table>
   <thead><tr><th style="width:52mm">Misura</th><th class="c">Nostro</th><th class="c">Paper</th><th class="c">Scarto</th></tr></thead>
   <tbody>
@@ -1213,12 +1347,21 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
 
 <h4>Una nostra aggiunta: il limite sul delta logaritmico <span class="tag t-ass">assunzione</span></h4>
 <p>Un test con delta patologici ha mostrato che <code>exp()</code> in float32 esplode oltre ~88, producendo regioni di dimensione infinita o nulla e quindi NaN nel gradiente. Né il paper né SparseFormer prevedono un limite.</p>
-<p>Abbiamo aggiunto <code>MAX_LOG_SCALE = 4</code>, cioè al più 55× di crescita per ripetizione e ~163 000× sulle tre — enormemente più di qualunque variazione sensata per regioni che vivono in [0, 1]. Un test dedicato verifica che <strong>nel regime normale il limite non si attivi mai</strong>, quindi non è una deviazione dal metodo ma una protezione contro la perdita di un run di ore.</p>
+<p>Abbiamo aggiunto <code>MAX_LOG_SCALE = 4</code>, cio&#232; al pi&#249; 55&#215; di crescita per ripetizione. Per mesi questo manuale ha aggiunto: &#171;un test dedicato verifica che nel regime normale il limite non si attivi mai, quindi non &#232; una deviazione dal metodo ma una protezione&#187;.</p>
+<div class="box warn">
+  <p class="box-t">Quell'affermazione era falsa, e il test non diceva quello che credevamo</p>
+  <p>Il test misurava i delta <strong>all'inizializzazione</strong>, dove <code>to_delta</code> &#232; azzerato per costruzione e il limite <em>non pu&#242; </em>attivarsi. Da un test sull'inizializzazione avevamo dedotto una propriet&#224; del modello <strong>addestrato</strong>: una deduzione che non segue.</p>
+  <p>Misurato sul checkpoint di <code>sparse_seed0</code> dopo 100 epoche:</p>
+  <pre>ripetizione 1:  |delta| medio    0,38   clamp attivo sullo   0,0% delle componenti
+ripetizione 2:  |delta| medio    4,40   clamp attivo sul    45,9%
+ripetizione 3:  |delta| medio 5468,64   clamp attivo sul    50,0%   (max 43816)</pre>
+  <p>Il limite non &#232; una rete di sicurezza inerte: &#232; <strong>l'unica ragione per cui quel run non ha prodotto NaN</strong>. Con <code>exp(43816)</code> il modello sarebbe andato a infinito nella terza ripetizione della prima epoca in cui i delta sono esplosi. La nostra aggiunta non dichiarata &#232; diventata <em>portante</em>, ed &#232; il tipo di cosa che va detta all'orale prima che la chiedano.</p>
+</div>
 
 <h4>Un dettaglio del contatore di FLOPs</h4>
 <p><code>FlopCounterMode</code> falliva sul modello sparso con un <code>AssertionError</code> opaco: sotto <code>no_grad</code> il suo <code>ModuleTracker</code> non riesce a registrare gli hook su un <code>Parameter</code> espanso, e le regioni iniziali sono esattamente questo. Si conta con il grafo attivo — il risultato non cambia, perché si contano le operazioni del forward.</p>
 
-<h3>12.9 Il metodo sparso non è deterministico su GPU <span class="tag t-evi">evidenza</span></h3>
+<h3>12.11 Il metodo sparso non è deterministico su GPU <span class="tag t-evi">evidenza</span></h3>
 <p>Al primo tentativo di addestrare il modello sparso, PyTorch ha interrotto il run:</p>
 <pre>RuntimeError: grid_sampler_2d_backward_cuda does not have a deterministic
 implementation, but you set 'torch.use_deterministic_algorithms(True)'</pre>
@@ -1230,35 +1373,260 @@ implementation, but you set 'torch.use_deterministic_algorithms(True)'</pre>
 </div>
 <p><strong>Osservazione da portare all'orale.</strong> Il metodo proposto è <strong>intrinsecamente meno riproducibile del proprio baseline denso</strong>, perché il suo meccanismo centrale non è deterministico su GPU. Questo rende l'ablation a singolo seed della Tabella 3 ancora meno solida di quanto già sospettassimo osservandone la non monotonia: gli autori non potevano avere run bit-riproducibili nemmeno volendo.</p>
 
-<h3>12.10 Il meccanismo funziona: le regioni si muovono <span class="tag t-evi">evidenza</span></h3>
-<p>Il rischio silenzioso di questo metodo è che le regioni <em>non</em> si muovano. Il gradiente rispetto alle coordinate è una differenza finita fra quattro celle adiacenti (eq. 7.6); se non porta segnale utile, le regioni restano dove la griglia le ha messe, il modello degrada a un campionamento fisso, <strong>si addestra comunque e produce un numero plausibile</strong> — senza che nulla nei log lo segnali.</p>
+<h3>12.12 Il meccanismo funziona: le regioni si muovono, poi si fermano <span class="tag t-evi">evidenza</span></h3>
+<p>Il rischio silenzioso di questo metodo &#232; che le regioni non si muovano. Il gradiente rispetto alle coordinate &#232; una differenza finita fra quattro celle adiacenti (eq. 7.6); se non porta segnale utile, le regioni restano dove la griglia le ha messe, il modello degrada a un campionamento fisso, si addestra comunque e produce un numero plausibile &#8212; senza che nulla nei log lo segnali.</p>
 <p>Due misure, entrambe gratuite, registrate a ogni epoca:</p>
 <table>
-  <thead><tr><th style="width:46mm">Misura</th><th>Che cosa dice</th></tr></thead>
+  <thead><tr><th style="width:44mm">Misura</th><th>Che cosa dice</th></tr></thead>
   <tbody>
-    <tr><td><code>region_init_drift</code></td><td>Quanto le regioni <em>apprese</em> si sono spostate dalla griglia iniziale. Zero = il modello non ha imparato dove guardare.</td></tr>
-    <tr><td><code>region_adjust_norm</code></td><td>Norma dei pesi che generano l'aggiustamento per-campione. Partono da <strong>esattamente zero</strong> (inizializzazione all'identità), quindi qualunque valore positivo dimostra che quel ramo riceve gradiente.</td></tr>
+    <tr><td><code>region_init_drift</code></td><td>Quanto le regioni apprese si sono spostate dalla griglia iniziale. Zero = il modello non ha imparato dove guardare.</td></tr>
+    <tr><td><code>region_adjust_norm</code></td><td>Norma dei pesi che generano l'aggiustamento per-campione. Partono da <em>esattamente</em> zero (inizializzazione all'identit&#224;), quindi qualunque valore positivo dimostra che quel ramo riceve gradiente.</td></tr>
   </tbody>
 </table>
-<p>Smoke test su due epoche: <code>region_adjust_norm</code> passa da 0 a <strong>4,32</strong> dopo una sola epoca. Il meccanismo centrale del paper è vivo. L'accuratezza sale da 35,65 % a 50,59 %.</p>
-<p><em>(Lo <code>spostamento</code> resta identico fra le due epoche perché con <code>--epochs 2</code> one-cycle comprime l'intero schedule: alla seconda epoca il learning rate è 1,3·10⁻⁹ e nessun parametro si muove più.)</em></p>
 
-<h3>12.11 Il guadagno in FLOPs non si traduce in velocità <span class="tag t-evi">evidenza</span></h3>
+<h4>La traiettoria completa, su 100 epoche</h4>
 <table>
-  <thead><tr><th>Modello</th><th class="c">FLOPs</th><th class="c">s/epoca</th><th class="c">picco GPU</th></tr></thead>
+  <thead><tr><th class="c">epoca</th><th class="c">1</th><th class="c">10</th><th class="c">20</th><th class="c">30</th><th class="c">50</th><th class="c">70</th><th class="c">100</th></tr></thead>
   <tbody>
-    <tr><td>Denso</td><td class="c">0,5275 G</td><td class="c">65 s</td><td class="c">1 087 MB</td></tr>
-    <tr><td><strong>Sparso</strong></td><td class="c"><strong>0,0485 G</strong> (−91 %)</td><td class="c"><strong>78 s</strong> (+20 %)</td><td class="c">596 MB</td></tr>
+    <tr><td><code>region_init_drift</code></td><td class="c">0,0017</td><td class="c">0,0205</td><td class="c">0,0571</td><td class="c">0,0889</td><td class="c">0,1343</td><td class="c">0,1437</td><td class="c">0,1437</td></tr>
+    <tr><td><code>region_adjust_norm</code></td><td class="c">0,42</td><td class="c">4,91</td><td class="c">8,93</td><td class="c">9,79</td><td class="c">12,84</td><td class="c">13,28</td><td class="c">13,42</td></tr>
+    <tr><td>val EMA</td><td class="c">9,36 %</td><td class="c">91,10 %</td><td class="c">89,70 %</td><td class="c">93,38 %</td><td class="c">95,13 %</td><td class="c">95,38 %</td><td class="c">95,49 %</td></tr>
+  </tbody>
+</table>
+<div class="box info">
+  <p class="box-t">Le regioni convergono: n&#233; inerti n&#233; alla deriva</p>
+  <p>Lo spostamento cresce di un fattore <strong>84</strong> nelle prime 70 epoche e poi si <strong>ferma</strong>: 0,1437 all'epoca 70, 0,1437 alla 100, invariato alla quarta cifra. Non &#232; saturazione dell'apprendimento in generale &#8212; l'accuratezza continua a salire di un decimo di punto fino alla 97 &#8212; ma proprio delle <em>coordinate</em>.</p>
+  <p>&#200; il comportamento migliore che si potesse osservare, e lo si apprezza guardando i due modi in cui poteva fallire. Se il drift fosse rimasto a zero, il meccanismo centrale del paper sarebbe stato inerte e il modello un campionatore a griglia fissa travestito. Se fosse cresciuto senza fermarsi, le regioni sarebbero andate alla deriva fuori dal piano, dove <code>padding_mode="border"</code> le avrebbe fatte leggere sempre lo stesso bordo. Invece <strong>si spostano per 70 epoche e poi trovano una configurazione stabile</strong>: il modello ha imparato dove guardare, e ha smesso quando l'ha trovato.</p>
+</div>
+<p>La coincidenza fra il plateau delle regioni (~epoca 70) e la fine dei guadagni di accuratezza (massimo alla 97, ma piatto dalla 80) &#232; la spiegazione di perch&#233; il modello sparso impari <em>pi&#249; a lungo</em> del denso (&#167;12.2): finch&#233; le coordinate si muovono, il modello sta ancora cambiando quali dati riceve, non solo come li elabora. Il denso non ha questo grado di libert&#224; e finisce prima.</p>
+<p>Per il riscontro visivo &#8212; <em>dove</em> siano andate le regioni, non solo quanto &#8212; c'&#232; <code>scripts/plot_sampling.py</code>, che riproduce la Figura 2 del paper dai pesi del run.</p>
+
+<h4>Ed &#232; proprio la figura ad aver trovato il difetto <span class="tag t-evi">evidenza</span></h4>
+<p>Eseguita sul checkpoint, la figura mostra una cosa che nessuna delle due diagnostiche numeriche poteva vedere: <strong>il campionamento &#232; sano solo alla prima ripetizione</strong>.</p>
+<pre>                dimensione media   massima   punti DENTRO il piano [0,1]
+ripetizione 1        0,54            1,28              98,6 %
+ripetizione 2        2,49            9,71              50,0 %
+ripetizione 3       54,88          431,22              50,0 %</pre>
+<p>Le regioni crescono ben oltre il piano tempo-frequenza, e dalla seconda ripetizione <strong>met&#224; dei punti campionati cade fuori</strong>. Fuori, <code>padding_mode="border"</code> aggancia la coordinata al bordo: il punto legge comunque un valore, ma quel valore non &#232; pi&#249; scelto dal modello. Nella figura si riconosce a colpo d'occhio &#8212; alla terza ripetizione i punti si dispongono in <strong>strisce verticali</strong>, che &#232; la firma di una coordinata saturata al bordo mentre l'altra varia ancora.</p>
+<div class="box warn">
+  <p class="box-t">Che cosa significa, detto con precisione</p>
+  <p><strong>Non</strong> che il modello non funzioni: fa 95,57 %, batte il denso, e la varianza fra i <var>P</var> campioni resta dello stesso ordine a tutti gli stadi (0,136 / 0,143 / 0,091), quindi il segnale &#232; degradato ma non azzerato &#8212; i punti saturati leggono <em>punti diversi del bordo</em>, non tutti lo stesso.</p>
+  <p><strong>S&#236;</strong> che il meccanismo iterativo, che &#232; il contributo del paper, sta lavorando a un terzo del suo potenziale dichiarato: una ripetizione selettiva e due degradate.</p>
+  <p><strong>Da cui una previsione verificabile, ed &#232; la ragione per cui vale la pena riportarlo:</strong> se le ripetizioni 2 e 3 sono in gran parte degeneri, <code>--set model.repeats=1</code> dovrebbe perdere poco. Un run da 1,6 h decide la questione, e sarebbe una critica al paper sostenuta da una misura invece che da un'impressione.</p>
+</div>
+
+<h4>Un dettaglio della prima ripetizione che si vede solo nella figura</h4>
+<p>Alla prima ripetizione le quattro regioni sono <strong>identiche per tutti e quattro i campioni disegnati</strong>, e non &#232; un difetto: &#232; una necessit&#224; algebrica. I token entrano nel primo stadio come <code>token_init</code>, che &#232; un parametro e non dipende dall'ingresso, quindi <code>Linear(t)</code> produce lo stesso spostamento per ogni clip. <strong>Le regioni diventano dipendenti dai dati solo dalla seconda ripetizione</strong>, quando i token hanno assorbito ci&#242; che hanno campionato.</p>
+<p>&#200; una premessa importante per leggere la Figura 2 del paper &#8212; e rende il difetto sopra pi&#249; serio di quanto sembri: le uniche ripetizioni <em>adattive</em> sono esattamente quelle che degenerano. Ci&#242; che sopravvive &#232; un campionamento appreso ma <strong>fisso</strong>, uguale per ogni ingresso.</p>
+
+
+<h3>12.13 Un fattore 11 sui FLOPs vale un fattore 0,6 sull'orologio <span class="tag t-evi">evidenza</span></h3>
+<p>Il claim del paper &#232; espresso in FLOPs: &#8722;85,25 % contro EAT-S, &#8722;91 % contro il proprio denso. La domanda che il paper non pone &#8212; e che chiunque voglia <em>usare</em> il modello pone per prima &#8212; &#232; quanto di quel guadagno arrivi all'orologio. Misurato con <code>scripts/benchmark_models.py</code>: solo modello, GPU scarica, 50 iterazioni di warmup e 300 di misura.</p>
+<table>
+  <thead><tr><th>Modello</th><th class="c">GFLOP</th><th class="c">parametri</th><th class="c">ms @ batch 1</th><th class="c">ms @ batch 64</th><th class="c">picco GPU</th></tr></thead>
+  <tbody>
+    <tr><td>Denso <code>c96</code></td><td class="c">0,5275</td><td class="c">4 875 235</td><td class="c">2,95</td><td class="c">11,08</td><td class="c">1 087 MB</td></tr>
+    <tr><td><strong>Sparso</strong></td><td class="c"><strong>0,0485</strong></td><td class="c">2 822 711</td><td class="c"><strong>4,65</strong></td><td class="c"><strong>6,49</strong></td><td class="c">596 MB</td></tr>
+    <tr><td>rapporto sparso/denso</td><td class="c">0,092&#215;</td><td class="c">0,58&#215;</td><td class="c"><strong>1,58&#215;</strong> (pi&#249; lento)</td><td class="c"><strong>0,59&#215;</strong> (pi&#249; veloce)</td><td class="c">0,55&#215;</td></tr>
   </tbody>
 </table>
 <div class="box warn">
-  <p class="box-t">Il modello che costa un decimo in FLOPs è più lento del 20 %</p>
-  <p>È la conferma più forte di una tesi che il progetto aveva già misurato per tre vie indipendenti: <strong>questo carico è limitato dal lancio dei kernel, non dall'aritmetica</strong>. L'estrattore sparso sostituisce pochi grandi prodotti matriciali con moltissime operazioni minuscole — tre ripetizioni di einsum per-token, <code>grid_sample</code>, LayerNorm — e ogni lancio CUDA costa più del calcolo che esegue.</p>
-  <p>Le altre tre misure che convergono: profondità contro larghezza a parità di parametri (1,85×), bf16 senza alcun guadagno, e i FLOPs che non predicono la latenza sul denso.</p>
-  <p><strong>Non invalida il paper.</strong> La riduzione di FLOPs è reale e verificata, e su un acceleratore per edge device — il caso d'uso che gli autori dichiarano — il profilo di costo può essere completamente diverso. Ma <strong>qualifica il claim in modo sostanziale</strong>, ed è una misura fatta sui due modelli del paper stesso. La riduzione di memoria (−45 %) invece si traduce direttamente.</p>
+  <p class="box-t">Il segno del guadagno dipende dal regime, e si inverte</p>
+  <p>Un fattore <strong>10,9 sui FLOPs</strong> diventa un fattore <strong>0,63 a batch 1</strong> &#8212; cio&#232; il modello &#171;pi&#249; economico&#187; &#232; il <strong>58 % pi&#249; lento</strong> &#8212; e un fattore <strong>1,71 a batch 64</strong>. Nessuno dei due &#232; 10,9, e i due hanno segno opposto.</p>
+  <p><strong>La spiegazione &#232; l'intensit&#224; aritmetica.</strong> L'estrattore sparso sostituisce pochi grandi prodotti matriciali con moltissime operazioni minuscole: tre ripetizioni di {aggiusta, campiona, decodifica}, ognuna con LayerNorm, <code>grid_sample</code> e due einsum per-token, pi&#249; 8 encoder su 4 token soltanto. A batch 1 nessuna di queste matrici satura la GPU e il tempo &#232; interamente costo di <em>lancio</em>: il modello sparso ne fa di pi&#249;, e perde. A batch 64 le matrici del denso diventano abbastanza grandi da far contare l'aritmetica, mentre quelle dello sparso restano piccole &#8212; e lo sparso vince.</p>
+  <p><strong>Il punto scomodo:</strong> il regime in cui il metodo perde &#232; <em>batch 1</em>, cio&#232; esattamente il dispositivo edge che classifica una parola alla volta &#8212; lo scenario che motiva l'intero lavoro.</p>
+  <p><strong>Che cosa questo non dice.</strong> Non che il paper sbagli: la riduzione di FLOPs &#232; reale, verificata con due contatori indipendenti, e su un acceleratore diverso &#8212; un DSP, un NPU, un core senza il costo di lancio di CUDA &#8212; il rapporto pu&#242; avvicinarsi molto di pi&#249; a quello aritmetico. Dice che <strong>i FLOPs, su questo hardware e a queste dimensioni, non predicono ci&#242; che l'utente misura</strong>, e che riportarli da soli lascia la met&#224; della domanda senza risposta. La riduzione di memoria (&#8722;45 %) invece si traduce direttamente in entrambi i regimi.</p>
 </div>
 
-<h2>13 · Riferimenti</h2>
+<h4>Due misure precedenti erano sbagliate, in direzioni opposte</h4>
+<p>Questa sezione riportava &#171;78 s/epoca contro 65, cio&#232; +20 %&#187;. Quel numero veniva da uno <strong>smoke test di due epoche</strong>, che ammortizza avvio dei worker e cache fredda su due sole epoche: il valore a regime, sul run completo, &#232; <strong>~50 s/epoca contro i ~55 del denso</strong>. &#200; lo stesso errore gi&#224; commesso sul denso (110 s stimati, 65 reali) e documentato nel diario &#8212; commesso di nuovo, con la stessa causa, un giorno dopo averlo scritto.</p>
+<p>Ma anche la correzione andava qualificata. Il tempo per epoca &#232; una misura a <strong>batch 64</strong>, e in quel regime lo sparso &#232; davvero pi&#249; veloce: il &#8722;9 % osservato per epoca &#232; coerente con lo 0,59&#215; misurato sul solo modello, attenuato da tutto ci&#242; che l'epoca contiene e che i due modelli condividono (log-mel, augmentation con STFT e iSTFT, EMA, due validazioni). La conclusione originale &#8212; &#171;il modello pi&#249; economico &#232; pi&#249; lento&#187; &#8212; era giusta per il caso sbagliato.</p>
+<div class="box">
+  <p class="box-t">La regola che ne esce, e che vale oltre questo progetto</p>
+  <p><strong>Il tempo per epoca non &#232; una misura di latenza.</strong> Mescola caricamento dati, front-end, augmentation, EMA e validazione, e risponde a &#171;quanto dura il mio training&#187;, non a &#171;quanto costa questo modello&#187;. E una stima ricavata da uno o due epoche misura l'avvio, non il regime. La latenza si misura sul solo modello, con warmup, su GPU scarica, <strong>e a pi&#249; di un batch</strong> &#8212; perch&#233; con uno solo si risponde a met&#224; della domanda senza sapere quale met&#224;.</p>
+</div>
+
+<h3>12.14 Quadro dei run eseguiti</h3>
+<table>
+  <thead><tr><th>Run</th><th class="c">front-end</th><th class="c">epoche</th><th class="c">val EMA</th><th class="c">par.</th><th class="c">GFLOP</th><th class="c">stato</th></tr></thead>
+  <tbody>
+    <tr><td><code>dense_seed0</code></td><td class="c"><code>c196_proj96</code></td><td class="c">100</td><td class="c">94,67 %</td><td class="c">4 899 147</td><td class="c">0,5742</td><td class="c">superato (&#167;12.2)</td></tr>
+    <tr><td><strong><code>dense_c96_seed0</code></strong></td><td class="c"><code>c96</code></td><td class="c">100</td><td class="c"><strong>94,09 %</strong></td><td class="c">4 875 235</td><td class="c">0,5275</td><td class="c"><strong>riferimento (&#167;12.1)</strong></td></tr>
+    <tr><td><code>dense_flatten_seed0</code></td><td class="c"><code>c96</code>, <code>flatten</code></td><td class="c">&#8212;</td><td class="c">&#8212;</td><td class="c">5 197 795</td><td class="c">0,5604</td><td class="c">da eseguire</td></tr>
+    <tr><td><strong><code>sparse_seed0</code></strong></td><td class="c"><code>c96</code></td><td class="c">100</td><td class="c"><strong>95,57 %</strong></td><td class="c">2 822 711</td><td class="c">0,0485</td><td class="c"><strong>risultato centrale (&#167;12.2)</strong></td></tr>
+  </tbody>
+</table>
+<p>Parametri e FLOPs sono misurati per <em>tutte</em> le righe, anche quelle non ancora addestrate: il costo dipende dalla sola architettura e si conta senza toccare la GPU. Le accuratezze mancanti sono l'unica cosa che richiede tempo di calcolo.</p>
+
+<h2>13 · Preparazione all'orale</h2>
+
+<div class="box info">
+  <p class="box-t">A cosa serve questo capitolo</p>
+  <p>I capitoli 1&#8211;12 spiegano il progetto. Questo lo <strong>interroga</strong>: i numeri da avere in testa, le derivazioni da saper scrivere alla lavagna, e le domande che &#232; ragionevole aspettarsi &#8212; con la risposta breve e il rimando alla sezione che la argomenta per esteso.</p>
+  <p>Regola d'oro per l'orale, che vale pi&#249; di qualsiasi risposta preparata: <strong>distinguere sempre le tre categorie</strong> &#8212; &#171;lo dichiara il paper&#187;, &#171;l'abbiamo assunto noi perch&#233; il paper tace&#187;, &#171;l'abbiamo misurato&#187;. Sono i tre marcatori di questo manuale, e un candidato che li tiene separati dimostra di aver capito il metodo, non solo il modello.</p>
+</div>
+
+<h3>13.1 I numeri da sapere a memoria</h3>
+<table>
+  <thead><tr><th style="width:44mm">Grandezza</th><th class="c">Valore</th><th>Da dove viene</th></tr></thead>
+  <tbody>
+    <tr><td colspan="3" style="background:var(--soft2);font-weight:600">Dati</td></tr>
+    <tr><td>Speech Commands V2</td><td class="c">105 829 clip &#183; 35 classi &#183; 16 kHz &#183; 1 s</td><td>Warden 2018</td></tr>
+    <tr><td>Split ufficiali</td><td class="c">84 843 / 9 981 / 11 005</td><td>dichiarati dal paper, coincidono con gli elenchi ufficiali <em>speaker-disjoint</em></td></tr>
+    <tr><td>Sbilanciamento delle classi</td><td class="c">1 256 &#8211; 3 250 (&#8776;2,6&#215;)</td><td>misurato</td></tr>
+    <tr><td>Clip pi&#249; corte di 1 s</td><td class="c">11,6 %</td><td>misurato; si zero-paddano</td></tr>
+    <tr><td colspan="3" style="background:var(--soft2);font-weight:600">Rappresentazione</td></tr>
+    <tr><td>Log-mel</td><td class="c">64 bin &#183; <var>n</var><sub>fft</sub>=400 (25 ms) &#183; hop 160 (10 ms)</td><td><span class="tag t-ass">assunzione</span> il paper tace su tutto il blocco</td></tr>
+    <tr><td>Forma dello spettrogramma</td><td class="c">[1, 64, 101]</td><td>101 = 16000/160 + 1</td></tr>
+    <tr><td>Uscita della early convolution</td><td class="c">[96, 16, 51]</td><td>conv 7&#215;7 s2 &#8594; maxpool 3&#215;3 stride (2,1)</td></tr>
+    <tr><td colspan="3" style="background:var(--soft2);font-weight:600">I due modelli &#8212; <em>nostri</em> numeri contro quelli del paper</td></tr>
+    <tr><td>Denso (nostro / paper)</td><td class="c">4,875 M / 4,80 M &#183; 0,528 / 0,645 G</td><td>+1,6 % sui parametri, &#8722;18,2 % sul costo</td></tr>
+    <tr><td>Sparso (nostro / paper)</td><td class="c">2,823 M / 2,87 M &#183; 0,0485 / 0,055 G</td><td>&#8722;1,6 % sui parametri, &#8722;11,8 % sul costo</td></tr>
+    <tr><td>Configurazione sparsa</td><td class="c"><var>N</var>=4 &#183; <var>P</var>=36 &#183; <var>d</var><sub>tok</sub>=64 &#183; <var>d</var><sub>enc</sub>=128 &#183; <var>L</var><sub>rep</sub>=3 &#183; <var>L</var><sub>enc</sub>=8</td><td><span class="tag t-pap">dal paper</span> Tabella 1</td></tr>
+    <tr><td>Accuratezze del paper</td><td class="c">sparso 96,88 % &#183; denso 96,67 % &#183; EAT-S 98,15 %</td><td>Tabella 2; EAT-S &#232; <em>citato</em>, non rimisurato</td></tr>
+    <tr><td>Il claim principale</td><td class="c">&#8722;85,25 % di FLOPs contro EAT-S</td><td>0,055 contro 0,373 G</td></tr>
+    <tr><td><strong>I nostri risultati</strong></td><td class="c"><strong>sparso 95,57 %</strong> &#183; denso 94,09 %<br>(validation, seed 0)</td><td>&#167;12.2 e &#167;12.1 &#8212; &#8722;1,31 e &#8722;2,58 dai loro numeri, che per&#242; sono su <em>test</em>. <strong>Il margine sparso&#8722;denso &#232; +1,48; il loro &#232; +0,21</strong></td></tr>
+    <tr><td colspan="3" style="background:var(--soft2);font-weight:600">Ricetta di training <span class="tag t-pap">dal paper</span></td></tr>
+    <tr><td>Ottimizzatore</td><td class="c">AdamW &#183; lr 3&#183;10<sup>&#8722;4</sup> &#183; &#946;=(0,9, 0,99) &#183; wd 10<sup>&#8722;5</sup></td><td>sez. 3.2; il decay salta i parametri 1-D (da EAT)</td></tr>
+    <tr><td>Schedule</td><td class="c">one-cycle &#183; <code>pct_start</code>=0,1 &#183; div 25 &#183; final div 10<sup>4</sup></td><td>i tre valori numerici vengono dal <code>trainer.py</code> di EAT</td></tr>
+    <tr><td>Resto</td><td class="c">batch 64 &#183; EMA 0,995 &#183; BCE multi-hot &#183; 100 epoche</td><td>solo il numero di epoche &#232; <span class="tag t-ass">assunzione</span></td></tr>
+    <tr><td colspan="3" style="background:var(--soft2);font-weight:600">Misure nostre che valgono una risposta</td></tr>
+    <tr><td>FLOPs / MAC</td><td class="c">esattamente 2,000000</td><td>verificato su <code>Linear(100&#8594;200)</code>: fvcore 20 000, torch 40 000</td></tr>
+    <tr><td>Profondit&#224; contro larghezza</td><td class="c">1,85&#215; di tempo a parit&#224; di parametri</td><td>d=128 L=24 contro d=224 L=8</td></tr>
+    <tr><td>bf16</td><td class="c">nessun guadagno (101,7 s in entrambi i casi)</td><td>&#167;11.4</td></tr>
+    <tr><td>Sparso contro denso, sul nostro hardware</td><td class="c">&#8722;91 % FLOPs &#183; <strong>1,58&#215; pi&#249; lento a batch 1</strong><br>0,59&#215; (pi&#249; veloce) a batch 64 &#183; &#8722;45 % memoria</td><td>&#167;12.13 &#8212; la misura pi&#249; interessante del progetto: il segno del guadagno <em>si inverte</em> col batch</td></tr>
+    <tr><td>Saturazione della curva</td><td class="c">massimo all'epoca <strong>63</strong> (denso) e <strong>97</strong> (sparso)</td><td>&#167;12.1 e &#167;12.2 &#8212; a 50 epoche l'ordinamento fra configurazioni si conserva, i valori assoluti calano di ~0,4</td></tr>
+  </tbody>
+</table>
+
+<h3>13.2 Il progetto in cinque minuti</h3>
+<p>Se la prima domanda &#232; &#171;mi racconti che cosa ha fatto&#187;, questa &#232; la traccia &#8212; problema, metodo, che cosa abbiamo dovuto ricostruire, che cosa abbiamo trovato:</p>
+<ol>
+  <li><strong>Il problema.</strong> Keyword spotting su 35 parole isolate di un secondo. Il vincolo vero non &#232; l'accuratezza &#8212; la letteratura &#232; al 98 % &#8212; ma il <em>costo</em>: questi modelli devono girare su dispositivi che ascoltano in continuazione.</li>
+  <li><strong>Che cosa fanno tutti.</strong> Spettrogramma, poi elaborazione <em>densa e uniforme</em> di tutte le celle tempo-frequenza: patch (AST, KWT), finestre gerarchiche (HTS-AT), convoluzioni sulla forma d'onda (EAT). Il costo cresce con la risoluzione, e la riduzione avviene <em>a posteriori</em>: si calcola tutto e poi si aggrega.</li>
+  <li><strong>Che cosa fa questo paper.</strong> Rompe lo schema: decide <em>a priori</em> dove guardare. <var>N</var>=4 token latenti, ciascuno accoppiato a una regione del piano tempo-frequenza; per <var>L</var><sub>rep</sub>=3 volte il token sposta la propria regione, ne campiona <var>P</var>=36 punti per interpolazione bilineare, e li ricodifica dentro di s&#233; con pesi che il token stesso genera. Poi 8 encoder su 4 token soltanto. Il calcolo a valle scala con <var>N</var>, non con la risoluzione dello spettrogramma: da 816 celle a 4 token.</li>
+  <li><strong>Il problema della riproduzione.</strong> Nessun codice pubblico e nessun preprint. Il paper dichiara la configurazione del modello sparso (Tabella 1) ma <em>nulla</em> del baseline denso su cui si fonda il confronto: solo 4,80 M parametri e 0,645 GFLOP. Abbiamo trattato quei due numeri come <strong>vincoli</strong> e cercato su 432 configurazioni quelle compatibili, ricavandone due deduzioni che il paper non scrive: il max pooling agisce solo sull'asse frequenza, e i numeri riportati sono FLOPs e non MAC (&#167;8).</li>
+  <li><strong>La contraddizione sciolta.</strong> La sez. 3.2 dice &#171;96 dimensional feature&#187; e &#171;196 kernels&#187; nella stessa pagina. Il denso non discrimina fra le due letture, lo sparso s&#236; &#8212; la early convolution &#232; l'11 % del suo costo contro il 65 % dell'altro &#8212; e la lettura a 196 sbaglia del +73 %. Il 196 &#232; un refuso (&#167;12.8).</li>
+  <li><strong>Che cosa abbiamo trovato.</strong> Il claim qualitativo si riproduce, e con un margine pi&#249; ampio del loro: il modello sparso batte il denso di <strong>1,48 punti</strong> (loro: +0,21) usando il 58 % dei parametri e il 9 % dei FLOPs. Ma il guadagno di calcolo <em>non</em> arriva all'orologio: un fattore 10,9 sui FLOPs diventa un fattore 0,63 a batch 1 &#8212; cio&#232; il modello &#171;economico&#187; &#232; pi&#249; <em>lento</em> &#8212; e 1,71 a batch 64. Il segno si inverte col regime, e il regime in cui perde &#232; proprio l'edge device che motiva il lavoro.</li>
+</ol>
+
+<h3>13.3 Derivazioni da saper scrivere alla lavagna</h3>
+<table>
+  <thead><tr><th style="width:50mm">Derivazione</th><th class="c">&#167;</th><th>Il passaggio che conta</th></tr></thead>
+  <tbody>
+    <tr><td>Scaling 1/&#8730;<var>d</var><sub>k</sub> dell'attenzione</td><td class="c">3.2</td><td><var>q&#183;k</var> su <var>d</var><sub>k</sub> componenti indipendenti a varianza 1 ha varianza <var>d</var><sub>k</sub>: senza riscalare i logit crescono con la dimensione, la softmax satura e il gradiente svanisce. Non &#232; una costante estetica, &#232; controllo della varianza.</td></tr>
+    <tr><td>Complessit&#224; di un blocco</td><td class="c">3.4</td><td>(4+2<var>r</var>)<var>nd</var><sup>2</sup> + 2<var>n</var><sup>2</sup><var>d</var>. Il termine quadratico domina per <var>n</var> &gt; (2+<var>r</var>)<var>d</var> = 768 con <var>d</var>=128, <var>r</var>=4. <strong>Le nostre sequenze sono cortissime</strong>: da 51 a 4 token il termine quadratico cala 162&#215;, quello lineare solo 12,75&#215;. Il guadagno reale sta in mezzo, ed &#232; il motivo per cui si misura invece di dedurlo.</td></tr>
+    <tr><td>Correzione del bias in Adam</td><td class="c">5.1</td><td><var>m</var><sub>t</sub> inizializzato a zero &#232; una stima distorta verso zero: E[<var>m</var><sub>t</sub>] = (1&#8722;&#946;<sub>1</sub><sup>t</sup>)E[<var>g</var>], da cui la divisione per (1&#8722;&#946;<sub>1</sub><sup>t</sup>).</td></tr>
+    <tr><td>AdamW: perch&#233; L2 &#8800; weight decay</td><td class="c">5.2</td><td>Con Adam il termine L2 entra nel gradiente e viene <em>diviso per &#8730;<var>v</var></em>: i pesi con gradiente storicamente grande vengono decaduti di meno. Disaccoppiarlo restituisce al decay il significato che ha con SGD.</td></tr>
+    <tr><td>Gradiente della cross-entropy con softmax</td><td class="c">6.1</td><td>&#8706;L/&#8706;<var>z</var> = <var>p</var> &#8722; <var>y</var>. Pi&#249; il trucco log-sum-exp per la stabilit&#224; numerica.</td></tr>
+    <tr><td>Parametrizzazione esponenziale delle regioni</td><td class="c">7.2</td><td><var>w</var>' = <var>w</var>&#183;e<sup><var>t</var></sup>: positivit&#224; per costruzione, invarianza di scala (la rete impara <em>rapporti</em>, non incrementi), simmetria fra allargare e restringere. Tre ragioni, non una.</td></tr>
+    <tr><td>Gradiente dell'interpolazione bilineare</td><td class="c">7.3</td><td>&#8706;<var>F</var>/&#8706;<var>x&#771;</var> &#232; una <strong>differenza finita fra celle adiacenti</strong>. Da qui due conseguenze: la regione si muove per piccoli passi locali, e su una superficie ruvida quella differenza &#232; rumore &#8212; che &#232; <em>esattamente</em> perch&#233; il paper campiona dopo la early convolution.</td></tr>
+    <tr><td>La regola dei tre sigma sugli offset</td><td class="c">7.3</td><td>Standardizzati sull'asse dei <var>P</var> punti e divisi per 3, la deviazione vale 1/3: il 99,7 % dei campioni cade dentro la regione <em>per costruzione</em>, invece che sperando che accada.</td></tr>
+    <tr><td>Perch&#233; la BCE con target mixati</td><td class="c">6.2</td><td>Ogni classe &#232; una domanda binaria indipendente: per una miscela udibile di due parole la risposta &#232; &#171;s&#236;&#187; a entrambe. Da cui il target multi-hot con soglia &#955;, non un target morbido.</td></tr>
+    <tr><td>Aritmetica della convoluzione</td><td class="c">4.1</td><td>&#8970;(<var>n</var>+2<var>p</var>&#8722;<var>k</var>)/<var>s</var>&#8971;+1, applicata due volte: 64&#215;101 &#8594; 32&#215;51 &#8594; 16&#215;51.</td></tr>
+  </tbody>
+</table>
+
+<h3>13.4 Domande sul metodo del paper</h3>
+
+<h4>&#171;Perch&#233; <var>N</var> deve essere un quadrato perfetto?&#187;</h4>
+<p>Perch&#233; le regioni si inizializzano su una griglia &#8730;<var>N</var>&#215;&#8730;<var>N</var> in coordinate normalizzate. Non &#232; scritto nel paper: lo si deduce dal codice di SparseFormer, e lo <em>conferma</em> l'ablation della Tabella 3, che usa <var>N</var> &#8712; {4, 9, 16, 25, 36} &#8212; tutti quadrati perfetti. Era un vincolo strutturale ereditato, non una scelta estetica degli autori (&#167;7.1).</p>
+
+<h4>&#171;Perch&#233; il modello sparso non ha codifica posizionale?&#187;</h4>
+<p>Perch&#233; i token latenti sono un <em>insieme</em>, non una sequenza: non hanno ordine intrinseco, e ognuno porta con s&#233; la propria posizione sotto forma di regione. L'informazione spaziale sta nei parametri della regione, non nell'indice del token. &#200; dichiarato dal paper. Sul modello <em>denso</em> la questione &#232; diversa &#8212; l&#236; i token sono frame temporali, che un ordine ce l'hanno &#8212; e infatti la testiamo: abbiamo verificato che senza codifica il transformer &#232; <strong>esattamente</strong> invariante a permutazioni del tempo (variazione 2,4&#183;10<sup>&#8722;7</sup>, cio&#232; rumore di virgola mobile).</p>
+
+<h4>&#171;Perch&#233; serve la early convolution? Non si potrebbe campionare direttamente lo spettrogramma?&#187;</h4>
+<p>&#200; la domanda migliore che si possa fare su questo metodo, e il paper la anticipa esplicitamente. No: il gradiente rispetto alle coordinate &#232; una differenza finita fra quattro celle adiacenti, e su uno spettrogramma grezzo &#8212; superficie ruvida, transitori, rumore &#8212; quella differenza non porta direzione, porta rumore. Dopo qualche convoluzione la superficie &#232; liscia e il gradiente diventa un segnale di direzione affidabile. La early convolution non serve solo a ridurre la risoluzione: <strong>serve a rendere addestrabile il campionamento</strong> (&#167;4.2).</p>
+
+<h4>&#171;Perch&#233; i pesi del decoding sono generati dal token invece di essere parametri fissi?&#187;</h4>
+<p>Uno strato lineare ordinario applica gli stessi pesi a tutti gli input: impara una trasformazione buona <em>in media</em>. Qui <var>M</var><sub>c</sub> e <var>M</var><sub>s</sub> sono funzioni del token, quindi un token che segue una regione di bassa frequenza pu&#242; pesare i propri canali diversamente da uno posato su un transiente. &#200; il principio delle hypernetwork, ereditato da AdaMixer. Il paper &#232; esplicito sul fatto che serva: &#171;simply using a linear layer for this encoding is not effective&#187; (&#167;7.4).</p>
+
+<h4>&#171;Da dove viene concretamente il risparmio di calcolo?&#187;</h4>
+<p>Non dall'attenzione &#8212; che &#232; il primo sospetto e sarebbe la risposta sbagliata. Con sequenze cos&#236; corte il termine quadratico dell'attenzione non domina (&#167;3.4). Il risparmio viene dal fatto che <em>tutto</em> il calcolo a valle scala con <var>N</var>=4 invece che con <var>T</var>=51: otto encoder su 4 token invece che su 51. E infatti nel modello sparso il termine dominante diventa la early convolution, che vale il 65 % del costo totale &#8212; e quella non &#232; stata ridotta affatto.</p>
+
+<h4>&#171;Che rapporto c'&#232; fra questo metodo e l'attenzione?&#187;</h4>
+<p>&#200; una forma di attenzione <em>hard</em> e appresa, ma sul <strong>dominio di input</strong> invece che fra token. L'attenzione classica calcola tutti i punteggi e poi pesa: costa comunque <var>n</var><sup>2</sup>. Qui il modello sceglie <var>P</var> posizioni e legge solo quelle: il calcolo non speso non viene proprio eseguito. Il prezzo &#232; che la selezione va resa differenziabile, e lo strumento &#232; l'interpolazione bilineare &#8212; la stessa idea degli Spatial Transformer Network e delle deformable convolution.</p>
+
+<h3>13.5 Domande sulle nostre scelte</h3>
+
+<h4>&#171;Perch&#233; il baseline &#232; il dense-transformer e non EAT-S, che &#232; l'altro paper assegnato?&#187;</h4>
+<p>Perch&#233; &#232; il <strong>confronto controllato</strong> del paper: stessa pipeline, stesso front-end, stessa ricetta di training, unica differenza la produzione dei token. Il numero di EAT-S nella Tabella 2 &#232; <em>citato dalla letteratura</em>, non rimisurato dagli autori: confrontarcisi significherebbe confrontare due pipeline diverse addestrate su due macchine diverse. La reimplementazione di EAT-S resta una fase opzionale, e servirebbe soprattutto a calibrare il nostro contatore di FLOPs contro un valore pubblicato.</p>
+
+<h4>&#171;Avete riprodotto il risultato del paper?&#187;</h4>
+<p>Il <strong>risultato</strong> s&#236;, i <strong>valori assoluti</strong> no, e la distinzione &#232; il punto. Il paper afferma che il modello sparso eguaglia o supera il denso a una frazione del costo: da noi lo supera di <strong>1,48 punti</strong> con il 58 % dei parametri e il 9 % dei FLOPs, contro il loro +0,21. I valori assoluti sono 1,31 punti sotto i loro sul modello sparso e 2,58 sotto sul denso.</p>
+<p>E c'&#232; una struttura in quei due scarti che conviene far notare per primi: <strong>il nostro scarto raddoppia esattamente dove il paper smette di essere esplicito.</strong> Del modello sparso la Tabella 1 dichiara ogni iperparametro, e siamo a &#8722;1,31; del denso dichiara due soli numeri e tutto il resto l'abbiamo ricostruito, e siamo a &#8722;2,58. Se il residuo venisse dalla pipeline &#8212; dati, front-end, augmentation, ottimizzatore, tutte cose che i due modelli condividono &#8212; i due scarti sarebbero simili. Non lo sono.</p>
+
+<h4>&#171;E i 2,58 punti che mancano al denso?&#187;</h4>
+<p>Quattro candidati, in ordine di plausibilit&#224;, e uno gi&#224; eliminato:</p>
+<ul>
+  <li><strong>Eliminato: &#171;poche epoche&#187;.</strong> Il massimo cade all'epoca 63 su 100 e le ultime 37 non producono nulla. Non &#232; un problema di durata dell'addestramento (&#167;12.1, &#167;12.3).</li>
+  <li><strong>Confronto validation contro test.</strong> Il nostro numero &#232; su validation, il loro su test. Parte dello scarto potrebbe non esistere &#8212; e lo sapremo una volta sola, alla fine.</li>
+  <li><strong>La ricostruzione non &#232; la loro.</strong> Lo scarto del &#8722;18,2 % sui FLOPs, mai spiegato, dice che il loro denso non &#232; esattamente il nostro. Senza il loro codice non &#232; risolvibile.</li>
+  <li><strong><code>seq_mode=pool_freq</code>.</strong> &#200; la nostra scelta meno sicura: media via l'asse frequenza, e ogni token porta 96 valori invece di 1536. La variante <code>flatten</code> &#232; gi&#224; scritta e fitta meglio il costo dichiarato. Un run da 1,8 ore chiude la questione.</li>
+</ul>
+<p>La risposta da <em>non</em> dare &#232; &#171;avr&#224; bisogno di pi&#249; tuning&#187;. Il progetto ha eliminato una causa con una misura e ha un esperimento programmato per la successiva: &#232; questo che si sta valutando.</p>
+
+<h4>&#171;Come avete deciso i parametri dello spettrogramma, visto che il paper non li dichiara?&#187;</h4>
+<p>Con una <strong>sonda lineare</strong>: regressione logistica su log-mel mediati su 8 finestre, 12 000 train / 4 000 val, al variare del numero di bin. Risultato: 41,60 % a 32 bin, 42,40 % a 80, 42,03 % a 128 &#8212; 0,8 punti di escursione su un fattore 4 di risoluzione, e curva <em>non monotona</em>. Il grado di libert&#224; che avevamo dichiarato come il pi&#249; impattante dell'intera riproduzione &#232; quasi piatto. Abbiamo preso 64 bin: a 0,22 punti dal migliore, cio&#232; dentro il rumore, ed &#232; l'unico valore che dopo lo stem d&#224; <var>F</var>=16 (&#167;2.5).</p>
+
+<h4>&#171;Avete normalizzato gli spettrogrammi?&#187;</h4>
+<p>No, ed &#232; una correzione a noi stessi. L'avevamo aggiunta convinti che aiutasse: il livello di registrazione in SC-V2 varia di 28,5 dB fra 1&#186; e 99&#186; percentile, cio&#232; un fattore 27 in ampiezza. La premessa &#232; vera e l'abbiamo misurata. Ma la stessa sonda lineare d&#224; 42,83 % <em>senza</em> normalizzazione contro 42,33 % <em>con</em>: il livello assoluto porta un po' di segnale utile, e azzerarlo lo distrugge. Si aggiunga che n&#233; il paper n&#233; i due ancestor normalizzano. Declassata a flag di configurazione e ablation dichiarata (&#167;2.6).</p>
+
+<h4>&#171;Avete copiato codice?&#187;</h4>
+<p>No. Il paper di Kavaki &amp; Mandel non ha codice pubblico: il metodo &#232; reimplementato dalle formule. Abbiamo <em>letto</em> il codice ufficiale di SparseFormer e di EAT per sciogliere ambiguit&#224; che nessuna prosa pu&#242; risolvere &#8212; la formula esatta della normalizzazione a tre deviazioni standard, la sequenza dello stem, la formula di PhaseMix, i parametri di one-cycle &#8212; e ogni punto in cui l'abbiamo fatto &#232; annotato nel codice e nel manuale. La lezione &#232; documentata: <em>dedurre un metodo da una riga di prosa &#232; un esercizio di immaginazione, non di riproduzione</em>. La nostra PhaseMix dedotta dal testo era sbagliata su cinque dettagli su cinque (&#167;6.3.2).</p>
+
+<h4>&#171;Perch&#233; avete reimplementato l'attenzione invece di usare <code>nn.MultiheadAttention</code>?&#187;</h4>
+<p>Perch&#233; la consegna chiede una reimplementazione autonoma e all'orale va spiegato ogni passaggio. Abbiamo per&#242; verificato l'equivalenza copiando i nostri pesi dentro l'implementazione di PyTorch: differenza massima delle uscite <strong>esattamente 0,0</strong>. Non plausibilit&#224; &#8212; equivalenza.</p>
+
+<h4>&#171;Perch&#233; addestrate in modalit&#224; deterministica, se costa il 10 % del tempo?&#187;</h4>
+<p>Perch&#233; senza, due run identici differiscono di 0,02 punti, e le differenze che il paper discute valgono 0,21 punti. Il determinismo azzera il pavimento di rumore, cos&#236; l'unica varianza che resta &#232; quella fra seed &#8212; che &#232; esattamente ci&#242; che vogliamo misurare. Vale la pena aggiungere che la garanzia ha richiesto lavoro: <code>use_deterministic_algorithms(True)</code> da solo non basta, serve anche <code>CUBLAS_WORKSPACE_CONFIG=:4096:8</code> impostata <em>prima</em> di importare torch, e ce ne siamo accorti leggendo i log del primo lancio, non dai test (&#167;11.8).</p>
+
+<h3>13.6 Domande scomode, e la risposta onesta</h3>
+
+<h4>&#171;Il modello sparso &#232; pi&#249; veloce?&#187;</h4>
+<p><strong>Dipende dal batch, e il segno si inverte.</strong> A batch 1 &#232; <strong>1,58&#215; pi&#249; lento</strong> del denso; a batch 64 &#232; <strong>1,71&#215; pi&#249; veloce</strong>. A fronte, in entrambi i casi, di un fattore 10,9 sui FLOPs.</p>
+<p>La spiegazione &#232; l'<strong>intensit&#224; aritmetica</strong>. L'estrattore sparso sostituisce pochi grandi prodotti matriciali con moltissime operazioni minuscole; a batch 1 nessuna satura la GPU e vince chi lancia meno kernel &#8212; cio&#232; il denso. A batch 64 le matrici del denso diventano grandi abbastanza da far contare l'aritmetica, quelle dello sparso restano piccole, e l'ordine si rovescia. &#200; la quarta misura del progetto che converge sul limite dei lanci di kernel: le altre tre sono la profondit&#224; che costa 1,85&#215; della larghezza a parit&#224; di parametri, bf16 che non guadagna nulla, e i FLOPs che non predicono la latenza gi&#224; sul denso.</p>
+<p><strong>Il dettaglio scomodo, da dire per primi invece di farselo estrarre:</strong> il regime in cui il metodo perde &#232; batch 1, cio&#232; il dispositivo che classifica una parola alla volta &#8212; lo scenario che motiva l'intero lavoro.</p>
+<p>Che cosa <em>non</em> significa: che il paper sbagli. La riduzione di FLOPs &#232; reale e misurata con due contatori indipendenti; su un acceleratore per edge &#8212; il caso d'uso dichiarato dagli autori &#8212; il profilo di costo pu&#242; essere del tutto diverso, e la riduzione di memoria (&#8722;45 %) si traduce direttamente ovunque. Ma qualifica il claim in modo sostanziale, ed &#232; una misura fatta sui due modelli del paper stesso.</p>
+
+<h4>&#171;Quanto vi fidate dei numeri della Tabella 3?&#187;</h4>
+<p>Poco, e per tre ragioni cumulative. &#200; a <strong>singolo seed</strong>. &#200; <strong>non monotona</strong> (16 token &#8594; 97,53 %, 25 &#8594; 97,20 %, 36 &#8594; 97,94 %), il che suggerisce un rumore da seed di 0,3&#8211;0,4 punti &#8212; <em>paragonabile a diverse delle differenze che il paper discute</em>, incluso il +0,21 con cui il modello sparso batte il denso. E il metodo proposto <strong>non &#232; bit-riproducibile su GPU</strong>: <code>grid_sample</code> non ha un backward deterministico su CUDA, quindi gli autori non potevano avere run riproducibili nemmeno volendo. &#200; la ragione per cui noi riportiamo &#8805;3 seed con deviazione standard.</p>
+
+<h4>&#171;Lo scarto sui FLOPs del denso &#232; del &#8722;18 %. Non vi siete fermati troppo presto?&#187;</h4>
+<p>&#200; una fermata deliberata, ed &#232; argomentabile. Abbiamo formulato l'ipotesi pi&#249; naturale &#8212; il paper dice &#171;convolutional layers&#187; al plurale, quindi ci sono pi&#249; strati &#8212; e l'abbiamo <em>testata</em>: due strati portano il costo a +164 % invece che a +11 %. Confutata, e nettamente. A quel punto continuare ad aggiungere gradi di libert&#224; finch&#233; il numero combacia sarebbe overfitting su una cifra riportata senza convenzione dichiarata. Si aggiunga un'osservazione strutturale: con <code>c96</code> tutti e quattro i vincoli sono <em>sottostimati</em>, e un sottostimare sistematico &#232; la firma plausibile di una ricostruzione un filo pi&#249; leggera dell'originale; un +73 % su un solo modello sarebbe stato un errore di struttura (&#167;12.8).</p>
+
+<h4>&#171;Come sapete che il meccanismo delle regioni funziona davvero e non &#232; inerte?&#187;</h4>
+<p>Perch&#233; lo misuriamo a ogni epoca, ed &#232; il rischio numero uno del progetto: se le regioni non si muovessero, il modello degraderebbe a campionamento fisso, si addestrerebbe comunque e produrrebbe un numero plausibile <em>senza che nulla nei log lo segnali</em>. Due diagnostiche gratuite: <code>region_init_drift</code> (spostamento dalla griglia iniziale) e <code>region_adjust_norm</code> (norma dei pesi dell'aggiustamento, che partono da <em>esattamente</em> zero per costruzione, quindi qualunque valore positivo dimostra che quel ramo riceve gradiente). Nello smoke test la seconda passa da 0 a 4,32 dopo una sola epoca (&#167;12.11).</p>
+
+<h4>&#171;Che cosa non sapete, e non saprete?&#187;</h4>
+<p>Domanda a cui conviene arrivare con l'elenco gi&#224; pronto &#8212; &#232; il &#167;9, e sono quattro voci: il numero di epoche (nessuna fonte lo fissa); l'origine del &#8722;18,2 % sui FLOPs del denso (due ipotesi formulate, entrambe eliminate); se il loro denso usi <code>pool_freq</code> o <code>flatten</code> (indecidibile dai vincoli, addestriamo entrambe); e i parametri dello spettrogramma (misurati come quasi irrilevanti, ma restano una nostra scelta). Nessuna di queste &#232; nascosta: sono marcate nel codice, nelle configurazioni e nel manuale.</p>
+
+<h3>13.7 Ponti col programma del corso</h3>
+<p>Le domande individuali vertono su tutto il programma, non solo sul progetto. Questi sono i punti in cui il progetto <em>&#232;</em> il programma, e conviene rispondere partendo dalla propria misura invece che dalla definizione:</p>
+<table>
+  <thead><tr><th style="width:46mm">Argomento del corso</th><th>Dove il progetto lo tocca</th></tr></thead>
+  <tbody>
+    <tr><td>Attenzione e transformer</td><td>Encoder reimplementato da zero e verificato bit a bit contro PyTorch; derivazione dello scaling; invarianza a permutazioni <em>dimostrata sperimentalmente</em>.</td></tr>
+    <tr><td>Convoluzione</td><td>Aritmetica applicata due volte per ricavare [96, 16, 51]; il ruolo non ovvio della early convolution (rendere addestrabile il campionamento).</td></tr>
+    <tr><td>Ottimizzazione</td><td>AdamW contro Adam+L2; one-cycle con i suoi quattro parametri; EMA, di cui abbiamo la curva del vantaggio che si chiude col learning rate (&#167;12.4).</td></tr>
+    <tr><td>Regolarizzazione</td><td>Le augmentation come regolarizzazione: <code>mixing</code> (between-class learning) e <code>phasemix</code>; il legame GELU&#8211;dropout; dropout a 0 come scelta dichiarata, non dimenticata.</td></tr>
+    <tr><td>Funzioni di perdita</td><td>BCE contro CE, e perch&#233; con target mixati la BCE &#232; la formulazione naturale; il gradiente <var>p</var>&#8722;<var>y</var>; log-sum-exp.</td></tr>
+    <tr><td>Valutazione e metodologia</td><td>Split speaker-disjoint; test set toccato una volta sola, con una guardia nel codice; accuratezza bilanciata su classi sbilanciate 2,6&#215;; &#8805;3 seed con deviazione standard.</td></tr>
+    <tr><td>Ottimizzazione degli iperparametri</td><td>Fase 5: Optuna con successive halving / Hyperband &#8212; argomento del programma da eseguire davvero, non da citare.</td></tr>
+    <tr><td>Riproducibilit&#224;</td><td>Determinismo bit-esatto, e il fatto che il metodo del paper <em>non lo consenta</em>; il resume trasparente e i tre bug che l'hanno impedito (&#167;11.7).</td></tr>
+  </tbody>
+</table>
+
+<h3>13.8 Le tre storie da raccontare</h3>
+<p>Un orale si ricorda per gli episodi, non per le tabelle. Queste tre sono nostre, complete di misura, e ognuna dimostra un modo di lavorare:</p>
+<ol>
+  <li><strong>La predizione a &#8722;0,8 %.</strong> Prima di scrivere una riga dell'estrattore sparso abbiamo sommato a mano il budget di parametri dei suoi componenti, per decidere fra due letture di una frase ambigua del paper. La lettura &#171;tensore appiattito&#187; dava 2 846 623 contro i 2,87 M dichiarati (&#8722;0,8 %), l'altra &#8722;23,3 %. L'implementazione ha poi dato 2 822 711. <em>Aver predetto il conteggio di un modello non ancora scritto &#232; la verifica pi&#249; forte che la lettura del metodo sia corretta</em> &#8212; pi&#249; di qualunque test unitario.</li>
+  <li><strong>Il refuso sciolto da due vincoli.</strong> &#171;96 dimensional feature&#187; e &#171;196 kernels&#187; nella stessa sezione. Il modello denso non discrimina: entrambe le letture cadono a &#8722;11/&#8722;18 % sul costo. Lo sparso s&#236;, e brutalmente: +73 % contro &#8722;11,8 %. La ragione &#232; strutturale &#8212; la early convolution &#232; l'11 % del costo del denso e il 65 % dello sparso &#8212; e nessuno dei due vincoli, da solo, avrebbe risolto l'ambiguit&#224;.</li>
+  <li><strong>Lo stesso errore di misura, due volte in due giorni.</strong> Avevamo stimato 110 s/epoca per il denso da un run di prova: i reali erano 65, perch&#233; due epoche ammortizzano l'avvio dei worker su niente. Lezione scritta nel diario. Il giorno dopo abbiamo stimato 78 s/epoca per lo sparso da uno smoke di <em>due epoche</em>, e pubblicato la conclusione &#171;il modello sparso &#232; pi&#249; lento del 20 %&#187;. I reali erano ~50. Da l&#236; &#232; nato <code>scripts/benchmark_models.py</code> &#8212; e con esso la scoperta che la risposta giusta dipende dal batch e cambia segno. <em>Una lezione scritta e non trasformata in strumento non &#232; stata imparata.</em></li>
+  <li><strong>Il test fallito che non era un bug.</strong> Un test verificava che <code>phasemix</code> preservasse il modulo dello spettrogramma, come dice EAT. Falliva con un errore del 34 %. Non era un bug: una matrice complessa arbitraria <em>non &#232; la STFT di alcun segnale reale</em>, e la iSTFT fa overlap-add, che equivale a proiettare sul sottospazio delle STFT consistenti &#8212; e la proiezione cambia anche i moduli. &#171;Ampiezza preservata&#187; vale sulla matrice modificata, non sul segnale ricostruito. &#200; lo stesso fenomeno che rende necessario Griffin-Lim.</li>
+</ol>
+
+<h2>14 · Riferimenti</h2>
 
 <h4>Paper del progetto</h4>
 <ul>

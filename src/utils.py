@@ -90,6 +90,72 @@ def load_config(path: str | Path) -> dict[str, Any]:
     return deep_merge(parent, cfg)
 
 
+def apply_overrides(cfg: dict[str, Any], assignments: list[str]) -> list[str]:
+    """Applica assegnamenti `chiave.annidata=valore` alla config gia' caricata.
+
+        apply_overrides(cfg, ["model.num_tokens=9", "optim.epochs=50"])
+
+    PERCHE' ESISTE. Le due ablation del paper (N su 5 valori, P su 4)
+    sarebbero 8 file YAML quasi identici, che divergono al primo
+    cambiamento della configurazione di base. Con questo, la stessa
+    `sparse.yaml` genera l'intera griglia e i valori effettivi finiscono
+    comunque in `resolved_config.json`: la provenienza resta completa.
+
+    DUE GUARDIE, entrambe deliberate.
+
+    - La chiave DEVE gia' esistere. Un refuso come `model.num_token=9`
+      creerebbe altrimenti una chiave nuova che nessuno legge, e il run
+      girerebbe con il valore di default fingendo di essere un'ablation.
+      E' il tipo di errore che non produce alcun sintomo: si scopre
+      confrontando i risultati e non capendo perche' sono identici.
+    - Il TIPO deve combaciare con quello presente. Un `epochs=cinquanta`
+      passerebbe come stringa e romperebbe molto piu' avanti.
+
+    Il valore si interpreta con il parser YAML, lo stesso dei file di
+    configurazione: `9` diventa int, `0.5` float, `true` bool,
+    `[2, 1]` lista. Ritorna la lista degli assegnamenti applicati, per
+    stamparli.
+    """
+    import yaml
+
+    applied: list[str] = []
+    for item in assignments:
+        if "=" not in item:
+            raise ValueError(f"--set vuole chiave=valore, ricevuto {item!r}")
+        path, raw = item.split("=", 1)
+        keys = path.strip().split(".")
+
+        node: Any = cfg
+        for i, key in enumerate(keys[:-1]):
+            if not isinstance(node, dict) or key not in node:
+                prefix = ".".join(keys[: i + 1])
+                raise KeyError(
+                    f"--set {path}: il blocco {prefix!r} non esiste nella config"
+                )
+            node = node[key]
+
+        leaf = keys[-1]
+        if not isinstance(node, dict) or leaf not in node:
+            vicini = sorted(node) if isinstance(node, dict) else []
+            raise KeyError(
+                f"--set {path}: la chiave {leaf!r} non esiste. "
+                f"Chiavi disponibili in {'.'.join(keys[:-1]) or 'radice'}: {vicini}"
+            )
+
+        old = node[leaf]
+        new = yaml.safe_load(raw)
+        # int accettato dove c'e' un float: 4 al posto di 4.0 e' innocuo
+        int_per_float = isinstance(old, float) and isinstance(new, int)
+        if old is not None and not isinstance(new, type(old)) and not int_per_float:
+            raise TypeError(
+                f"--set {path}: atteso {type(old).__name__}, "
+                f"ricevuto {type(new).__name__} ({raw!r})"
+            )
+        node[leaf] = new
+        applied.append(f"{path}: {old!r} -> {new!r}")
+    return applied
+
+
 def param_groups(model: torch.nn.Module, weight_decay: float,
                  skip_1d: bool = True) -> list[dict[str, Any]]:
     """Gruppi di parametri per il weight decay.
