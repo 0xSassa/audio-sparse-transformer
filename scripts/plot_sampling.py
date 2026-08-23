@@ -207,8 +207,9 @@ def main() -> int:
               f"max {float(size.max()):10.3f}   punti dentro il piano "
               f"{100 * inside:5.1f}%{flag}")
     print()
-    print("(regioni molto piu' grandi del piano = il campionamento degenera;")
-    print(" vedi Manuale_tecnico.pdf, §12.10)")
+    print("(regioni molto piu' grandi del piano = il campionamento degenera:")
+    print(" fuori dal piano il padding 'border' fa leggere il bordo, e il")
+    print(" campionamento smette di essere selettivo)")
     return 0
 
 

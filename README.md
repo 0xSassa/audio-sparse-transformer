@@ -46,7 +46,7 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 punti sotto** il denso, mentre il paper lo dà 0,21 sopra. Regge invece il valore
 vero della proposta — **11,6× meno calcolo per 1,44 punti** — e il divario è
 localizzato nell'estrattore: dalla seconda ripetizione metà dei punti campionati
-cade fuori dal piano tempo-frequenza (`Manuale_tecnico.pdf`, §12.12). Vincolare
+cade fuori dal piano tempo-frequenza. Vincolare
 le regioni a restare dentro il piano **non recupera accuratezza** (95,21 %): il
 difetto è reale ma non costa punti, e il divario resta non spiegato.
 
@@ -66,9 +66,10 @@ python scripts/benchmark_models.py
 
 Un fattore 10,9 sui FLOPs vale 0,63 a batch 1 e 1,71 a batch 64. Il regime
 in cui il metodo perde è batch 1 — cioè il dispositivo edge che motiva il
-lavoro. Dettagli e spiegazione in `Manuale_tecnico.pdf`, §12.13.
-
-Il piano completo è in `Pipeline_progetto_DL.pdf`.
+lavoro: a batch 1 nessuna delle matrici satura la GPU e il tempo è
+interamente costo di lancio dei kernel, che il modello sparso paga di più;
+a batch 64 le matrici del denso diventano grandi abbastanza da far contare
+l'aritmetica, e l'ordine si rovescia.
 
 ---
 
@@ -211,31 +212,32 @@ src/
     augment.py           mixing e phasemix (GPU, a livello di batch)
   flops.py               doppio contatore + latenza
   utils.py               seed, config, EMA
+  models/
+    frontend.py          early convolution (stem del paper)
+    transformer.py       encoder reimplementato
+    dense.py             baseline denso
+    sparse.py            estrattore sparso: regioni, campionamento, decoding
+    sparse_model.py      modello sparso completo
+  train.py               training loop
+  metrics.py             metriche per classe e confusioni
+  tracking.py            CSV, TensorBoard, W&B
 scripts/
   check_env.py           verifica ambiente
-  prepare_data.py        Fase 2
-  build_docs.ps1         rigenera i PDF da docs/ (Edge headless)
+  prepare_data.py        scarica i dati e costruisce la cache
+  evaluate.py            valutazione sul test set, con guardia
+  run_seeds.py           piu' seed, con media e deviazione standard
+  benchmark_models.py    costo e latenza dei modelli a piu' batch
+  plot_sampling.py       la figura del campionamento sparso
 tests/
   test_pipeline.py       forme, invarianti, contatore FLOPs (non serve il dataset)
-docs/                    sorgenti HTML dei due PDF
-results/                 CSV/JSON dei run e notebook delle figure
+results/                 metriche, configurazioni e report di ogni run
 ```
 
-## Documentazione
+## Test
 
-| File | Contenuto |
-|---|---|
-| `Manuale_tecnico.pdf` | **il riferimento**: matematica, architettura, ogni scelta implementativa e la sua motivazione |
-| `Pipeline_progetto_DL.pdf` | il piano: cosa fare, in che ordine, con quali criteri |
-| `Diario_di_bordo.pdf` | il registro: cosa è stato fatto, decisioni, errori, cambi di direzione |
-
-Entrambi si rigenerano dai sorgenti in `docs/`:
-
-```powershell
-powershell -File scripts\build_docs.ps1
-```
-
-I test girano senza dataset scaricato:
+Girano senza il dataset scaricato — verificano forme, invarianti delle
+augmentation, equivalenza dell'encoder con `nn.MultiheadAttention`, contatore
+di FLOPs, EMA, riproducibilità dei seed e geometria delle regioni:
 
 ```bash
 pytest -q
