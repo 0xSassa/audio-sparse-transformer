@@ -1031,6 +1031,62 @@ dichiarato dal paper              +0,21</pre>
   <p><strong>Domanda aperta, e vale un run:</strong> con un vincolo che tenga le regioni dentro il piano, le due ripetizioni renderebbero pi&#249; di 0,59? Se s&#236;, parte dell'1,31 che ci separa dal paper &#232; un difetto nostro; se no, &#232; un limite del metodo. In entrambi i casi &#232; un risultato.</p>
 </div>
 
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Audit di fedelt&#224;: la motivazione di <code>flatten</code> era circolare</p>
+  <p>Domanda posta prima di lanciare il run col vincolo: <em>stiamo davvero replicando ci&#242; che fa il paper?</em> Per rispondere ho estratto il testo del PDF con PyMuPDF dall'ambiente <code>DLA2026</code> e l'ho riletto alla lettera, invece di fidarmi di ci&#242; che il manuale ricordava.</p>
+  <p>Il paper descrive il denso, <strong>due volte</strong>, come un modello che &#171;processes a <strong>sequence of time frames</strong>&#187;. Un time frame di una feature map [C, F, T] &#232; la fetta completa in frequenza, cio&#232; C&#215;F valori: <strong>&#232; <code>flatten</code></strong>. <code>pool_freq</code>, che media via la frequenza, non &#232; un time frame ma un riassunto.</p>
+  <p><strong>Il problema non &#232; la conclusione, &#232; come ci eravamo arrivati.</strong> Il 23/08 avevo motivato <code>flatten</code> scrivendo che &#171;riproduce l'accuratezza dichiarata a +0,34, quindi &#232; la lettura giusta&#187;: cio&#232; scegliendo la ricostruzione che ottimizza <em>proprio la grandezza che il progetto dichiara di voler riprodurre</em>. &#200; lo stesso modo di sbagliare gi&#224; registrato due volte in questo diario &#8212; il 18/08, quando avevo ottimizzato una profondit&#224; che il paper aveva gi&#224; dichiarato, e nella regola contro l'&#171;overfitting su una cifra riportata&#187;.</p>
+  <p>Corretto l'ordine: <strong>il testo decide, la misura conferma</strong>. Il risultato ne esce rafforzato &#8212; il +0,34 torna a essere una riproduzione indipendente invece che il criterio di selezione &#8212; ma per due giorni il manuale ha sostenuto una tesi giusta con un argomento sbagliato, che all'orale &#232; peggio di un dubbio dichiarato.</p>
+  <p><strong>Lezione:</strong> la domanda &#171;stiamo replicando il paper?&#187; va posta <em>prima</em> di ogni scelta di ricostruzione, non dopo. E la risposta si cerca nel PDF, non nella propria memoria del PDF.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Le equazioni del paper non contengono alcun vincolo &#8212; il nostro clamp &#232; portante</p>
+  <pre>x' = x + tx*w      w' = w * exp(tw)        (eq. 2-5, verbatim)</pre>
+  <p>Nessun clamp, nessun bound, nessun limite: n&#233; sulle coordinate n&#233; sulle dimensioni. <code>MAX_LOG_SCALE = 4</code> &#232; interamente nostro, e sappiamo dal 22/08 che <strong>morde sul 46&#8211;50 % delle componenti</strong> nel modello addestrato.</p>
+  <p>Ne segue che il nostro default <strong>non &#232; &#171;la lettura letterale&#187;</strong>: &#232; la lettura letterale <em>pi&#249; il nostro stabilizzatore</em>. E porta con s&#233; un risultato riportabile: <strong>il metodo, implementato come scritto, &#232; numericamente instabile</strong> &#8212; i delta arrivano a 43816, e senza limite <code>exp()</code> va a infinito.</p>
+</div>
+
+<div class="entry dec">
+  <p class="entry-h"><span class="tag t-dec">decisione</span>Regola di riporto per il run col vincolo</p>
+  <p>Qualunque numero produca <code>region_constraint=clip</code>, <strong>non</strong> si scriver&#224; &#171;il nostro modello sparso fa X&#187;. Si scriver&#224;: <em>il metodo come pubblicato d&#224; 95,57 %; aggiungendo un vincolo che il paper non specifica d&#224; X; il valore dichiarato dagli autori &#232; 96,88 %</em>.</p>
+  <p>La distinzione non &#232; formale: aggiungere gradi di libert&#224; finch&#233; il numero combacia, e poi dichiarare di aver riprodotto, &#232; il modo pi&#249; comune di produrre una riproduzione che non lo &#232;. Il valore dell'esperimento sta nel <strong>quantificare quanta parte del divario dipenda dall'assenza di un vincolo non specificato</strong>, non nel chiuderlo.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Che cosa il paper dichiara davvero, controllato riga per riga</p>
+  <table>
+    <thead><tr><th style="width:62mm">Elemento</th><th>Esito del controllo</th></tr></thead>
+    <tbody>
+      <tr><td>Tabella 1: N=4, P=36, d 64/128, L<sub>rep</sub>=3, L<sub>enc</sub>=8</td><td>tutti presenti e rispettati nella nostra config</td></tr>
+      <tr><td>Eq. (1)&#8211;(8), normalizzazione a tre deviazioni</td><td>implementate come scritte</td></tr>
+      <tr><td>AdamW, &#946;=(0,9 0,99), eps 1e&#8722;8, lr 3e&#8722;4, one-cycle, wd 1e&#8722;5, EMA 0,995, batch 64</td><td>dichiarati e rispettati</td></tr>
+      <tr><td><code>mixing</code> + <code>phasemix</code>, nessun positional encoding</td><td>dichiarati e rispettati</td></tr>
+      <tr><td>Contraddizione &#171;96 dimensional&#187; / &#171;196 kernels&#187;</td><td>verbatim, come documentato</td></tr>
+      <tr><td><strong>Numero di epoche</strong></td><td><strong>mai nominato nel paper</strong>: la nostra assunzione regge</td></tr>
+      <tr><td><strong>Parametri dello spettrogramma</strong></td><td><strong>assenti</strong>: l'unica menzione di &#171;Mel-spectrogram&#187; riguarda KWT nel related work</td></tr>
+      <tr><td>&#171;The same architecture&#187; per il denso</td><td><strong>in contraddizione con i suoi 4,80 M parametri</strong>: se fosse la stessa, d<sub>enc</sub>=128 darebbe ~1,8 M. Risolto da noi trattando <var>d</var> come libero</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Il vincolo sulle regioni non recupera nulla: 95,21 % contro 95,57 %</p>
+  <pre>                   accuratezza   punti dentro il piano   drift finale
+none (letterale)     95,57 %      98,6 / 50,0 / 50,0 %      0,1437
+clip (nostro)        95,21 %      100 / 99,3 / 100 %        0,0657
+                      -0,36</pre>
+  <p>Il vincolo ha fatto esattamente ci&#242; che prometteva &#8212; regioni dentro il piano a tutte le ripetizioni, drift che satura a meno della met&#224; perch&#233; lo spazio disponibile &#232; ridotto &#8212; e a parit&#224; esatta di parametri e FLOPs l'accuratezza <strong>scende</strong> di 0,36 punti, cio&#232; al limite del rumore da seed.</p>
+  <p><strong>Risposta alla domanda che l'esperimento poneva: il divario dal paper non si spiega con la geometria.</strong> La degenerazione &#232; reale e misurata, ma non stava costando punti; e la nostra implementazione non &#232; rotta in un modo che costi accuratezza.</p>
+  <p><strong>La lettura che vale una slide</strong> viene dai tre run insieme: le ripetizioni aggiuntive valgono +0,59 punti quando campionano met&#224; fuori dal piano e +0,23 quando sono costrette a campionare dentro. Se il beneficio non dipende da <em>dove</em> si campiona, non viene dal campionamento ma dal percorso dei token &#8212; aggiornamento residuo e decoding adattivo. Un solo seed e differenze di 0,2&#8211;0,6 punti: &#232; un'indicazione, ma &#232; falsificabile, ed &#232; ci&#242; che l'ablation a regioni congelate deciderebbe.</p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Avevo sopravvalutato l'ipotesi &#171;poche epoche&#187; per lo sparso</p>
+  <p>Avevo scritto che lo sparso &#171;stava ancora migliorando all'epoca 97 su 100&#187; e proposto un run a 150 epoche come diagnostica ad alta resa. Guardando i tre run insieme, il picco cade all'epoca <strong>97</strong> (base), <strong>76</strong> (clip) e <strong>86</strong> (L<sub>rep</sub>=1): non &#232; una tendenza, &#232; <strong>rumore dentro un plateau</strong> &#8212; la curva base &#232; piatta dall'epoca 80 (95,50 &#8594; 95,49).</p>
+  <p>Stesso errore di lettura dello sparkline del 19/08: prendere per tendenza la fluttuazione di una metrica ferma. Il run a 150 epoche scende in fondo alla lista delle priorit&#224;.</p>
+</div>
+
 <!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
@@ -1063,6 +1119,9 @@ dichiarato dal paper              +0,21</pre>
     <tr><td class="c">22/08</td><td>La latenza si misura con uno strumento dedicato, non dal tempo per epoca</td><td>Il tempo per epoca &#232; a batch 64 e include dati, augmentation, EMA e due validazioni. Sbagliato due volte in due giorni: serviva uno strumento, non un'altra lezione scritta.</td></tr>
     <tr><td class="c">22/08</td><td>Si riportano <em>due</em> regimi di latenza, batch 1 e batch 64</td><td>Il segno del guadagno si inverte fra i due. Riportarne uno solo risponde a met&#224; della domanda senza dire quale met&#224;.</td></tr>
     <tr><td class="c">23/08</td><td><strong>Il baseline denso &#232; <code>flatten</code></strong></td><td>Terzo vincolo: riproduce l'accuratezza dichiarata a +0,34, contro i &#8722;2,58 di <code>pool_freq</code>. Due vincoli su tre, e quello che decide &#232; il comportamento invece della taglia.</td></tr>
+    <tr><td class="c">23/08</td><td>Il testo decide la ricostruzione, la misura conferma</td><td>Motivare una lettura con l'accuratezza che si vuole riprodurre &#232; circolare. L'argomento per <code>flatten</code> &#232; &#171;a sequence of time frames&#187;, non il +0,34.</td></tr>
+    <tr><td class="c">23/08</td><td>I seed si spendono sul modello <strong>letterale</strong>, non su <code>clip</code></td><td>Correzione a una decisione di due giorni prima. <code>clip</code> resta un'ablation a seed singolo qualunque numero produca: altrimenti la riproduzione diventa &#171;la nostra variante che funziona meglio&#187;.</td></tr>
+    <tr><td class="c">23/08</td><td>Regola di riporto per le nostre varianti</td><td>Un numero ottenuto con un'aggiunta non prevista dal paper non &#232; &#171;il nostro risultato&#187;: &#232; il risultato di una variante, e va scritto come tale.</td></tr>
     <tr><td class="c">23/08</td><td>Si riporta che <strong>il claim del paper non si riproduce</strong></td><td>&#8722;1,44 contro il +0,21 dichiarato, ben oltre il rumore. Riportarlo con la causa localizzata vale pi&#249; di un numero uguale al loro.</td></tr>
     <tr><td class="c">22/08</td><td>Ablation via <code>--set</code>, non via nove file YAML</td><td>File quasi identici divergono al primo cambiamento della configurazione di base. Con l'override la base resta una sola e i valori effettivi finiscono comunque in <code>resolved_config.json</code>.</td></tr>
   </tbody>
@@ -1115,6 +1174,8 @@ dichiarato dal paper              +0,21</pre>
     <tr><td class="c">22/08</td><td><code>plot_sampling.py</code> caricava <code>config.yaml</code> dalla cartella del run</td><td>Contiene ancora <code>defaults: base.yaml</code>, assente l&#236;. Corretto leggendo dal checkpoint. <code>evaluate.py</code> verificato: non ha il difetto.</td></tr>
     <tr><td class="c">22/08</td><td><strong>&#171;Il clamp su <code>exp()</code> non si attiva mai&#187;</strong></td><td>Dedotto da un test sull'<em>inizializzazione</em>. Sul modello addestrato &#232; attivo sul 46&#8211;50 % delle componenti, ed &#232; l'unica ragione per cui il run non ha prodotto NaN.</td></tr>
     <tr><td class="c">23/08</td><td><strong>&#171;Il claim qualitativo &#232; riprodotto, con margine pi&#249; ampio del loro&#187;</strong></td><td>Poggiava su <code>pool_freq</code>, baseline poi scartato. Col denso corretto il margine si <strong>inverte</strong>: &#8722;1,44 invece di +1,48.</td></tr>
+    <tr><td class="c">23/08</td><td>&#171;Lo sparso stava ancora migliorando all'epoca 97&#187;</td><td>Rumore dentro un plateau: i picchi dei tre run cadono a 97, 76 e 86. Il run a 150 epoche scende di priorit&#224;.</td></tr>
+    <tr><td class="c">23/08</td><td><strong>Motivazione circolare per <code>flatten</code></strong></td><td>Scelta fittando l'accuratezza da riprodurre. Il vero argomento &#232; nel testo del paper e c'era fin dall'inizio: &#171;a sequence of time frames&#187;.</td></tr>
     <tr><td class="c">23/08</td><td><code>pool_freq</code> adottata come configurazione del denso</td><td>Sbagliata di 2,92 punti. Era dichiarata &#171;la scelta meno sicura&#187;, con la motivazione giusta: mediare via la frequenza.</td></tr>
     <tr><td class="c">22/08</td><td><strong>Il campionamento degenera dopo la prima ripetizione</strong></td><td>Met&#224; dei punti fuori dal piano dalla seconda in poi. Trovato generando la Figura 2; le due diagnostiche numeriche non potevano vederlo.</td></tr>
     <tr><td class="c">22/08</td><td>Regola &#171;50 epoche bastano&#187; dedotta dal solo denso</td><td>Sullo sparso il massimo &#232; alla 97: a 50 epoche si perdono 0,44 punti. L'ordinamento si conserva, i valori assoluti no.</td></tr>

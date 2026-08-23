@@ -37,6 +37,7 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 |---|---|---|---|---|
 | **`dense_flatten_seed0`** — baseline | `c96`, `flatten` | **97,01 %** | 5 197 795 | 0,5604 |
 | `sparse_seed0` — il metodo del paper | `c96`, N=4 P=36 | 95,57 % | 2 822 711 | 0,0485 |
+| `sparse_clip_seed0` — ablation (nostra variante) | regioni vincolate | 95,21 % | 2 822 711 | 0,0485 |
 | `sparse_rep1_seed0` — ablation | `L_rep`=1 | 94,98 % | 2 010 591 | 0,0349 |
 | `dense_c96_seed0` — ricostruzione scartata | `c96`, `pool_freq` | 94,09 % | 4 875 235 | 0,5275 |
 
@@ -45,7 +46,9 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 punti sotto** il denso, mentre il paper lo dà 0,21 sopra. Regge invece il valore
 vero della proposta — **11,6× meno calcolo per 1,44 punti** — e il divario è
 localizzato nell'estrattore: dalla seconda ripetizione metà dei punti campionati
-cade fuori dal piano tempo-frequenza (`Manuale_tecnico.pdf`, §12.12).
+cade fuori dal piano tempo-frequenza (`Manuale_tecnico.pdf`, §12.12). Vincolare
+le regioni a restare dentro il piano **non recupera accuratezza** (95,21 %): il
+difetto è reale ma non costa punti, e il divario resta non spiegato.
 
 Il test set non è ancora stato toccato, e i seed 1–2 mancano.
 

@@ -80,7 +80,7 @@
   <h1>Manuale tecnico</h1>
   <p class="sub">Riproduzione di <em>Audio Sparse-Transformer for Speech Classification</em><br>Kavaki &amp; Mandel, ICASSP 2025</p>
   <p class="sub" style="font-size:9.8pt">Progetto d'esame — B031278 Deep Learning, Fall 2025<br>MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Versione 2.0 — 23 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
+  <p class="meta">Versione 2.2 — 23 agosto 2026 · documento vivo, aggiornato a ogni sessione<br>
   <em>v1.1: consultato il codice di SparseFormer e di EAT. Corrette le formule di <code>mixing</code> e <code>phasemix</code>, la sequenza dello stem e il default della normalizzazione; risolte la formula degli offset e l'inizializzazione a griglia.<br>
   v1.2: letti <code>trainer.py</code> e <code>helper_funcs.py</code> di EAT. Chiusi i parametri di one-cycle, la programmazione delle augmentation e il criterio del weight decay; corretto il target mixato in multi-hot con soglia; chiarita la giustificazione del mel.<br>
   v1.3: nuovo capitolo 12 con il primo run completo (94,67 %), la saturazione della curva ben prima delle 100 epoche, il comportamento dell'EMA lungo lo schedule e il profilo fonologico degli errori; corretta l'osservazione sulla norma del gradiente.<br>
@@ -90,7 +90,9 @@
 v1.7: nuovo run di riferimento del denso con front-end <code>c96</code> (§12.1) e confronto con la lettura superata; quadro dei run (§12.13); nuovo capitolo 13, <em>Preparazione all'orale</em>: numeri a memoria, derivazioni, e le domande attese con la risposta.<br>
 v1.8: <strong>run completo del modello sparso, 95,57 %</strong> &#8212; <s>il claim qualitativo del paper &#232; riprodotto con un margine di +1,48 sul denso</s> <strong>[smentito in v2.0: quel margine era contro <code>pool_freq</code>, baseline poi scartato]</strong>; la traiettoria completa delle regioni, che si muovono per 70 epoche e poi si fermano (&#167;12.12); la latenza rimisurata come si deve, e il guadagno che <em>cambia segno</em> col batch (&#167;12.13).<br>
 v1.9: la Figura 2, generata dai pesi del run, mostra che <strong>il campionamento degenera dopo la prima ripetizione</strong> &#8212; met&#224; dei punti finisce fuori dal piano (&#167;12.12); corretta l'affermazione, falsa, secondo cui il nostro limite su <code>exp()</code> non si attivasse mai (&#167;12.10).<br>
-<strong>v2.0: il baseline denso &#232; <code>flatten</code> (97,01 %), deciso da un terzo vincolo &#8212; l'accuratezza &#8212; disponibile solo dopo aver addestrato entrambe le varianti (&#167;8.7, &#167;12.1). Con il baseline corretto <strong>il claim del paper non si riproduce</strong>: il nostro sparso &#232; 1,44 punti sotto il denso, il loro 0,21 sopra (&#167;12.2). Ablation su <var>L</var><sub>rep</sub>: le due ripetizioni aggiuntive rendono +0,59 punti e con una sola il campionamento non degenera.</strong></em></p>
+<strong>v2.0: il baseline denso &#232; <code>flatten</code> (97,01 %), deciso da un terzo vincolo &#8212; l'accuratezza &#8212; disponibile solo dopo aver addestrato entrambe le varianti (&#167;8.7, &#167;12.1). Con il baseline corretto <strong>il claim del paper non si riproduce</strong>: il nostro sparso &#232; 1,44 punti sotto il denso, il loro 0,21 sopra (&#167;12.2). Ablation su <var>L</var><sub>rep</sub>: le due ripetizioni aggiuntive rendono +0,59 punti e con una sola il campionamento non degenera.</strong><br>
+v2.1: <strong>audit di fedelt&#224; sul testo del paper.</strong> La motivazione di <code>flatten</code> era circolare &#8212; sceglieva la ricostruzione fittando l'accuratezza da riprodurre &#8212; ed &#232; sostituita dall'argomento testuale, &#171;a sequence of time frames&#187; (&#167;8.7, &#167;12.1). Le eq. (2)&#8211;(5) del paper non contengono <em>alcun</em> vincolo: il nostro <code>MAX_LOG_SCALE</code> &#232; una deviazione portante, e il metodo come scritto &#232; numericamente instabile (&#167;12.10). Aggiunte la regola di riporto per <code>clip</code> e la tensione &#171;same architecture&#187; contro i 4,80 M parametri.<br>
+v2.2: <strong>il vincolo sulle regioni non recupera nulla</strong> (95,21 % contro 95,57 %): la degenerazione &#232; reale ma non costa accuratezza, e il divario dal paper non si spiega con essa (&#167;12.2). Aggiornato &#167;12.8 con le due cause eliminate per misura.</em></p>
 </header>
 
 <div class="box info" style="margin-top:6mm">
@@ -786,10 +788,19 @@ parametri         5.197.795       dichiarati 4,80 M    ->   +8,3 %
 costo             0,5604 GFLOP    dichiarati 0,645     ->  -13,1 %
 accuratezza       97,01 %         dichiarata 96,67 %   ->   +0,34</pre>
 <div class="box info">
-  <p class="box-t">La riga dell'accuratezza &#232; arrivata dopo, ed &#232; quella che ha deciso</p>
-  <p>Fino al 22/08 questa sezione adottava <code>pool_freq</code> e dichiarava <code>flatten</code> come variante di controllo: sui due vincoli disponibili &#8212; parametri e FLOPs &#8212; nessuna delle due vinceva, e le due &#171;bracketizzavano l'incertezza&#187;.</p>
-  <p>Addestrandole entrambe si &#232; reso disponibile il <strong>terzo vincolo</strong>. <code>flatten</code> riproduce l'accuratezza dichiarata a +0,34 punti; <code>pool_freq</code> la manca di 2,58. La questione &#232; chiusa, e non per bracketing ma per misura: vedi &#167;12.1.</p>
-  <p>Resta lo scarto sui parametri (+8,3 %), che nessuna delle due letture azzera insieme al costo. &#200; dichiarato e non spiegato, come lo scarto sui FLOPs.</p>
+  <p class="box-t">&#200; il TESTO a dire <code>flatten</code>; l'accuratezza lo conferma</p>
+  <p>Il paper descrive il dense-transformer, due volte, come un modello che &#171;<strong>processes a sequence of time frames</strong>&#187;. Un <em>time frame</em> di una feature map [C, F, T] &#232; la fetta completa in frequenza all'istante <var>t</var>, cio&#232; C&#215;F valori: questo &#232; <code>flatten</code>. <code>pool_freq</code>, che media via l'asse frequenza, non &#232; un time frame ma un riassunto. <strong>La lettura letterale &#232; <code>flatten</code>, e lo era anche prima di addestrare qualunque cosa.</strong></p>
+  <div class="box warn" style="margin:2.5mm 0 0">
+    <p class="box-t">Una correzione a noi stessi, di metodo</p>
+    <p>Fino al 23/08 questa sezione motivava <code>flatten</code> cos&#236;: &#171;riproduce l'accuratezza dichiarata a +0,34, quindi &#232; la lettura giusta&#187;. <strong>&#200; un ragionamento circolare</strong>: sceglie la ricostruzione ottimizzando proprio la grandezza che il progetto dichiara di voler riprodurre. &#200; lo stesso modo di sbagliare gi&#224; segnalato due volte in questo manuale &#8212; l'ottimizzazione della profondit&#224; che il paper aveva gi&#224; dichiarato, e l'overfitting su una cifra riportata senza convenzione.</p>
+    <p>L'ordine corretto &#232; l'inverso: <strong>il testo decide, la misura conferma</strong>. E il risultato ne esce rafforzato, perch&#233; il +0,34 torna a essere una riproduzione indipendente invece che il criterio di selezione.</p>
+  </div>
+  <p style="margin-top:2.5mm">Resta lo scarto sui parametri (+8,3 %), che nessuna delle due letture azzera insieme al costo. &#200; dichiarato e non spiegato, come lo scarto sui FLOPs.</p>
+</div>
+<div class="box">
+  <p class="box-t">Una tensione interna al paper, che abbiamo risolto noi</p>
+  <p>&#171;The same architecture&#187; &#232; in contraddizione con i 4,80 M parametri dichiarati per il denso. Se fosse <em>davvero</em> la stessa architettura, <var>d</var><sub>enc</sub> sarebbe 128 come nel modello sparso, e il denso avrebbe circa 1,8 M parametri &#8212; non 4,80 M. Abbiamo risolto trattando <var>d</var> come grado di libert&#224; (e trovando 224), tenendo vincolata la profondit&#224; <var>L</var>=8, che il testo dichiara.</p>
+  <p>&#200; una scelta ragionevole, ma va detta per quello che &#232;: <strong>la nostra risoluzione di un'incoerenza del paper</strong>, non una lettura del paper.</p>
 </div>
 <div class="box">
   <p class="box-t">Perch&#233; ci fermiamo qui</p>
@@ -1127,9 +1138,9 @@ epoca 3  loss 0.14688354</pre>
 </table>
 <p style="font-size:8.6pt;color:var(--muted)"><sup>&#8224;</sup> su test; i nostri su validation.</p>
 <div class="box info">
-  <p class="box-t">La ricostruzione corretta &#232; <code>flatten</code>: due vincoli su tre</p>
-  <p><code>flatten</code> riproduce l'accuratezza dichiarata a <strong>+0,34 punti</strong> ed &#232; pi&#249; vicina sul costo; perde solo sui parametri. <code>pool_freq</code> vince sui parametri e sbaglia l'accuratezza di <strong>2,58 punti</strong>. Fra i tre vincoli, quello che un baseline deve soddisfare per <em>essere</em> quel baseline &#232; l'accuratezza: parametri e FLOPs descrivono la taglia, l'accuratezza descrive il comportamento.</p>
-  <p>Il manuale aveva dichiarato <code>pool_freq</code> &#171;la scelta meno sicura di tutta la ricostruzione&#187;, con questa motivazione esatta: <em>media via la struttura in frequenza proprio nel baseline che verr&#224; confrontato con un modello che campiona nel piano tempo-frequenza</em>. La previsione era giusta; l'entit&#224; &#8212; <strong>2,92 punti</strong> &#8212; molto maggiore dell'atteso.</p>
+  <p class="box-t">Lo dice il paper, e la misura lo conferma</p>
+  <p>Il testo descrive il denso, due volte, come un modello che &#171;<strong>processes a sequence of time frames</strong>&#187;: un time frame di [C, F, T] &#232; la fetta completa in frequenza, cio&#232; C&#215;F valori, cio&#232; <code>flatten</code>. La lettura letterale era questa fin dall'inizio; <code>pool_freq</code> era una nostra sovra-interpretazione.</p>
+  <p>L'accuratezza &#232; quindi una <strong>conferma indipendente</strong>, non il criterio di scelta: <code>flatten</code> riproduce il valore dichiarato a +0,34 punti, <code>pool_freq</code> lo manca di 2,58. Sceglierla <em>perch&#233;</em> fitta l'accuratezza sarebbe stato circolare (&#167;8.7); trovarla nel testo e vederla poi combaciare &#232; una verifica.</p>
 </div>
 
 <h4>Quanto costa buttare via la frequenza</h4>
@@ -1188,6 +1199,29 @@ epoca 3  loss 0.14688354</pre>
   <p>Le due ripetizioni aggiuntive costano <strong>+40 % di parametri e +39 % di FLOPs</strong> e rendono <strong>+0,59 punti</strong>. &#200; sopra il rumore da seed, quindi il raffinamento iterativo <em>fa</em> qualcosa: la nostra previsione &#171;se sono degeneri, <code>repeats=1</code> dovrebbe perdere poco&#187; &#232; confermata nella direzione ma non nella forma forte &#8212; non sono inerti, sono <strong>dimezzate</strong>.</p>
   <p>E la misura sulla geometria lo spiega: con una sola ripetizione <strong>il 100 % dei punti resta dentro il piano</strong> (dimensione media 0,748), contro il 50 % delle ripetizioni 2 e 3 nel modello completo. <strong>La degenerazione &#232; cumulativa</strong>: nasce dal comporsi degli esponenziali attraverso le ripetizioni, non dal singolo passo di aggiustamento.</p>
   <p>Ne segue una domanda aperta che vale un esperimento: con un vincolo sulle coordinate che tenga le regioni dentro il piano, le due ripetizioni aggiuntive renderebbero pi&#249; di 0,59? Se s&#236;, parte dell'1,31 che ci separa dal paper &#232; un difetto della nostra implementazione; se no, il limite &#232; del metodo.</p>
+</div>
+<div class="box warn">
+  <p class="box-t">Come va letto il risultato di <code>region_constraint=clip</code></p>
+  <p>Il vincolo &#232; una <strong>nostra variante</strong>: il paper non lo prevede, e <code>none</code> resta il default. Da qui una regola di riporto, che serve a non ricadere nella circolarit&#224; di &#167;8.7:</p>
+  <p>Qualunque numero produca, <strong>non</strong> si scrive &#171;il nostro modello sparso fa X&#187;. Si scrive: <em>il metodo come pubblicato d&#224; 95,57 %; aggiungendo un vincolo che il paper non specifica d&#224; X; il valore dichiarato dagli autori &#232; 96,88 %</em>.</p>
+  <p>La differenza non &#232; formale. Aggiungere gradi di libert&#224; finch&#233; il numero combacia e poi dichiarare di aver riprodotto &#232; il modo pi&#249; comune di produrre una riproduzione che non lo &#232;. Il valore dell'esperimento sta nel <strong>quantificare quanta parte del divario sia attribuibile all'assenza di un vincolo non specificato</strong>, non nel chiuderlo.</p>
+</div>
+
+<h4>L'esito: il vincolo non recupera nulla <span class="tag t-evi">evidenza</span></h4>
+<table>
+  <thead><tr><th>Variante</th><th class="c">parametri</th><th class="c">GFLOP</th><th class="c">accuratezza</th><th class="c">punti dentro il piano</th><th class="c">drift finale</th></tr></thead>
+  <tbody>
+    <tr><td><code>none</code> &#8212; lettura letterale</td><td class="c">2 822 711</td><td class="c">0,0485</td><td class="c"><strong>95,57 %</strong></td><td class="c">98,6 / 50,0 / 50,0 %</td><td class="c">0,1437</td></tr>
+    <tr><td><code>clip</code> &#8212; nostra variante</td><td class="c">2 822 711</td><td class="c">0,0485</td><td class="c">95,21 %</td><td class="c"><strong>100 / 99,3 / 100 %</strong></td><td class="c">0,0657</td></tr>
+    <tr><td colspan="3">differenza</td><td class="c"><strong>&#8722;0,36</strong></td><td colspan="2"></td></tr>
+  </tbody>
+</table>
+<p>Il vincolo ha fatto esattamente ci&#242; che prometteva: le regioni restano dentro il piano a <em>tutte</em> le ripetizioni, con dimensioni fra 0,57 e 1,00, e il drift satura a meno della met&#224; (0,0657 contro 0,1437) perch&#233; lo spazio in cui le regioni possono muoversi &#232; ora limitato. A parit&#224; esatta di parametri e FLOPs &#8212; il vincolo non ne aggiunge nessuno &#8212; l'accuratezza <strong>scende di 0,36 punti</strong>.</p>
+<div class="box info">
+  <p class="box-t">Un risultato negativo, e informativo</p>
+  <p><strong>La degenerazione non stava costando accuratezza.</strong> Il divario di 1,31 punti dal valore del paper <em>non</em> si spiega con l'assenza di un vincolo sulle regioni: correggendo la geometria, il modello non migliora &#8212; se mai peggiora di una quantit&#224; al limite del rumore da seed (0,3&#8211;0,4 punti).</p>
+  <p>Ne segue anche che la nostra implementazione non &#232; rotta in un modo che costi punti: le regioni escono dal piano, met&#224; dei punti legge il bordo, e il modello ottiene comunque il risultato migliore fra le tre varianti sparse provate.</p>
+  <p><strong>La lettura pi&#249; interessante</strong> viene dal mettere in fila i tre run. Le due ripetizioni aggiuntive valgono +0,59 punti quando campionano met&#224; fuori dal piano, e solo +0,23 quando sono costrette a campionare dentro. Se il beneficio del raffinamento iterativo non dipende da <em>dove</em> si campiona, allora non viene dal campionamento: viene dal percorso dei <strong>token</strong> &#8212; l'aggiornamento residuo e il decoding adattivo, che a ogni ripetizione aggiungono capacit&#224; a prescindere dalla geometria. Con un solo seed e differenze di 0,2&#8211;0,6 punti &#232; un'indicazione, non una misura; ma &#232; una previsione precisa e falsificabile, ed &#232; esattamente ci&#242; che l'ablation a regioni congelate deciderebbe.</p>
 </div>
 
 <h3>12.3 Il primo run completo — <code>c196_proj96</code>, seed 0</h3>
@@ -1260,7 +1294,16 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
 <p>È il controllo qualitativo che conta più dell'accuratezza aggregata: se il modello sbagliasse coppie senza somiglianza acustica, ci sarebbe un difetto nella pipeline dei dati. Qui il profilo di errore è quello di un sistema che ha imparato la fonetica e si ferma dove si fermerebbe un ascoltatore umano su clip brevi e rumorose.</p>
 <p>Le classi peggiori sono anche fra le <strong>meno rappresentate</strong> — <em>forward</em> 146 campioni, <em>learn</em> 128 contro i ~400 delle classi frequenti — ma non solo: <em>go</em>, <em>no</em> e <em>down</em> hanno supporto abbondante e sbagliano lo stesso. Lo sbilanciamento spiega una parte del fenomeno, la somiglianza acustica il resto. Coerente con lo scarto contenuto fra accuratezza globale (94,67 %) e bilanciata (94,31 %).</p>
 
-<h3>12.8 Dove cercare i due punti mancanti</h3>
+<h3>12.8 Dove cercare i punti mancanti &#8212; due cause eliminate</h3>
+<div class="box info">
+  <p class="box-t">Stato al 23 agosto: che cosa &#232; stato escluso con una misura</p>
+  <ul>
+    <li><strong>&#171;Poche epoche&#187;</strong> &#8212; escluso: il denso ha il massimo all'epoca 61 su 100 e lo sparso &#232; piatto dall'80. Nessuno dei due stava ancora migliorando alla fine.</li>
+    <li><strong>&#171;La geometria delle regioni degenera&#187;</strong> &#8212; escluso come <em>causa del divario</em>: vincolando le regioni dentro il piano l'accuratezza non sale (95,21 % contro 95,57 %, &#167;12.2). Il difetto &#232; reale e misurato, ma non costa punti.</li>
+    <li><strong>&#171;La ricostruzione del denso &#232; sbagliata&#187;</strong> &#8212; risolto: era <code>pool_freq</code>, ed &#232; costato 2,92 punti. Con <code>flatten</code> il baseline &#232; +0,34 sopra il valore dichiarato.</li>
+  </ul>
+  <p>Restano non spiegati <strong>1,31 punti sul modello sparso</strong>. I candidati rimasti sono le assunzioni comuni a entrambi i modelli &#8212; in primo luogo i parametri dello spettrogramma, che il paper non dichiara &#8212; e differenze che senza il loro codice non sono osservabili. Che il denso <em>superi</em> il proprio bersaglio mentre lo sparso resti sotto localizza il residuo nell'estrattore, ma non lo identifica.</p>
+</div>
 <p>Con «poche epoche» escluso da §12.4, restano quattro ipotesi, in ordine di plausibilità:</p>
 <table>
   <thead><tr><th style="width:44mm">Ipotesi</th><th>Come la si verifica</th></tr></thead>
@@ -1311,7 +1354,9 @@ epoca 100:   0,00 punti      lr = 1,2e-09, i pesi non si muovono piu'</pre>
   <pre>ripetizione 1:  |delta| medio    0,38   clamp attivo sullo   0,0% delle componenti
 ripetizione 2:  |delta| medio    4,40   clamp attivo sul    45,9%
 ripetizione 3:  |delta| medio 5468,64   clamp attivo sul    50,0%   (max 43816)</pre>
-  <p>Il limite non &#232; una rete di sicurezza inerte: &#232; <strong>l'unica ragione per cui quel run non ha prodotto NaN</strong>. Con <code>exp(43816)</code> il modello sarebbe andato a infinito nella terza ripetizione della prima epoca in cui i delta sono esplosi. La nostra aggiunta non dichiarata &#232; diventata <em>portante</em>, ed &#232; il tipo di cosa che va detta all'orale prima che la chiedano.</p>
+  <p><strong>Verificato sul testo del paper il 23/08:</strong> le equazioni (2)&#8211;(5) sono verbatim quelle che abbiamo implementato, e <strong>non contengono alcun vincolo</strong> &#8212; nessun clamp, nessun limite, nessun bound sulle coordinate o sulle dimensioni. Il limite &#232; interamente nostro.</p>
+  <p>E non &#232; una rete di sicurezza inerte: &#232; <strong>l'unica ragione per cui quel run non ha prodotto NaN</strong>. Con <code>exp(43816)</code> il modello sarebbe andato a infinito nella terza ripetizione della prima epoca in cui i delta sono esplosi. La nostra aggiunta non dichiarata &#232; diventata <em>portante</em>, ed &#232; il tipo di cosa che va detta all'orale prima che la chiedano.</p>
+  <p><strong>Ne segue una conseguenza sul significato di &#171;lettura letterale&#187;.</strong> Il nostro default non &#232; il metodo del paper implementato alla lettera: &#232; il metodo del paper <em>pi&#249; il nostro stabilizzatore</em>. Il che porta con s&#233; un risultato: <strong>il metodo, implementato come scritto, &#232; numericamente instabile</strong> &#8212; nelle nostre mani i delta arrivano a 43816, e senza limite <code>exp()</code> va a infinito. Non &#232; una critica gratuita: &#232; ci&#242; che i nostri numeri misurano.</p>
 </div>
 
 <h4>Un dettaglio del contatore di FLOPs</h4>
@@ -1411,6 +1456,7 @@ ripetizione 3       54,88          431,22              50,0 %</pre>
     <tr><td><strong><code>dense_flatten_seed0</code></strong></td><td class="c"><code>c96</code>, <code>flatten</code></td><td class="c">100</td><td class="c"><strong>97,01 %</strong></td><td class="c">5 197 795</td><td class="c">0,5604</td><td class="c"><strong>baseline denso (&#167;12.1)</strong></td></tr>
     <tr><td><strong><code>sparse_seed0</code></strong></td><td class="c"><code>c96</code></td><td class="c">100</td><td class="c"><strong>95,57 %</strong></td><td class="c">2 822 711</td><td class="c">0,0485</td><td class="c"><strong>metodo del paper (&#167;12.2)</strong></td></tr>
     <tr><td><code>sparse_rep1_seed0</code></td><td class="c"><code>c96</code>, <var>L</var><sub>rep</sub>=1</td><td class="c">100</td><td class="c">94,98 %</td><td class="c">2 010 591</td><td class="c">0,0349</td><td class="c">ablation sulle ripetizioni (&#167;12.2)</td></tr>
+    <tr><td><code>sparse_clip_seed0</code></td><td class="c"><code>c96</code>, regioni vincolate</td><td class="c">100</td><td class="c">95,21 %</td><td class="c">2 822 711</td><td class="c">0,0485</td><td class="c">nostra variante, non recupera (&#167;12.2)</td></tr>
   </tbody>
 </table>
 <p>Parametri e FLOPs sono misurati per <em>tutte</em> le righe, anche quelle non ancora addestrate: il costo dipende dalla sola architettura e si conta senza toccare la GPU. Le accuratezze mancanti sono l'unica cosa che richiede tempo di calcolo.</p>
