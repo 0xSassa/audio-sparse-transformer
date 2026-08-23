@@ -80,7 +80,7 @@
   <h1>Diario di bordo</h1>
   <p class="sub">Progetto d'esame — riproduzione di <em>Audio Sparse-Transformer</em> (Kavaki &amp; Mandel, ICASSP 2025)</p>
   <p class="sub" style="font-size:9.6pt">B031278 Deep Learning, Fall 2025 — MSc in Artificial Intelligence, Università di Firenze</p>
-  <p class="meta">Ultimo aggiornamento: 22 agosto 2026</p>
+  <p class="meta">Ultimo aggiornamento: 23 agosto 2026</p>
 </header>
 
 <div class="box info">
@@ -904,6 +904,7 @@ denso  c96      4.875.235    0,5275    94,09 %
 sparso          2.822.711    0,0485    95,57 %   <-- +1,48
                    (0,58x)   (0,092x)
 paper: denso 96,67 %, sparso 96,88 %  ->  +0,21</pre>
+  <p class="meta" style="margin:0 0 2mm"><strong>[corretto il 23/08]</strong> Questo margine &#232; calcolato contro <code>pool_freq</code>, che il run di <code>flatten</code> ha poi scartato come baseline. Col denso corretto il confronto si inverte: &#8722;1,44. Vedi il Giorno 7.</p>
   <p>Con il <strong>58 % dei parametri e il 9,2 % dei FLOPs</strong> il modello sparso &#232; <strong>1,48 punti sopra</strong> il denso: il claim qualitativo del paper &#232; riprodotto, e con un margine sette volte pi&#249; ampio del loro. Il nostro 1,48 &#232; ben oltre il rumore da seed stimato (0,3&#8211;0,4 punti); il loro +0,21 <em>non lo &#232;</em>.</p>
 </div>
 
@@ -994,6 +995,43 @@ ripetizione 3:  |delta| medio 5468,64   clamp attivo sul   50,0%  (max 43816)</p
 </div>
 
 <!-- ==================================================================== -->
+<h2 class="brk">Giorno 7 &#8212; domenica 23 agosto 2026</h2>
+<p class="meta" style="margin-bottom:4mm">Il baseline cambia, e con esso il risultato principale del progetto.</p>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span><code>flatten</code> fa 97,01 % e chiude la ricostruzione del denso</p>
+  <pre>                 parametri      costo       accuratezza
+pool_freq        4.875.235     0,5275 G       94,09 %
+flatten          5.197.795     0,5604 G       97,01 %   <-- +2,92
+dichiarati        4,80 M       0,645  G       96,67 %</pre>
+  <p><strong>+2,92 punti</strong>, sette volte la soglia di decisione fissata prima di vedere il numero. E la curva &#232; ancora pi&#249; eloquente del valore finale: <code>flatten</code> raggiunge <strong>all'epoca 5</strong> (94,10 %) il risultato che <code>pool_freq</code> ottiene in cento.</p>
+  <p><strong>La ricostruzione &#232; decisa da un terzo vincolo che prima non avevamo.</strong> Su parametri e FLOPs nessuna delle due letture vinceva, e il manuale le teneva entrambe dichiarando che &#171;bracketizzano l'incertezza&#187;. L'accuratezza dichiarata &#232; il terzo vincolo, e diventa disponibile solo dopo aver addestrato entrambe: <code>flatten</code> la riproduce a +0,34, <code>pool_freq</code> la manca di 2,58. Due vincoli su tre, e quello che decide &#232; il comportamento invece della taglia.</p>
+  <p>Il manuale aveva dichiarato <code>pool_freq</code> &#171;la scelta meno sicura di tutta la ricostruzione&#187; con la motivazione esatta: media via la frequenza proprio nel baseline che verr&#224; confrontato con un modello che campiona nel piano tempo-frequenza. <strong>La previsione era giusta; l'entit&#224; molto maggiore dell'atteso.</strong></p>
+</div>
+
+<div class="entry err">
+  <p class="entry-h"><span class="tag t-err">errore</span>Con il baseline corretto, il claim del paper non si riproduce</p>
+  <pre>                          margine sparso - denso
+contro pool_freq (sbagliato)      +1,48
+contro flatten   (corretto)       -1,44   <--
+dichiarato dal paper              +0,21</pre>
+  <p>Il 20&#8211;22/08 avevamo scritto, qui e nel manuale, che <strong>il claim qualitativo era riprodotto con un margine sette volte pi&#249; ampio del loro</strong>. Era condizionato a un baseline che questo run ha scartato. Con il denso corretto il confronto si <strong>inverte</strong>: il modello sparso resta 1,44 punti <em>sotto</em>, mentre il paper lo d&#224; 0,21 <em>sopra</em>.</p>
+  <p><strong>Lezione di metodo.</strong> Il numero pi&#249; importante del progetto &#232; rimasto sbagliato per due giorni non per un errore di calcolo, ma perch&#233; poggiava su un'assunzione dichiarata come incerta e trattata come risolta. La decisione di fare <code>flatten</code> <em>prima</em> dei seed &#232; ci&#242; che ha impedito di spendere 6,5 ore su un baseline sbagliato &#8212; ed &#232; la stessa regola che il 19/08 aveva evitato i tre seed su <code>pool_freq</code>. La regola vale: <strong>prima si chiudono le ambiguit&#224;, poi si spendono i seed.</strong></p>
+  <p>Ne esce un progetto pi&#249; forte, non pi&#249; debole, e i criteri di successo lo dicevano gi&#224;: <em>un progetto che afferma &#171;non ho riprodotto il 96,88 %, ed ecco le cause candidate isolate con questi esperimenti&#187; vale pi&#249; di un numero identico ottenuto senza capire perch&#233;</em>. Ora abbiamo un baseline riprodotto a +0,34, uno scarto localizzato nell'estrattore e una causa gi&#224; misurata.</p>
+</div>
+
+<div class="entry ver">
+  <p class="entry-h"><span class="tag t-ver">verifica</span>Ablation su <var>L</var><sub>rep</sub>: le ripetizioni rendono +0,59 punti</p>
+  <pre>L_rep   parametri     GFLOP    accuratezza   punti dentro il piano
+  1     2.010.591    0,0349      94,98 %           100,0 %
+  3     2.822.711    0,0485      95,57 %      98,6 / 50,0 / 50,0 %
+        +40 %        +39 %       +0,59</pre>
+  <p>La previsione era &#171;se le ripetizioni 2 e 3 sono degeneri, <code>repeats=1</code> dovrebbe perdere poco&#187;. Confermata nella direzione, non nella forma forte: +0,59 &#232; sopra il rumore da seed, quindi il raffinamento iterativo <em>fa</em> qualcosa. Non sono inerti, sono <strong>dimezzate</strong>.</p>
+  <p>E la geometria lo spiega: con una sola ripetizione <strong>il 100 % dei punti resta dentro il piano</strong> (dimensione media 0,748), contro il 50 % delle ripetizioni 2 e 3 nel modello completo. <strong>La degenerazione &#232; cumulativa</strong> &#8212; nasce dal comporsi degli esponenziali attraverso le ripetizioni, non dal singolo passo.</p>
+  <p><strong>Domanda aperta, e vale un run:</strong> con un vincolo che tenga le regioni dentro il piano, le due ripetizioni renderebbero pi&#249; di 0,59? Se s&#236;, parte dell'1,31 che ci separa dal paper &#232; un difetto nostro; se no, &#232; un limite del metodo. In entrambi i casi &#232; un risultato.</p>
+</div>
+
+<!-- ==================================================================== -->
 <h2 class="brk">Registro delle decisioni</h2>
 <table>
   <thead><tr><th class="c" style="width:16mm">Data</th><th style="width:52mm">Decisione</th><th>Motivazione</th></tr></thead>
@@ -1024,6 +1062,8 @@ ripetizione 3:  |delta| medio 5468,64   clamp attivo sul   50,0%  (max 43816)</p
     <tr><td class="c">20/08</td><td>Ablation a 50&#8211;60 epoche invece di 100</td><td>Misurato due volte: il massimo cade all'epoca 63 (e all'88 nel primo run). Dimezza il budget delle ablation senza cambiare alcuna conclusione.</td></tr>
     <tr><td class="c">22/08</td><td>La latenza si misura con uno strumento dedicato, non dal tempo per epoca</td><td>Il tempo per epoca &#232; a batch 64 e include dati, augmentation, EMA e due validazioni. Sbagliato due volte in due giorni: serviva uno strumento, non un'altra lezione scritta.</td></tr>
     <tr><td class="c">22/08</td><td>Si riportano <em>due</em> regimi di latenza, batch 1 e batch 64</td><td>Il segno del guadagno si inverte fra i due. Riportarne uno solo risponde a met&#224; della domanda senza dire quale met&#224;.</td></tr>
+    <tr><td class="c">23/08</td><td><strong>Il baseline denso &#232; <code>flatten</code></strong></td><td>Terzo vincolo: riproduce l'accuratezza dichiarata a +0,34, contro i &#8722;2,58 di <code>pool_freq</code>. Due vincoli su tre, e quello che decide &#232; il comportamento invece della taglia.</td></tr>
+    <tr><td class="c">23/08</td><td>Si riporta che <strong>il claim del paper non si riproduce</strong></td><td>&#8722;1,44 contro il +0,21 dichiarato, ben oltre il rumore. Riportarlo con la causa localizzata vale pi&#249; di un numero uguale al loro.</td></tr>
     <tr><td class="c">22/08</td><td>Ablation via <code>--set</code>, non via nove file YAML</td><td>File quasi identici divergono al primo cambiamento della configurazione di base. Con l'override la base resta una sola e i valori effettivi finiscono comunque in <code>resolved_config.json</code>.</td></tr>
   </tbody>
 </table>
@@ -1074,23 +1114,25 @@ ripetizione 3:  |delta| medio 5468,64   clamp attivo sul   50,0%  (max 43816)</p
     <tr><td class="c">22/08</td><td>Guardia sull'occupazione GPU: falso positivo a GPU vuota</td><td><code>mem_get_info</code> include il contesto CUDA del processo chiamante (~1 GB). Terza guardia del progetto a nascere con un falso positivo, sempre per lo stesso motivo.</td></tr>
     <tr><td class="c">22/08</td><td><code>plot_sampling.py</code> caricava <code>config.yaml</code> dalla cartella del run</td><td>Contiene ancora <code>defaults: base.yaml</code>, assente l&#236;. Corretto leggendo dal checkpoint. <code>evaluate.py</code> verificato: non ha il difetto.</td></tr>
     <tr><td class="c">22/08</td><td><strong>&#171;Il clamp su <code>exp()</code> non si attiva mai&#187;</strong></td><td>Dedotto da un test sull'<em>inizializzazione</em>. Sul modello addestrato &#232; attivo sul 46&#8211;50 % delle componenti, ed &#232; l'unica ragione per cui il run non ha prodotto NaN.</td></tr>
+    <tr><td class="c">23/08</td><td><strong>&#171;Il claim qualitativo &#232; riprodotto, con margine pi&#249; ampio del loro&#187;</strong></td><td>Poggiava su <code>pool_freq</code>, baseline poi scartato. Col denso corretto il margine si <strong>inverte</strong>: &#8722;1,44 invece di +1,48.</td></tr>
+    <tr><td class="c">23/08</td><td><code>pool_freq</code> adottata come configurazione del denso</td><td>Sbagliata di 2,92 punti. Era dichiarata &#171;la scelta meno sicura&#187;, con la motivazione giusta: mediare via la frequenza.</td></tr>
     <tr><td class="c">22/08</td><td><strong>Il campionamento degenera dopo la prima ripetizione</strong></td><td>Met&#224; dei punti fuori dal piano dalla seconda in poi. Trovato generando la Figura 2; le due diagnostiche numeriche non potevano vederlo.</td></tr>
     <tr><td class="c">22/08</td><td>Regola &#171;50 epoche bastano&#187; dedotta dal solo denso</td><td>Sullo sparso il massimo &#232; alla 97: a 50 epoche si perdono 0,44 punti. L'ordinamento si conserva, i valori assoluti no.</td></tr>
   </tbody>
 </table>
 
-<h2>Stato al 22 agosto 2026</h2>
+<h2>Stato al 23 agosto 2026</h2>
 <table>
   <thead><tr><th class="c" style="width:14mm">Fase</th><th style="width:56mm">Contenuto</th><th>Stato</th></tr></thead>
   <tbody>
-    <tr><td class="c">0</td><td>Lettura paper + ancestor, setup</td><td>paper e codici letti; ambiente verificato. <strong>Restano: form risorse, ricevimento, repo Codeberg con <code>dl.unifi</code></strong></td></tr>
-    <tr><td class="c">1</td><td>Prerequisiti teorici</td><td>in corso &#8212; il manuale &#232; il deposito, ora con un capitolo dedicato all'orale</td></tr>
+    <tr><td class="c">0</td><td>Lettura paper + ancestor, setup</td><td>fatto. <strong>Restano: repo Codeberg con <code>dl.unifi</code>, form risorse, ricevimento</strong></td></tr>
+    <tr><td class="c">1</td><td>Prerequisiti teorici</td><td>in corso &#8212; il manuale, con il capitolo 13 sull'orale</td></tr>
     <tr><td class="c">2</td><td>Dati, split, contatore FLOPs</td><td><strong>COMPLETATA</strong></td></tr>
-    <tr><td class="c">3</td><td>Early conv + dense transformer</td><td><strong>run di riferimento: 94,09 %</strong>. Restano <code>flatten</code> e i seed 1&#8211;2</td></tr>
-    <tr><td class="c"><strong>4</strong></td><td>Sparse feature extractor</td><td><strong>COMPLETATA per il seed 0: 95,57 %, +1,48 sul denso.</strong> Il claim del paper &#232; riprodotto. Restano i seed 1&#8211;2</td></tr>
-    <tr><td class="c">4-bis</td><td>EAT-S <em>(opzionale)</em></td><td>da fare; servirebbe a calibrare il contatore contro un valore pubblicato</td></tr>
-    <tr><td class="c">5</td><td>Ablation, seed multipli, HPO</td><td>sbloccata: <code>--set</code> e <code>benchmark_models.py</code> pronti. Da eseguire</td></tr>
-    <tr><td class="c">6</td><td>Presentazione</td><td>il materiale c'&#232;; manca il grafico accuratezza/FLOPs e la Figura 2 <em>generata</em> (lo script c'&#232;)</td></tr>
+    <tr><td class="c"><strong>3</strong></td><td>Early conv + dense transformer</td><td><strong>COMPLETATA per il seed 0: <code>flatten</code> 97,01 %</strong>, +0,34 sul valore dichiarato. Restano i seed 1&#8211;2</td></tr>
+    <tr><td class="c"><strong>4</strong></td><td>Sparse feature extractor</td><td><strong>COMPLETATA per il seed 0: 95,57 %</strong>, cio&#232; 1,44 sotto il denso. Restano i seed 1&#8211;2</td></tr>
+    <tr><td class="c">4-bis</td><td>EAT-S <em>(opzionale)</em></td><td>da fare; probabilmente da saltare</td></tr>
+    <tr><td class="c">5</td><td>Ablation, seed multipli, HPO</td><td>iniziata: <var>L</var><sub>rep</sub> fatta. Restano <var>N</var>, <var>P</var> e i seed</td></tr>
+    <tr><td class="c">6</td><td>Presentazione</td><td>il materiale c'&#232;, incluso un risultato negativo ben localizzato. Manca il grafico accuratezza/FLOPs</td></tr>
   </tbody>
 </table>
 
@@ -1124,8 +1166,9 @@ ripetizione 3:  |delta| medio 5468,64   clamp attivo sul   50,0%  (max 43816)</p
   <li><strong>Aperte &#8212; sperimentali</strong>
     <ul>
       <li><s>Il run completo del modello sparso</s> &#8212; <strong>fatto</strong> il 20&#8211;22/08: <strong>95,57 %</strong>, +1,48 sul denso.</li>
-      <li><strong>I seed 1 e 2</strong> su denso e sparso: senza, il +1,48 resta un'indicazione e non una misura.</li>
-      <li><code>pool_freq</code> contro <code>flatten</code>: indecidibile dai vincoli numerici, si decide addestrando.</li>
+      <li><strong>I seed 1 e 2</strong> su <code>dense_flatten</code> e sullo sparso: senza, il &#8722;1,44 resta un'indicazione e non una misura.</li>
+      <li><strong>Il vincolo sulle coordinate delle regioni</strong>: decide se l'1,31 che ci separa dal paper sia un difetto nostro o un limite del metodo.</li>
+      <li><s><code>pool_freq</code> contro <code>flatten</code></s> &#8212; <strong>chiusa</strong> il 23/08 addestrando entrambe: <code>flatten</code> di 2,92 punti.</li>
       <li>Lo scarto sui FLOPs del denso (&#8722;18,2 % con <code>c96</code>): due ipotesi formulate, entrambe eliminate. Verr&#224; riportato come non spiegato.</li>
       <li>Codifica posizionale sul denso: il paper tace, e senza il transformer &#232; <em>esattamente</em> invariante a permutazioni. Ablation quasi gratuita.</li>
       <li>Pre-norm contro post-norm: da ablare, se il budget lo consente.</li>

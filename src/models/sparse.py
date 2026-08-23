@@ -24,11 +24,19 @@ la conversione 2*c-1 al momento del campionamento.
 from __future__ import annotations
 
 import math
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
+
+# "none" e' la lettura letterale del paper: nulla impedisce alle regioni di
+# uscire dal piano. "clip" e' una NOSTRA variante, introdotta dopo aver
+# misurato che dalla seconda ripetizione meta' dei punti campionati cade
+# fuori (manuale, 12.12). Il default resta "none": le nostre aggiunte sono
+# ablation dichiarate, non il comportamento di riferimento.
+RegionConstraint = Literal["none", "clip"]
 
 
 def boxes_to_cwh(boxes: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -94,8 +102,11 @@ class RegionAdjust(nn.Module):
     (tx*w): una regione grande si sposta di piu' a parita' di segnale.
     """
 
-    def __init__(self, token_dim: int) -> None:
+    def __init__(self, token_dim: int, constraint: RegionConstraint = "none",
+                 min_size: float = 1.0 / 64) -> None:
         super().__init__()
+        self.constraint = constraint
+        self.min_size = min_size
         self.to_delta = nn.Linear(token_dim, 4)
         # partenza dall'identita': senza questo, alla prima iterazione le
         # regioni schizzerebbero via da una griglia scelta con cura
@@ -121,6 +132,28 @@ class RegionAdjust(nn.Module):
         center = center + delta[..., :2] * size
         log_scale = delta[..., 2:].clamp(-self.MAX_LOG_SCALE, self.MAX_LOG_SCALE)
         size = size * log_scale.exp()
+
+        if self.constraint == "clip":
+            # La regione viene riportata DENTRO il piano [0,1]x[0,1].
+            #
+            # Prima la dimensione, in [min_size, 1]: sopra 1 la regione non
+            # entra piu' nel piano, sotto min_size e' piu' piccola di una
+            # cella della feature map (16x51) e il campionamento legge quattro
+            # volte lo stesso valore. Poi il centro, ristretto a
+            # [size/2, 1 - size/2], che e' l'intervallo in cui la regione sta
+            # tutta dentro. L'ordine conta: vincolare il centro prima della
+            # dimensione lascerebbe passare regioni grandi centrate al bordo.
+            #
+            # NOTA SUL GRADIENTE, da dichiarare: dove il clamp morde il
+            # gradiente rispetto a `delta` e' nullo, quindi quel passo non
+            # corregge la regione. Non e' un blocco permanente — il token
+            # cambia a ogni ripetizione e a ogni batch — ma e' una differenza
+            # rispetto a una penalita' morbida, che manterrebbe segnale
+            # ovunque al prezzo di un iperparametro in piu'.
+            size = size.clamp(self.min_size, 1.0)
+            half = 0.5 * size
+            center = torch.min(torch.max(center, half), 1.0 - half)
+
         return cwh_to_boxes(center, size)
 
 
@@ -262,7 +295,8 @@ class SparseFeatureExtractor(nn.Module):
 
     def __init__(self, num_tokens: int = 4, num_points: int = 36,
                  token_dim: int = 64, channels: int = 96, repeats: int = 3,
-                 hidden_div: int = 4, unit: float = 0.5) -> None:
+                 hidden_div: int = 4, unit: float = 0.5,
+                 region_constraint: RegionConstraint = "none") -> None:
         super().__init__()
         self.num_tokens = num_tokens
         self.num_points = num_points
@@ -274,7 +308,7 @@ class SparseFeatureExtractor(nn.Module):
 
         self.stages = nn.ModuleList(
             nn.ModuleDict({
-                "adjust": RegionAdjust(token_dim),
+                "adjust": RegionAdjust(token_dim, constraint=region_constraint),
                 "sample": SparseSampler(token_dim, num_points),
                 "decode": AdaptiveDecoder(token_dim, channels, num_points, hidden_div),
             })

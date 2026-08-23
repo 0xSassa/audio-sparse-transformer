@@ -581,6 +581,52 @@ def test_region_clamp_does_not_bind_at_initialisation():
     assert float(delta[..., 2:].abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
 
 
+def test_region_constraint_keeps_boxes_inside_the_plane():
+    """Con `constraint="clip"` le regioni restano dentro [0,1], sempre.
+
+    Misurato sul run di riferimento: senza vincolo, dalla seconda ripetizione
+    meta' dei punti campionati cade fuori dal piano e legge il bordo. Questo
+    test usa delta patologici — molto oltre quelli osservati — e verifica che
+    il vincolo li assorba comunque.
+    """
+    from src.models.sparse import RegionAdjust, boxes_to_cwh, init_boxes_on_grid
+
+    adj = RegionAdjust(64, constraint="clip")
+    torch.nn.init.normal_(adj.to_delta.weight, std=20.0)   # deliberatamente assurdi
+    torch.nn.init.normal_(adj.to_delta.bias, std=20.0)
+
+    boxes = init_boxes_on_grid(4).unsqueeze(0).expand(32, -1, -1)
+    for _ in range(3):                                     # tre ripetizioni, come L_rep
+        boxes = adj(torch.randn(32, 4, 64), boxes)
+
+    assert torch.isfinite(boxes).all()
+    assert float(boxes.min()) >= -1e-6
+    assert float(boxes.max()) <= 1 + 1e-6
+    _, size = boxes_to_cwh(boxes)
+    assert float(size.min()) >= adj.min_size - 1e-6        # niente regioni sotto-cella
+
+
+def test_region_constraint_is_off_by_default():
+    """Il default e' la lettura letterale del paper: nessun vincolo.
+
+    Serve a garantire che la nostra variante non diventi il comportamento di
+    riferimento per distrazione. Con gli stessi delta, "none" produce regioni
+    fuori dal piano e "clip" no: se un giorno il default cambiasse, questo
+    test lo direbbe.
+    """
+    from src.models.sparse import RegionAdjust, SparseFeatureExtractor
+
+    assert RegionAdjust(64).constraint == "none"
+    assert SparseFeatureExtractor().stages[0]["adjust"].constraint == "none"
+
+    torch.manual_seed(0)
+    libero = RegionAdjust(64, constraint="none")
+    torch.nn.init.normal_(libero.to_delta.weight, std=20.0)
+    boxes = libero(torch.randn(16, 4, 64),
+                   torch.tensor([[0.25, 0.25, 0.75, 0.75]]).expand(16, 4, 4).clone())
+    assert float(boxes.max()) > 1.0        # senza vincolo si esce, ed e' voluto
+
+
 def test_sampler_shapes_and_three_sigma_normalisation():
     """[B,N,P,C] in uscita, e i punti cadono quasi tutti dentro la regione.
 

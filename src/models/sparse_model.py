@@ -25,7 +25,7 @@ import torch
 from torch import nn
 
 from .frontend import ChannelReading, EarlyConv, NormKind, StemKind
-from .sparse import SparseFeatureExtractor
+from .sparse import RegionConstraint, SparseFeatureExtractor
 from .transformer import TransformerEncoder
 
 
@@ -49,6 +49,7 @@ class SparseAudioTransformer(nn.Module):
         repeats: int = 3,
         hidden_div: int = 4,
         unit: float = 0.5,
+        region_constraint: RegionConstraint = "none",
         # transformer di classificazione
         dim: int = 128,
         depth: int = 8,
@@ -68,7 +69,7 @@ class SparseAudioTransformer(nn.Module):
         self.extractor = SparseFeatureExtractor(
             num_tokens=num_tokens, num_points=num_points, token_dim=token_dim,
             channels=shape.channels, repeats=repeats, hidden_div=hidden_div,
-            unit=unit,
+            unit=unit, region_constraint=region_constraint,
         )
         # «two models are bridged by a linear layer to change the dimension
         # of token from 64 to 128»

@@ -26,23 +26,28 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 | 0 | Lettura paper + ancestor, setup | completata (restano form risorse e ricevimento) |
 | 1 | Prerequisiti teorici | in corso, in parallelo |
 | 2 | Dati, split ufficiali, contatore FLOPs | **completata** |
-| 3 | Baseline: early conv + dense transformer | run di riferimento fatto (94,09 % su validation); restano `flatten` e i seed 1-2 |
-| 4 | Sparse feature extractor | **completata (seed 0): 95,57 %, +1,48 sul denso** |
+| 3 | Baseline: early conv + dense transformer | **completata (seed 0): `flatten` 97,01 %, +0,34 sul dichiarato** |
+| 4 | Sparse feature extractor | **completata (seed 0): 95,57 %, −1,44 dal denso** |
 | 5 | Ablation, seed multipli, HPO | da fare |
 | 6 | Presentazione | da fare |
 
 ### Risultati finora (validation, modello EMA, seed 0)
 
-| Run | Front-end | Accuratezza | Params | GFLOP |
+| Run | Configurazione | Accuratezza | Params | GFLOP |
 |---|---|---|---|---|
-| **`sparse_seed0`** — il metodo del paper | `c96` | **95,57 %** | 2 822 711 | 0,0485 |
-| `dense_c96_seed0` — baseline controllato | `c96` | 94,09 % | 4 875 235 | 0,5275 |
-| `dense_seed0` — lettura dei canali superata | `c196_proj96` | 94,67 % | 4 899 147 | 0,5742 |
+| **`dense_flatten_seed0`** — baseline | `c96`, `flatten` | **97,01 %** | 5 197 795 | 0,5604 |
+| `sparse_seed0` — il metodo del paper | `c96`, N=4 P=36 | 95,57 % | 2 822 711 | 0,0485 |
+| `sparse_rep1_seed0` — ablation | `L_rep`=1 | 94,98 % | 2 010 591 | 0,0349 |
+| `dense_c96_seed0` — ricostruzione scartata | `c96`, `pool_freq` | 94,09 % | 4 875 235 | 0,5275 |
 
-Il modello sparso batte il baseline denso di **1,48 punti** con il 58 % dei
-parametri e il 9,2 % dei FLOPs: il claim qualitativo del paper (+0,21 nella
-loro Tabella 2) è riprodotto, con un margine più ampio. Il test set non è
-ancora stato toccato, e i seed 1–2 mancano.
+**Il baseline denso si riproduce** (97,01 % contro i 96,67 % dichiarati, +0,34).
+**Il claim del paper no**: con la stessa pipeline il modello sparso resta **1,44
+punti sotto** il denso, mentre il paper lo dà 0,21 sopra. Regge invece il valore
+vero della proposta — **11,6× meno calcolo per 1,44 punti** — e il divario è
+localizzato nell'estrattore: dalla seconda ripetizione metà dei punti campionati
+cade fuori dal piano tempo-frequenza (`Manuale_tecnico.pdf`, §12.12).
+
+Il test set non è ancora stato toccato, e i seed 1–2 mancano.
 
 ### Latenza: il guadagno in FLOPs cambia segno col batch
 

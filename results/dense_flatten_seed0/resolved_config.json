@@ -1,0 +1,86 @@
+{
+  "seed": 0,
+  "deterministic": true,
+  "data": {
+    "cache_dir": "data/cache",
+    "num_classes": 35,
+    "sample_rate": 16000,
+    "clip_samples": 16000,
+    "num_workers": 4
+  },
+  "features": {
+    "type": "log_mel",
+    "n_fft": 400,
+    "hop_length": 160,
+    "n_mels": 64,
+    "f_min": 20.0,
+    "f_max": 7600.0,
+    "top_db": 80.0,
+    "normalize": false
+  },
+  "model": {
+    "norm": "layernorm",
+    "kind": "dense",
+    "channel_reading": "c96",
+    "stem": "paper",
+    "num_conv_layers": 1,
+    "pool_stride": [
+      2,
+      1
+    ],
+    "seq_mode": "flatten",
+    "dim": 224,
+    "depth": 8,
+    "num_heads": 7,
+    "ffn_ratio": 4,
+    "pos_encoding": "none",
+    "dropout": 0.0
+  },
+  "augment": {
+    "names": [
+      "mixing",
+      "phasemix"
+    ],
+    "mix_ratio": 1.0,
+    "epoch_mix": -1,
+    "lam_label_threshold": 0.9
+  },
+  "optim": {
+    "optimizer": "adamw",
+    "lr": 0.0003,
+    "betas": [
+      0.9,
+      0.99
+    ],
+    "eps": 1e-08,
+    "weight_decay": 1e-05,
+    "wd_skip_1d_params": true,
+    "scheduler": "one_cycle",
+    "pct_start": 0.1,
+    "div_factor": 25.0,
+    "final_div_factor": 10000.0,
+    "batch_size": 64,
+    "epochs": 100,
+    "amp": "none",
+    "ema_decay": 0.995,
+    "loss": "bce",
+    "label_smoothing": 0.0
+  },
+  "eval": {
+    "metric": "accuracy",
+    "use_ema": true,
+    "test_once": true
+  },
+  "log": {
+    "dir": "results",
+    "tensorboard": true,
+    "wandb": {
+      "enabled": true,
+      "project": "audio-sparse-transformer",
+      "entity": null,
+      "mode": "online",
+      "log_checkpoints": false
+    }
+  },
+  "determinism_level": "strict"
+}

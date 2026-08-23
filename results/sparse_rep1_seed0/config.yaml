@@ -48,18 +48,6 @@ model:
   hidden_div: 4                # la rete F ha dimensione nascosta d/4 = 16
   unit: 0.5                    # lato iniziale delle regioni, "half of the
                                # feature dimension"
-  region_constraint: none      # [NOSTRA VARIANTE, default = lettura letterale]
-                               # "none": nulla impedisce alle regioni di uscire
-                               #   dal piano. E' cio' che fanno il paper e
-                               #   SparseFormer, ed e' il default.
-                               # "clip": regione riportata dentro [0,1]^2.
-                               # Misurato sul run di riferimento: con "none",
-                               # dalla 2a ripetizione META' dei punti campionati
-                               # cade fuori dal piano e legge il bordo. Con
-                               # L_rep=1 il 100% resta dentro: la degenerazione
-                               # e' cumulativa. Questa variante serve a decidere
-                               # se l'1,31 che ci separa dal paper sia un
-                               # difetto nostro o un limite del metodo.
 
   # --- transformer di classificazione
   dim: 128                     # d_encoder; un ponte lineare 64 -> 128

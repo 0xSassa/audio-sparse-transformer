@@ -35,6 +35,7 @@ $targets = [ordered]@{
     "manuale_tecnico.html"      = "Manuale_tecnico.pdf"
     "diario_di_bordo.html"      = "Diario_di_bordo.pdf"
     "pipeline_progetto_dl.html" = "Pipeline_progetto_DL.pdf"
+    "analisi_paper.html"        = "Analisi_dei_paper.pdf"
 }
 
 Get-Process msedge, chrome -ErrorAction SilentlyContinue |
