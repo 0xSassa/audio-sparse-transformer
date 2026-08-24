@@ -1,0 +1,23 @@
+{
+  "balanced_val_accuracy": 0.956462614279042,
+  "tag": "sparse_N36_seed0",
+  "seed": 0,
+  "epochs": 50,
+  "params": 2824887,
+  "best_val_accuracy": 0.9608255685803025,
+  "peak_gpu_mb": 1214,
+  "seq_len": 36,
+  "gflops": 0.31842176,
+  "gmacs": 0.161525248,
+  "provenance": {
+    "python": "3.12.4",
+    "torch": "2.9.1+cu128",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "cuda": "12.8",
+    "commit": "b4f38c5cb10a8c94eaa89b09bf73019e3f68b4e1",
+    "dirty": false,
+    "untracked": 25
+  },
+  "determinism": "warn_only"
+}
