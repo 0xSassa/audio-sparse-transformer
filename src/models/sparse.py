@@ -38,6 +38,23 @@ from torch import nn
 # ablation dichiarate, non il comportamento di riferimento.
 RegionConstraint = Literal["none", "clip"]
 
+# COME le regioni vengono determinate. Serve a rispondere alla domanda che il
+# paper pone implicitamente e non misura: la saliency APPRESA serve davvero?
+#
+#   "learned"  il metodo del paper: regioni iniziali apprese, piu' un
+#              aggiustamento per campione a ogni ripetizione.
+#   "static"   `to_delta` congelato a zero: le regioni restano dove le mette
+#              `box_init`, che resta appreso. Regioni APPRESE ma UGUALI PER
+#              OGNI INGRESSO — isola il contributo dell'adattivita'.
+#   "grid"     congelati anche i `box_init`: le regioni restano sulla griglia
+#              regolare iniziale. Nessuna saliency, ne' appresa ne' adattiva.
+#
+# Nota utile a leggere il risultato: alla PRIMA ripetizione le regioni sono
+# gia' identiche per ogni ingresso anche in "learned", perche' i token
+# entrano come `token_init`, che e' un parametro. L'adattivita' esiste solo
+# dalla seconda in poi.
+RegionMode = Literal["learned", "static", "grid"]
+
 
 def boxes_to_cwh(boxes: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """(x1,y1,x2,y2) -> (centro, dimensione), entrambi [..., 2]."""
@@ -296,7 +313,8 @@ class SparseFeatureExtractor(nn.Module):
     def __init__(self, num_tokens: int = 4, num_points: int = 36,
                  token_dim: int = 64, channels: int = 96, repeats: int = 3,
                  hidden_div: int = 4, unit: float = 0.5,
-                 region_constraint: RegionConstraint = "none") -> None:
+                 region_constraint: RegionConstraint = "none",
+                 region_mode: RegionMode = "learned") -> None:
         super().__init__()
         self.num_tokens = num_tokens
         self.num_points = num_points
@@ -314,6 +332,18 @@ class SparseFeatureExtractor(nn.Module):
             })
             for _ in range(repeats)
         )
+
+        # Il congelamento avviene DOPO la costruzione, e non sostituendo i
+        # moduli: la forma del modello, il conteggio dei parametri e il costo
+        # in FLOPs restano identici a "learned". E' cio' che rende l'ablation
+        # un confronto controllato invece di un modello piu' piccolo.
+        self.region_mode = region_mode
+        if region_mode in ("static", "grid"):
+            for stage in self.stages:
+                for param in stage["adjust"].parameters():
+                    param.requires_grad_(False)
+        if region_mode == "grid":
+            self.box_init.requires_grad_(False)
 
     def forward(self, features: torch.Tensor,
                 return_trace: bool = False):

@@ -36,21 +36,30 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 | Run | Configurazione | Accuratezza | Params | GFLOP |
 |---|---|---|---|---|
 | **`dense_flatten_seed0`** — baseline | `c96`, `flatten` | **97,01 %** | 5 197 795 | 0,5604 |
-| `sparse_seed0` — il metodo del paper | `c96`, N=4 P=36 | 95,57 % | 2 822 711 | 0,0485 |
-| `sparse_clip_seed0` — ablation (nostra variante) | regioni vincolate | 95,21 % | 2 822 711 | 0,0485 |
+| `sparse_N16_ep100_seed0` | N=16, P=36 | 96,46 % | 2 823 527 | 0,1487 |
+| `sparse_seed0` — configurazione del paper | N=4, P=36 | 95,57 % | 2 822 711 | 0,0485 |
 | `sparse_rep1_seed0` — ablation | `L_rep`=1 | 94,98 % | 2 010 591 | 0,0349 |
+| `sparse_clip_seed0` — ablation (nostra variante) | regioni vincolate | 95,21 % | 2 822 711 | 0,0485 |
 | `dense_c96_seed0` — ricostruzione scartata | `c96`, `pool_freq` | 94,09 % | 4 875 235 | 0,5275 |
 
-**Il baseline denso si riproduce** (97,01 % contro i 96,67 % dichiarati, +0,34).
-**Il claim del paper no**: con la stessa pipeline il modello sparso resta **1,44
-punti sotto** il denso, mentre il paper lo dà 0,21 sopra. Regge invece il valore
-vero della proposta — **11,6× meno calcolo per 1,44 punti** — e il divario è
-localizzato nell'estrattore: dalla seconda ripetizione metà dei punti campionati
-cade fuori dal piano tempo-frequenza. Vincolare
-le regioni a restare dentro il piano **non recupera accuratezza** (95,21 %): il
-difetto è reale ma non costa punti, e il divario resta non spiegato.
+L'obiettivo è **riprodurre l'esperimento e capirlo**, non far tornare le cifre:
+uno scarto di qualche punto sui valori assoluti è atteso, e nasce dalle
+assunzioni che il paper lascia aperte. Su quel piano l'esperimento è
+riprodotto — il nostro denso è addirittura mezzo punto sopra il valore
+dichiarato.
 
-Il test set non è ancora stato toccato, e i seed 1–2 mancano.
+**Il risultato è invece il confronto interno.** Il paper dà il modello sparso
+0,21 punti *sopra* il proprio dense-transformer; con la stessa pipeline, lo
+stesso front-end e lo stesso seed il nostro resta **1,44 punti sotto** (0,55 a
+N=16). È un cambio di *segno* su un confronto controllato, e nessuna tolleranza
+sui livelli lo assorbe: i due modelli condividono tutto tranne il modo di
+produrre i token.
+
+Quello che emerge è una frontiera efficienza-accuratezza misurata su una
+pipeline sola: **3,8× meno calcolo per 0,55 punti** a N=16, **11,6× per 1,44** a
+N=4. Il divario si restringe con il numero di token ma non si chiude.
+
+Il test set non è ancora stato toccato, e i seed 1–2 sono in corso.
 
 ### Latenza: il guadagno in FLOPs cambia segno col batch
 

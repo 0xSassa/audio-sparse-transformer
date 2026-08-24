@@ -48,17 +48,6 @@ model:
   hidden_div: 4                # la rete F ha dimensione nascosta d/4 = 16
   unit: 0.5                    # lato iniziale delle regioni, "half of the
                                # feature dimension"
-  region_mode: learned         # [ABLATION, default = metodo del paper]
-                               # "learned": regioni apprese + aggiustamento
-                               #   per campione. E' il metodo.
-                               # "static": `to_delta` congelato -> regioni
-                               #   apprese ma UGUALI per ogni ingresso.
-                               # "grid": congelato anche `box_init` -> regioni
-                               #   fisse sulla griglia iniziale.
-                               # Risponde alla domanda che il paper non pone:
-                               # la saliency appresa serve, o basta la griglia?
-                               # Il congelamento non cambia forma, parametri
-                               # ne' FLOPs: il confronto resta controllato.
   region_constraint: none      # [NOSTRA VARIANTE, default = lettura letterale]
                                # "none": nulla impedisce alle regioni di uscire
                                #   dal piano. E' cio' che fanno il paper e

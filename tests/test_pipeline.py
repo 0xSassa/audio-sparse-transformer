@@ -581,6 +581,50 @@ def test_region_clamp_does_not_bind_at_initialisation():
     assert float(delta[..., 2:].abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
 
 
+def test_region_mode_freezes_the_right_parameters():
+    """`static` e `grid` congelano, senza cambiare la forma del modello.
+
+    Il punto dell'ablation e' che sia un confronto CONTROLLATO: congelare non
+    deve togliere parametri ne' FLOPs, altrimenti si starebbe confrontando un
+    modello piu' piccolo invece dello stesso modello senza saliency appresa.
+    """
+    from src.models.sparse import SparseFeatureExtractor
+
+    tot = None
+    for mode in ("learned", "static", "grid"):
+        ex = SparseFeatureExtractor(region_mode=mode)
+        n = sum(p.numel() for p in ex.parameters())
+        tot = n if tot is None else tot
+        assert n == tot, "il congelamento non deve cambiare il numero di parametri"
+
+        adjust_frozen = all(not p.requires_grad
+                            for st in ex.stages for p in st["adjust"].parameters())
+        assert adjust_frozen == (mode != "learned")
+        assert ex.box_init.requires_grad == (mode != "grid")
+
+        # i moduli restano al loro posto: si congela, non si sostituisce
+        assert len(ex.stages) == 3
+
+
+def test_frozen_regions_do_not_move():
+    """Con `grid` le regioni restano ESATTAMENTE sulla griglia iniziale.
+
+    `to_delta` parte da zero, quindi congelarlo rende l'aggiustamento
+    l'identita' a ogni ripetizione: e' il modo in cui l'ablation ottiene
+    regioni fisse senza toccare la struttura del modello.
+    """
+    import torch
+
+    from src.models.sparse import SparseFeatureExtractor, init_boxes_on_grid
+
+    torch.manual_seed(0)
+    ex = SparseFeatureExtractor(region_mode="grid").eval()
+    _, trace = ex(torch.randn(4, 96, 16, 51), return_trace=True)
+    atteso = init_boxes_on_grid(4)
+    for stage in trace:
+        assert torch.allclose(stage["boxes"][0], atteso, atol=1e-6)
+
+
 def test_region_constraint_keeps_boxes_inside_the_plane():
     """Con `constraint="clip"` le regioni restano dentro [0,1], sempre.
 
