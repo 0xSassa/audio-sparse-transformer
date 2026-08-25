@@ -33,33 +33,39 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 
 ### Risultati finora (validation, modello EMA, seed 0)
 
-| Run | Configurazione | Accuratezza | Params | GFLOP |
-|---|---|---|---|---|
-| **`dense_flatten_seed0`** — baseline | `c96`, `flatten` | **97,01 %** | 5 197 795 | 0,5604 |
-| `sparse_N16_ep100_seed0` | N=16, P=36 | 96,46 % | 2 823 527 | 0,1487 |
-| `sparse_seed0` — configurazione del paper | N=4, P=36 | 95,57 % | 2 822 711 | 0,0485 |
-| `sparse_rep1_seed0` — ablation | `L_rep`=1 | 94,98 % | 2 010 591 | 0,0349 |
-| `sparse_clip_seed0` — ablation (nostra variante) | regioni vincolate | 95,21 % | 2 822 711 | 0,0485 |
-| `dense_c96_seed0` — ricostruzione scartata | `c96`, `pool_freq` | 94,09 % | 4 875 235 | 0,5275 |
+| Modello | Accuratezza (validation) | Params | GFLOP |
+|---|---|---|---|
+| **Denso `flatten`** — baseline, 3 seed | **96,97 % ± 0,04** | 5 197 795 | 0,5604 |
+| **Sparso N=4** — configurazione del paper, 3 seed | **95,71 % ± 0,36** | 2 822 711 | 0,0485 |
+| Sparso N=16 | 96,46 % | 2 823 527 | 0,1487 |
+| Sparso, regioni congelate su griglia — 3 seed | 94,94 % ± 0,22 | 2 822 711 | 0,0485 |
+| Sparso, `L_rep`=1 | 94,98 % | 2 010 591 | 0,0349 |
+| Sparso, regioni vincolate al piano | 95,21 % | 2 822 711 | 0,0485 |
+| Denso `pool_freq` — ricostruzione scartata | 94,09 % | 4 875 235 | 0,5275 |
 
 L'obiettivo è **riprodurre l'esperimento e capirlo**, non far tornare le cifre:
-uno scarto di qualche punto sui valori assoluti è atteso, e nasce dalle
+uno scarto di qualche punto sui valori assoluti è atteso e nasce dalle
 assunzioni che il paper lascia aperte. Su quel piano l'esperimento è
-riprodotto — il nostro denso è addirittura mezzo punto sopra il valore
-dichiarato.
+riprodotto — il nostro denso è mezzo punto *sopra* il valore dichiarato.
 
-**Il risultato è invece il confronto interno.** Il paper dà il modello sparso
-0,21 punti *sopra* il proprio dense-transformer; con la stessa pipeline, lo
-stesso front-end e lo stesso seed il nostro resta **1,44 punti sotto** (0,55 a
-N=16). È un cambio di *segno* su un confronto controllato, e nessuna tolleranza
-sui livelli lo assorbe: i due modelli condividono tutto tranne il modo di
-produrre i token.
+**Il risultato è il confronto interno.** Il paper dà il modello sparso 0,21
+punti *sopra* il proprio dense-transformer; con la stessa pipeline il nostro
+resta **1,26 ± 0,21 punti sotto** (*t* = 6,0 su 4 gradi di libertà). È un
+cambio di *segno* su un confronto controllato, che nessuna tolleranza sui
+livelli assorbe.
 
-Quello che emerge è una frontiera efficienza-accuratezza misurata su una
-pipeline sola: **3,8× meno calcolo per 0,55 punti** a N=16, **11,6× per 1,44** a
-N=4. Il divario si restringe con il numero di token ma non si chiude.
+Tre risultati collaterali che il paper non riporta:
 
-Il test set non è ancora stato toccato, e i seed 1–2 sono in corso.
+- **Il rumore da seed del modello sparso è dieci volte quello del denso**
+  (0,36 contro 0,04), perché `grid_sample` non ha un backward deterministico
+  su CUDA. Il margine di +0,21 dichiarato dagli autori, misurato su un solo
+  seed, vale 0,6 deviazioni di quel rumore.
+- **La saliency appresa vale 0,76 ± 0,25 punti**: congelando le regioni su una
+  griglia regolare fissa, a parità esatta di parametri e FLOPs, il modello fa
+  ancora 94,94 %. Quasi tutta la prestazione viene dall'architettura, non da
+  *dove* il modello guarda.
+- **Il guadagno in FLOPs non si traduce in latenza**, e cambia segno col batch
+  (vedi sotto).
 
 ### Latenza: il guadagno in FLOPs cambia segno col batch
 
