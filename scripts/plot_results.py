@@ -42,6 +42,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from src.train import MODELS
+
 # --------------------------------------------------------------------------
 # Numeri dichiarati da Kavaki & Mandel, ICASSP 2025 — trascritti dal PDF.
 # Tabella 2: confronto su Google Speech Commands V2 (accuratezza su test).
@@ -77,14 +79,27 @@ def load_runs(results: Path) -> list[dict]:
         with open(cfg_path, encoding="utf-8") as fh:
             cfg = json.load(fh)
         m = cfg.get("model", {})
+        # accuratezza su TEST, se quel run e' stato valutato. Il file lo
+        # scrive `evaluate.py`, una volta sola per run: la sua presenza e'
+        # essa stessa la garanzia che il test set non sia stato riusato.
+        test = None
+        guard = summary.parent / "TEST_EVALUATED.json"
+        if guard.exists():
+            with open(guard, encoding="utf-8") as fh:
+                test = 100 * json.load(fh)["accuracy"]
+
         runs.append({
-            "tag": s["tag"], "seed": s["seed"], "epochs": s["epochs"],
+            "tag": s["tag"], "seed": s["seed"], "epochs": s["epochs"], "test": test,
             "acc": 100 * s["best_val_accuracy"], "gflops": s["gflops"],
             "params": s["params"], "kind": m.get("kind"),
             "num_tokens": m.get("num_tokens"), "num_points": m.get("num_points"),
             "repeats": m.get("repeats"), "seq_mode": m.get("seq_mode"),
             "channels": m.get("channel_reading"),
             "constraint": m.get("region_constraint", "none"),
+            "mode": m.get("region_mode", "learned"),
+            # La configurazione INTERA del modello, non solo i campi che
+            # servono alle etichette: e' cio' che identifica un run.
+            "model_cfg": m,
         })
     return runs
 
@@ -96,24 +111,71 @@ def group(runs: list[dict]) -> dict[tuple, dict]:
     modello o il protocollo. Cosi' `sparse_seed0/1/2` diventano un punto solo
     con media e deviazione, mentre `sparse_clip_seed0` resta separato.
     """
+    import inspect
     import statistics
+
+    def _hashable(v):
+        return tuple(v) if isinstance(v, list) else v
+
+    def _with_defaults(cfg: dict) -> dict:
+        """Riempie le opzioni assenti coi default della classe del modello.
+
+        Serve perche' `resolved_config.json` fotografa la config al momento
+        del run: un'opzione aggiunta al codice DOPO non compare nei run
+        precedenti. Senza questo, lo stesso modello addestrato prima e dopo
+        l'aggiunta di un'opzione finirebbe in due gruppi diversi — che e'
+        esattamente il difetto opposto a quello che la chiave derivata
+        risolve, ed e' altrettanto silenzioso.
+
+        I default si leggono dalla firma della classe, quindi anche questo
+        non richiede che nessuno si ricordi di aggiornare un elenco.
+        """
+        model = MODELS.get(cfg.get("kind"))
+        if model is None:
+            return cfg
+        out = dict(cfg)
+        for name, param in inspect.signature(model.__init__).parameters.items():
+            if param.default is not inspect.Parameter.empty and name not in out:
+                out[name] = param.default
+        return out
 
     buckets: dict[tuple, list[dict]] = defaultdict(list)
     for r in runs:
-        key = (r["kind"], r["channels"], r["seq_mode"], r["num_tokens"],
-               r["num_points"], r["repeats"], r["constraint"], r["epochs"])
+        # LA CHIAVE SI DERIVA DALLA CONFIGURAZIONE INTERA, non da un elenco
+        # scritto a mano.
+        #
+        # La prima versione elencava i campi a mano e ne dimenticava uno:
+        # quando e' stata aggiunta l'opzione `region_mode`, i tre run a
+        # regioni congelate si sono fusi con i tre a regioni apprese in un
+        # unico gruppo da sei seed, con una media che non corrispondeva ad
+        # alcun modello esistente. E il difetto era invisibile ai controlli
+        # ovvi: le due varianti hanno per costruzione gli STESSI parametri e
+        # gli STESSI FLOPs, quindi nessuna verifica di coerenza su quelli
+        # avrebbe potuto accorgersene.
+        #
+        # Derivando la chiave da `model_cfg` il problema non si ripresenta:
+        # qualunque opzione nuova entra automaticamente nell'identita' del
+        # run, senza che nessuno debba ricordarsene.
+        cfg = _with_defaults(r["model_cfg"])
+        key = (tuple(sorted((k, _hashable(v)) for k, v in cfg.items())),
+               r["epochs"])
         buckets[key].append(r)
 
     out = {}
     for key, rs in buckets.items():
         accs = [r["acc"] for r in rs]
+        tests = [r["test"] for r in rs if r["test"] is not None]
         out[key] = {
             "n_seeds": len(rs), "acc": statistics.mean(accs),
             "std": statistics.stdev(accs) if len(accs) > 1 else 0.0,
+            "test": statistics.mean(tests) if tests else None,
+            "test_std": statistics.stdev(tests) if len(tests) > 1 else 0.0,
+            "n_test": len(tests),
             "gflops": rs[0]["gflops"], "params": rs[0]["params"],
-            "tags": sorted(r["tag"] for r in rs), **dict(zip(
-                ("kind", "channels", "seq_mode", "num_tokens", "num_points",
-                 "repeats", "constraint", "epochs"), key)),
+            "tags": sorted(r["tag"] for r in rs),
+            **{k: rs[0][k] for k in ("kind", "channels", "seq_mode",
+                                     "num_tokens", "num_points", "repeats",
+                                     "constraint", "mode", "epochs")},
         }
     return out
 
@@ -161,6 +223,8 @@ def main() -> int:
                 lab += f" L={v['repeats']}"
             if v["constraint"] != "none":
                 lab += " (vincolato)"
+            if v["mode"] != "learned":
+                lab += f" (regioni {v['mode']})"
         if v["epochs"] != 100:
             lab += f" · {v['epochs']}ep"
         ax.errorbar(v["gflops"], v["acc"], yerr=v["std"] or None, fmt="o",
@@ -202,7 +266,8 @@ def main() -> int:
         series: dict[int, list] = defaultdict(list)
         for v in g.values():
             if (v["kind"] == "sparse" and v[other] == default_other
-                    and v["repeats"] == 3 and v["constraint"] == "none"):
+                    and v["repeats"] == 3 and v["constraint"] == "none"
+                    and v["mode"] == "learned"):
                 series[v["epochs"]].append((v[axis_key], v["acc"], v["std"]))
 
         for style, (ep, pts) in zip(["o-", "s:", "^-."], sorted(series.items())):
@@ -234,8 +299,8 @@ def main() -> int:
 
     # ---- tabella aggregata -----------------------------------------------
     rows = sorted(g.values(), key=lambda v: (v["kind"], v["gflops"]))
-    lines = ["| Configurazione | seed | accuratezza | params | GFLOP |",
-             "|---|---|---|---|---|"]
+    lines = ["| Configurazione | seed | validation | **test** | params | GFLOP |",
+             "|---|---|---|---|---|---|"]
     for v in rows:
         if v["kind"] == "dense":
             name = f"denso `{v['seq_mode']}` ({v['channels']})"
@@ -245,11 +310,19 @@ def main() -> int:
                 name += f" L_rep={v['repeats']}"
             if v["constraint"] != "none":
                 name += " vincolato"
+            if v["mode"] != "learned":
+                name += f", regioni {v['mode']}"
         if v["epochs"] != 100:
             name += f", {v['epochs']} ep"
         acc = (f"{v['acc']:.2f} % ± {v['std']:.2f}" if v["n_seeds"] > 1
                else f"{v['acc']:.2f} %")
-        lines.append(f"| {name} | {v['n_seeds']} | {acc} | "
+        if v["test"] is None:
+            test = "—"
+        elif v["n_test"] > 1:
+            test = f"**{v['test']:.2f} % ± {v['test_std']:.2f}**"
+        else:
+            test = f"**{v['test']:.2f} %**"
+        lines.append(f"| {name} | {v['n_seeds']} | {acc} | {test} | "
                      f"{v['params']:,} | {v['gflops']:.4f} |")
     table = "\n".join(lines) + "\n"
     (ROOT / args.table).write_text(table, encoding="utf-8")

@@ -1,0 +1,9 @@
+{
+  "when": "2026-08-25T11:17:44+00:00",
+  "checkpoint": "best.pt",
+  "epoch": 83,
+  "accuracy": 0.9681054066333484,
+  "n": 11005,
+  "forced": false,
+  "history": []
+}

@@ -581,6 +581,73 @@ def test_region_clamp_does_not_bind_at_initialisation():
     assert float(delta[..., 2:].abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
 
 
+def _load_plot_results():
+    """Carica `scripts/plot_results.py`, che non e' un package."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "plot_results.py"
+    spec = importlib.util.spec_from_file_location("plot_results", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _run(tag, seed, acc, **model):
+    cfg = {"kind": "sparse", "num_tokens": 4, "num_points": 36, "repeats": 3,
+           "channel_reading": "c96", "region_constraint": "none", **model}
+    return {"tag": tag, "seed": seed, "epochs": 100, "acc": acc, "test": None,
+            "gflops": 0.0485, "params": 2_822_711, "kind": "sparse",
+            "num_tokens": cfg["num_tokens"], "num_points": cfg["num_points"],
+            "repeats": cfg["repeats"], "seq_mode": None,
+            "channels": cfg["channel_reading"], "constraint": cfg["region_constraint"],
+            "mode": cfg.get("region_mode", "learned"), "model_cfg": cfg}
+
+
+def test_grouping_separates_configurations_that_differ_only_in_one_option():
+    """Due varianti diverse non devono fondersi in un gruppo solo.
+
+    >>> IL DIFETTO CHE QUESTO TEST IMPEDISCE <<<
+
+    La chiave di raggruppamento elencava i campi a mano. Quando e' stata
+    aggiunta l'opzione `region_mode`, i tre run a regioni congelate si sono
+    fusi con i tre a regioni apprese in un unico gruppo da sei seed, con una
+    media che non corrispondeva ad alcun modello esistente — ed e' finita in
+    una tabella di risultati.
+
+    Il difetto era invisibile ai controlli ovvi: le due varianti hanno per
+    costruzione gli STESSI parametri e gli STESSI FLOPs, quindi nessuna
+    verifica di coerenza su quelli poteva accorgersene.
+    """
+    group = _load_plot_results().group
+
+    runs = [_run(f"learned{i}", i, 95.0 + i / 10) for i in range(3)]
+    runs += [_run(f"grid{i}", i, 94.0 + i / 10, region_mode="grid") for i in range(3)]
+    g = group(runs)
+    assert len(g) == 2, "learned e grid devono restare due configurazioni distinte"
+    assert sorted(v["n_seeds"] for v in g.values()) == [3, 3]
+
+
+def test_grouping_fills_options_added_after_a_run_was_archived():
+    """Un run vecchio, la cui config non conosce un'opzione nuova, deve
+    raggrupparsi con i run che la usano al valore di default.
+
+    `resolved_config.json` fotografa la configurazione al momento del run:
+    un'opzione aggiunta dopo non compare nei run precedenti. Senza riempire
+    i default dalla firma della classe, lo stesso identico modello finirebbe
+    in due gruppi diversi a seconda di quando e' stato addestrato — difetto
+    speculare al precedente, e altrettanto silenzioso.
+    """
+    group = _load_plot_results().group
+
+    vecchio = _run("prima", 0, 95.5)
+    vecchio["model_cfg"].pop("region_constraint")      # opzione non ancora esistente
+    nuovo = _run("dopo", 1, 95.7)                      # stessa cosa, col default
+    g = group([vecchio, nuovo])
+    assert len(g) == 1, "lo stesso modello non deve dividersi per l'eta' del run"
+    assert next(iter(g.values()))["n_seeds"] == 2
+
+
 def test_region_mode_freezes_the_right_parameters():
     """`static` e `grid` congelano, senza cambiare la forma del modello.
 

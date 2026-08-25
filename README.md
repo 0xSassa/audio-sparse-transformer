@@ -33,15 +33,15 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 
 ### Risultati finora (validation, modello EMA, seed 0)
 
-| Modello | Accuratezza (validation) | Params | GFLOP |
-|---|---|---|---|
-| **Denso `flatten`** — baseline, 3 seed | **96,97 % ± 0,04** | 5 197 795 | 0,5604 |
-| **Sparso N=4** — configurazione del paper, 3 seed | **95,71 % ± 0,36** | 2 822 711 | 0,0485 |
-| Sparso N=16 | 96,46 % | 2 823 527 | 0,1487 |
-| Sparso, regioni congelate su griglia — 3 seed | 94,94 % ± 0,22 | 2 822 711 | 0,0485 |
-| Sparso, `L_rep`=1 | 94,98 % | 2 010 591 | 0,0349 |
-| Sparso, regioni vincolate al piano | 95,21 % | 2 822 711 | 0,0485 |
-| Denso `pool_freq` — ricostruzione scartata | 94,09 % | 4 875 235 | 0,5275 |
+| Modello | **Test** (3 seed) | Validation | Params | GFLOP |
+|---|---|---|---|---|
+| **Denso `flatten`** — baseline | **97,03 % ± 0,20** | 96,97 ± 0,04 | 5 197 795 | 0,5604 |
+| **Sparso N=4** — configurazione del paper | **95,52 % ± 0,31** | 95,71 ± 0,37 | 2 822 711 | 0,0485 |
+| Sparso N=16 | — | 96,46 % | 2 823 527 | 0,1487 |
+| Sparso, regioni congelate su griglia — 3 seed | — | 94,94 % ± 0,22 | 2 822 711 | 0,0485 |
+| Sparso, `L_rep`=1 | — | 94,98 % | 2 010 591 | 0,0349 |
+| Sparso, regioni vincolate al piano | — | 95,21 % | 2 822 711 | 0,0485 |
+| Denso `pool_freq` — ricostruzione scartata | — | 94,09 % | 4 875 235 | 0,5275 |
 
 L'obiettivo è **riprodurre l'esperimento e capirlo**, non far tornare le cifre:
 uno scarto di qualche punto sui valori assoluti è atteso e nasce dalle
@@ -50,9 +50,10 @@ riprodotto — il nostro denso è mezzo punto *sopra* il valore dichiarato.
 
 **Il risultato è il confronto interno.** Il paper dà il modello sparso 0,21
 punti *sopra* il proprio dense-transformer; con la stessa pipeline il nostro
-resta **1,26 ± 0,21 punti sotto** (*t* = 6,0 su 4 gradi di libertà). È un
+resta **1,52 punti sotto sul test set** (*t* = 7,2; −1,26 su validation). È un
 cambio di *segno* su un confronto controllato, che nessuna tolleranza sui
-livelli assorbe.
+livelli assorbe. Il test set è stato toccato una volta sola per modello, a
+esperimenti chiusi.
 
 Tre risultati collaterali che il paper non riporta:
 
