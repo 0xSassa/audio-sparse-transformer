@@ -262,7 +262,7 @@ def test_stem_follows_sparseformer_sequence():
     """
     from src.models.frontend import ChannelLayerNorm, EarlyConv
 
-    stem = EarlyConv(channel_reading="c96", stem="paper")
+    stem = EarlyConv(channel_reading="c96")
     kinds = [type(m).__name__ for m in stem.body]
     assert kinds == ["Conv2d", "ReLU", "MaxPool2d", "ChannelLayerNorm"], kinds
     assert stem.body[0].bias is not None
@@ -397,24 +397,33 @@ def test_dataset_is_picklable_without_the_memmap(tmp_path):
     assert revived[0][0].shape == (clip,)
 
 
+# La configurazione ADOTTATA, cioe' `configs/dense_flatten.yaml`: e' quella
+# da cui vengono i numeri riportati. Una versione precedente teneva qui
+# c196_proj96 + pool_freq, cioe' la ricostruzione SCARTATA: il test si
+# chiamava "adopted" e sorvegliava un modello che non riportiamo.
 ADOPTED_DENSE = {
-    "channel_reading": "c196_proj96",
-    "stem": "paper",
+    "channel_reading": "c96",
     "pool_stride": (2, 1),
-    "seq_mode": "pool_freq",
+    "seq_mode": "flatten",
     "dim": 224,
     "depth": 8,
     "num_heads": 7,
 }
 
 
-def test_adopted_dense_configuration_stays_within_the_declared_budget():
-    """Guardia di regressione sulla ricostruzione del modello denso.
+def test_adopted_dense_still_costs_what_we_reported():
+    """Guardia di regressione sul modello denso: sono ancora i NOSTRI numeri?
 
-    Il paper dichiara 4.80 M parametri e 0.645 G FLOPs. La nostra
-    configurazione sta a +2.1% e -11.0%. Se una modifica al codice sposta
-    questi numeri, il confronto col paper smette di essere legittimo e
-    vogliamo accorgercene subito, non dopo un training.
+    Il test fissa cio' che abbiamo riportato, non cio' che dichiara il paper.
+    La distinzione non e' pedanteria: una soglia costruita attorno ai valori
+    del paper si rompe quando ci allontaniamo da loro, che e' un fatto da
+    discutere e non un difetto da segnalare; una soglia costruita attorno ai
+    nostri si rompe quando cambia il MODELLO, che e' l'unica cosa che un test
+    di regressione deve sorvegliare.
+
+    Per riferimento, non come vincolo: il paper dichiara 4.80 M parametri e
+    0.645 G FLOPs, quindi siamo a +8.3% e -13.1%. Lo scarto e' dichiarato nel
+    README e discusso nella presentazione.
     """
     from src.flops import analyze
     from src.models.dense import DenseAudioTransformer
@@ -424,10 +433,8 @@ def test_adopted_dense_configuration_stays_within_the_declared_budget():
     assert (model.feature_shape.channels, model.feature_shape.freq) == (96, 16)
 
     rep = analyze(model, (1, 64, 101))
-    param_err = abs(rep.params - 4.80e6) / 4.80e6
-    flop_err = abs(rep.native_flops - 0.645e9) / 0.645e9
-    assert param_err < 0.05, f"parametri fuori budget: {rep.params:,}"
-    assert flop_err < 0.15, f"FLOPs fuori budget: {rep.native_flops/1e9:.3f} G"
+    assert rep.params == 5_197_795, f"parametri cambiati: {rep.params:,}"
+    assert rep.native_flops == 560_431_424, f"FLOPs cambiati: {rep.native_flops:,}"
 
 
 def test_dense_is_batch_independent():
@@ -479,7 +486,7 @@ def test_ema_moves_towards_model_and_lags_it():
 # Estrattore sparso — il metodo di Kavaki & Mandel
 # ==========================================================================
 
-ADOPTED_SPARSE = {"channel_reading": "c96", "stem": "paper", "pool_stride": (2, 1)}
+ADOPTED_SPARSE = {"channel_reading": "c96", "pool_stride": (2, 1)}
 
 
 def test_boxes_round_trip():
@@ -822,7 +829,7 @@ def test_c196_would_blow_the_sparse_cost():
     from src.models.sparse_model import SparseAudioTransformer
 
     bad = analyze(SparseAudioTransformer(channel_reading="c196_proj96",
-                                         stem="paper", pool_stride=(2, 1)),
+                                         pool_stride=(2, 1)),
                   (1, 64, 101))
     assert (bad.native_flops - 0.055e9) / 0.055e9 > 0.5
 

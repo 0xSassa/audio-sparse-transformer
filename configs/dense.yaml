@@ -24,10 +24,7 @@ model:
                                # FLOPs del modello SPARSO, dove la early conv
                                # e' il 65% del costo (contro l'11% nel denso)
                                # e c196_proj96 sbaglia del +73%.
-  stem: paper                  # conv 7x7 stride 2 (bias) -> ReLU -> maxpool
   num_conv_layers: 1
-  norm: layernorm              # LayerNorm sui canali DOPO il pooling,
-                               # come nel codice di SparseFormer
   pool_stride: [2, 1]          # DEDOTTO: solo sull'asse frequenza. Con (2,2)
                                # la sequenza scende a 26 frame e il costo si
                                # ferma al 70 % di quello dichiarato
@@ -43,9 +40,9 @@ model:
   num_heads: 7                 # 224/7 = 32, la dim/testa convenzionale.
                                # Misurato: params e FLOPs identici per 4/7/8/14
   ffn_ratio: 4
-  pos_encoding: none           # si addestra anche con sinusoidal: il paper tace
-                               # sul denso, e senza codifica il transformer e'
-                               # esattamente invariante a permutazioni del tempo
+  # Nessuna codifica posizionale: il paper la dichiara assente sullo sparso e
+  # tace sul denso. E' una nostra ASSUNZIONE, presa per simmetria; testarla
+  # era previsto e non e' stato fatto.
   dropout: 0.0
 
 # Sequenza risultante: [C=96, F=16, T=51]  ->  51 token di dimensione 96

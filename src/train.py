@@ -89,7 +89,26 @@ def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
     kind = m.pop("kind", "dense")
     if kind not in MODELS:
         raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
-    pool = m.pop("pool_stride", (2, 2))
+
+    # Chiavi di configurazioni vecchie. Le opzioni corrispondenti sono state
+    # rimosse dai modelli perche' nessun run le ha mai usate, ma i CHECKPOINT
+    # ARCHIVIATI portano dentro `state["config"]` la config con cui furono
+    # addestrati — ed e' da li' che `evaluate.py` e `plot_sampling.py`
+    # ricostruiscono il modello. Ignorarle e' cio' che li tiene ricaricabili,
+    # e non cambia il modello: i valori archiviati coincidono con l'unico
+    # comportamento rimasto.
+    for obsoleta in ("stem", "norm", "pos_encoding"):
+        m.pop(obsoleta, None)
+
+    # `pool_stride` invece non si assume: e' un parametro DEDOTTO dai vincoli
+    # del paper — (2,1), solo sull'asse frequenza — e ricadere in silenzio su
+    # (2,2) darebbe 26 frame invece di 51, cioe' un altro esperimento.
+    if "pool_stride" not in m:
+        raise ValueError(
+            "la configurazione non dichiara model.pool_stride: e' un parametro "
+            "dedotto, non un dettaglio con un default sensato (atteso [2, 1])"
+        )
+    pool = m.pop("pool_stride")
     return MODELS[kind](
         num_classes=cfg["data"]["num_classes"],
         n_mels=n_mels, n_frames=n_frames,

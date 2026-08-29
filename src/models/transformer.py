@@ -32,13 +32,10 @@ Il numero di parametri di un blocco e' invece indipendente da n:
 from __future__ import annotations
 
 import math
-from typing import Literal
 
 import torch
 from einops import rearrange
 from torch import nn
-
-PosEncoding = Literal["none", "sinusoidal", "learned"]
 
 
 class MultiHeadSelfAttention(nn.Module):
@@ -128,49 +125,6 @@ class EncoderBlock(nn.Module):
         x = x + self.attn(self.norm1(x))
         x = x + self.ffn(self.norm2(x))
         return x
-
-
-class PositionalEncoding(nn.Module):
-    """Codifica posizionale, opzionale.
-
-    >>> PUNTO SPERIMENTALE <<<
-    Il paper dichiara che il modello SPARSO non usa positional encoding,
-    perche' i token latenti non hanno un ordine intrinseco. Sul modello
-    DENSO non dice nulla — ma i frame temporali un ordine ce l'hanno, e
-    senza codifica il transformer e' invariante a permutazioni del tempo.
-
-    Quanto conti davvero l'ordine temporale per riconoscere una parola
-    isolata di un secondo e' una domanda aperta e interessante: la si
-    risponde addestrando nelle due varianti.
-    """
-
-    def __init__(self, dim: int, kind: PosEncoding = "none",
-                 max_len: int = 512) -> None:
-        super().__init__()
-        self.kind = kind
-        if kind == "learned":
-            self.pos = nn.Parameter(torch.zeros(1, max_len, dim))
-            nn.init.trunc_normal_(self.pos, std=0.02)
-        elif kind == "sinusoidal":
-            self.register_buffer("pos", self._sinusoidal(max_len, dim),
-                                 persistent=False)
-        elif kind != "none":
-            raise ValueError(f"positional encoding sconosciuto: {kind}")
-
-    @staticmethod
-    def _sinusoidal(max_len: int, dim: int) -> torch.Tensor:
-        pos = torch.arange(max_len).unsqueeze(1).float()
-        i = torch.arange(0, dim, 2).float()
-        freq = torch.exp(-math.log(10_000.0) * i / dim)
-        pe = torch.zeros(1, max_len, dim)
-        pe[0, :, 0::2] = torch.sin(pos * freq)
-        pe[0, :, 1::2] = torch.cos(pos * freq)
-        return pe
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.kind == "none":
-            return x
-        return x + self.pos[:, : x.shape[1]]
 
 
 class TransformerEncoder(nn.Module):

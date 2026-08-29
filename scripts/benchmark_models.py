@@ -44,7 +44,15 @@ from src.flops import analyze, benchmark_latency
 from src.train import build_frontend, build_model
 from src.utils import load_config, provenance
 
-DEFAULT_CONFIGS = ["configs/dense.yaml", "configs/sparse.yaml"]
+# `dense_flatten` non e' opzionale: e' il baseline ADOTTATO, quello su cui
+# poggia il confronto centrale. `dense` (pool_freq) resta perche' e' la
+# ricostruzione scartata e il suo costo serve al confronto fra le due
+# letture, ma la riga da leggere nei risultati e' quella flatten.
+DEFAULT_CONFIGS = [
+    "configs/dense.yaml",
+    "configs/dense_flatten.yaml",
+    "configs/sparse.yaml",
+]
 
 
 def main() -> int:

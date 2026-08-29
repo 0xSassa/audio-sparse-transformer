@@ -42,8 +42,6 @@ import torch
 from torch import nn
 
 ChannelReading = Literal["c96", "c196", "c196_proj96"]
-StemKind = Literal["paper", "xiao"]
-NormKind = Literal["layernorm", "batchnorm", "none"]
 
 
 @dataclass(frozen=True)
@@ -87,38 +85,25 @@ class ChannelLayerNorm(nn.Module):
         return self.norm(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2).contiguous()
 
 
-def _make_norm(kind: NormKind, channels: int) -> list[nn.Module]:
-    if kind == "layernorm":
-        return [ChannelLayerNorm(channels)]
-    if kind == "batchnorm":
-        return [nn.BatchNorm2d(channels)]
-    if kind == "none":
-        return []
-    raise ValueError(f"normalizzazione sconosciuta: {kind}")
-
-
 class EarlyConv(nn.Module):
     """Spettrogramma [B, 1, F, T] -> feature map [B, C, F', T'].
 
-    `stem="paper"`
-        Lettura letterale della sez. 3.2, confermata da SparseFormer:
-        conv 7x7 stride 2 con bias, ReLU, max pooling, poi normalizzazione.
+    Lettura letterale della sez. 3.2, confermata da SparseFormer:
+    conv 7x7 stride 2 con bias -> ReLU -> max pooling -> LayerNorm sui canali.
 
-    `stem="xiao"`
-        Lettura alternativa fedele al riferimento citato (Xiao et al. 2021):
-        stack di conv 3x3 stride 2. Tenuta per confronto; la ricerca sulle
-        configurazioni la scarta.
+    >>> AMBIGUITA' DEL PAPER <<<
+    La sez. 3.2 si contraddice: "extract 96 dimensional feature" ma "196
+    kernels with a size 7x7 and a stride 2". Il modulo supporta tutte e tre
+    le letture possibili via `channel_reading`, cosi' la scelta si e' fatta
+    sul conteggio dei parametri invece che a intuito.
     """
 
     def __init__(
         self,
         in_channels: int = 1,
         channel_reading: ChannelReading = "c96",
-        stem: StemKind = "paper",
-        num_xiao_layers: int = 2,
         num_conv_layers: int = 1,
-        norm: NormKind = "layernorm",
-        pool_stride: tuple[int, int] = (2, 2),
+        pool_stride: tuple[int, int] = (2, 1),
     ) -> None:
         """`pool_stride` e' (frequenza, tempo).
 
@@ -126,56 +111,40 @@ class EarlyConv(nn.Module):
         (2, 1) dimezza solo la frequenza  -> restano 51 frame.
 
         Il paper dice solo "max pooling", senza stride. La ricerca sulle
-        configurazioni mostra che deve essere (2, 1): con (2, 2) il costo
-        si ferma al 70% di quello dichiarato e nessun altro grado di
-        liberta' recupera il fattore mancante.
+        configurazioni mostra che deve essere (2, 1) — che e' il default —
+        perche' con (2, 2) il costo si ferma al 70% di quello dichiarato e
+        nessun altro grado di liberta' recupera il fattore mancante.
         """
         super().__init__()
         self.channel_reading = channel_reading
-        self.stem = stem
         self.pool_stride = pool_stride
-        self.norm_kind = norm
 
         conv_channels, out_channels = self._resolve_channels(channel_reading)
         self.conv_channels = conv_channels
         self.out_channels = out_channels
 
-        layers: list[nn.Module] = []
-        if stem == "paper":
+        layers: list[nn.Module] = [
+            nn.Conv2d(in_channels, conv_channels, 7, stride=2, padding=3,
+                      bias=True),
+            nn.ReLU(inplace=True),
+        ]
+        # `num_conv_layers` > 1 esiste per testare l'ipotesi sul plurale di
+        # "convolutional layers". Confutata: due strati portano i FLOPs a
+        # +164% invece che a +11%. Tenuto per documentazione.
+        for _ in range(num_conv_layers - 1):
             layers += [
-                nn.Conv2d(in_channels, conv_channels, 7, stride=2, padding=3,
-                          bias=True),
+                nn.Conv2d(conv_channels, conv_channels, 3, stride=1,
+                          padding=1, bias=True),
                 nn.ReLU(inplace=True),
             ]
-            # `num_conv_layers` > 1 esiste per testare l'ipotesi sul plurale
-            # di "convolutional layers". Confutata: due strati portano i
-            # FLOPs a +164% invece che a +11%. Tenuto per documentazione.
-            for _ in range(num_conv_layers - 1):
-                layers += [
-                    nn.Conv2d(conv_channels, conv_channels, 3, stride=1,
-                              padding=1, bias=True),
-                    nn.ReLU(inplace=True),
-                ]
-            layers.append(nn.MaxPool2d(3, stride=pool_stride, padding=1))
-            self._downsample = 4
-        else:
-            c_in = in_channels
-            for i in range(num_xiao_layers):
-                c_out = conv_channels // (2 ** (num_xiao_layers - 1 - i))
-                layers += [
-                    nn.Conv2d(c_in, c_out, 3, stride=2, padding=1, bias=True),
-                    nn.ReLU(inplace=True),
-                ]
-                c_in = c_out
-            layers.append(nn.Conv2d(c_in, conv_channels, 1))
-            self._downsample = 2 ** num_xiao_layers
+        layers.append(nn.MaxPool2d(3, stride=pool_stride, padding=1))
 
         # Terza lettura dell'ambiguita': 196 kernel, poi proiezione a 96.
         if out_channels != conv_channels:
             layers.append(nn.Conv2d(conv_channels, out_channels, 1))
 
         # Normalizzazione DOPO il pooling, come in SparseFormer.
-        layers += _make_norm(norm, out_channels)
+        layers.append(ChannelLayerNorm(out_channels))
 
         self.body = nn.Sequential(*layers)
 
@@ -192,16 +161,10 @@ class EarlyConv(nn.Module):
 
     def output_shape(self, freq: int, time: int) -> FrontendShape:
         """Forma dell'uscita senza eseguire il forward."""
-        if self.stem == "paper":
-            f = _conv_out(freq, 7, 2, 3)
-            t = _conv_out(time, 7, 2, 3)
-            f = _conv_out(f, 3, self.pool_stride[0], 1)
-            t = _conv_out(t, 3, self.pool_stride[1], 1)
-        else:
-            f, t = freq, time
-            for _ in range(self._downsample.bit_length() - 1):
-                f = _conv_out(f, 3, 2, 1)
-                t = _conv_out(t, 3, 2, 1)
+        f = _conv_out(freq, 7, 2, 3)
+        t = _conv_out(time, 7, 2, 3)
+        f = _conv_out(f, 3, self.pool_stride[0], 1)
+        t = _conv_out(t, 3, self.pool_stride[1], 1)
         return FrontendShape(channels=self.out_channels, freq=f, time=t)
 
     def forward(self, spec: torch.Tensor) -> torch.Tensor:

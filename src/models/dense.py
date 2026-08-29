@@ -20,8 +20,18 @@ gradi di liberta' su cui si cerca, non scelte gia' fatte.
     "pool_freq"  media sull'asse frequenza: N = T, dim = C.
                  Proiezione economica; l'informazione spettrale resta nei
                  canali della convoluzione.
-    "patches2d"  ogni cella (f, t) e' un token: N = F*T, dim = C.
-                 Massima risoluzione, sequenza molto piu' lunga.
+
+E' la scelta piu' importante della ricostruzione: vale 2,92 punti, e con
+"pool_freq" il claim del paper si riproduce mentre con "flatten" no. Vedi
+l'intestazione di configs/dense_flatten.yaml.
+
+>>> NIENTE CODIFICA POSIZIONALE <<<
+Il paper la dichiara assente per il modello SPARSO — i token latenti non
+hanno un ordine intrinseco. Sul DENSO tace, e i frame temporali un ordine
+ce l'hanno: senza codifica il transformer e' invariante a permutazioni del
+tempo. E' quindi una nostra ASSUNZIONE, presa per simmetria col modello
+sparso. Testarla nelle due varianti era previsto e non e' stato fatto: e'
+un esperimento mancante, non una scelta misurata.
 """
 
 from __future__ import annotations
@@ -32,10 +42,10 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from .frontend import ChannelReading, EarlyConv, NormKind, StemKind
-from .transformer import PosEncoding, PositionalEncoding, TransformerEncoder
+from .frontend import ChannelReading, EarlyConv
+from .transformer import TransformerEncoder
 
-SeqMode = Literal["flatten", "pool_freq", "patches2d"]
+SeqMode = Literal["flatten", "pool_freq"]
 
 
 class DenseAudioTransformer(nn.Module):
@@ -45,25 +55,26 @@ class DenseAudioTransformer(nn.Module):
         n_mels: int = 64,
         n_frames: int = 101,
         *,
+        # I default sono la CONFIGURAZIONE ADOTTATA, quella di
+        # `configs/dense_flatten.yaml` da cui vengono i risultati riportati.
+        # Le alternative esplorate restano negli YAML, che e' dove sono
+        # documentate: `configs/dense.yaml` tiene `pool_freq` come ablation.
         channel_reading: ChannelReading = "c96",
-        stem: StemKind = "paper",
         num_conv_layers: int = 1,
-        norm: NormKind = "layernorm",
-        pool_stride: tuple[int, int] = (2, 2),
-        seq_mode: SeqMode = "pool_freq",
+        pool_stride: tuple[int, int] = (2, 1),
+        seq_mode: SeqMode = "flatten",
         dim: int = 224,
         depth: int = 8,
-        num_heads: int = 8,
+        num_heads: int = 7,
         ffn_ratio: int = 4,
-        pos_encoding: PosEncoding = "none",
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.seq_mode = seq_mode
 
         self.frontend = EarlyConv(
-            channel_reading=channel_reading, stem=stem, pool_stride=pool_stride,
-            num_conv_layers=num_conv_layers, norm=norm,
+            channel_reading=channel_reading, pool_stride=pool_stride,
+            num_conv_layers=num_conv_layers,
         )
         shape = self.frontend.output_shape(n_mels, n_frames)
         self.feature_shape = shape
@@ -72,14 +83,11 @@ class DenseAudioTransformer(nn.Module):
             token_dim, seq_len = shape.channels * shape.freq, shape.time
         elif seq_mode == "pool_freq":
             token_dim, seq_len = shape.channels, shape.time
-        elif seq_mode == "patches2d":
-            token_dim, seq_len = shape.channels, shape.freq * shape.time
         else:
             raise ValueError(f"seq_mode sconosciuto: {seq_mode}")
         self.seq_len = seq_len
 
         self.proj = nn.Linear(token_dim, dim)
-        self.pos = PositionalEncoding(dim, pos_encoding, max_len=seq_len)
         self.encoder = TransformerEncoder(dim, depth, num_heads, ffn_ratio, dropout)
         self.head = nn.Linear(dim, num_classes)
 
@@ -87,13 +95,11 @@ class DenseAudioTransformer(nn.Module):
         """[B, C, F, T] -> [B, N, token_dim]."""
         if self.seq_mode == "flatten":
             return rearrange(feat, "b c f t -> b t (c f)")
-        if self.seq_mode == "pool_freq":
-            return rearrange(feat.mean(dim=2), "b c t -> b t c")
-        return rearrange(feat, "b c f t -> b (f t) c")
+        return rearrange(feat.mean(dim=2), "b c t -> b t c")
 
     def forward(self, spec: torch.Tensor) -> torch.Tensor:
         """spec: [B, 1, n_mels, n_frames] -> logits [B, num_classes]."""
         feat = self.frontend(spec)
         seq = self.proj(self.to_sequence(feat))
-        seq = self.encoder(self.pos(seq))
+        seq = self.encoder(seq)
         return self.head(seq.mean(dim=1))

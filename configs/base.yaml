@@ -29,10 +29,9 @@ features:                       # [ASSUNZIONE] il paper non dichiara nulla di
   normalize: false              # NOSTRA aggiunta, evidenza contraria (-0.5 punti
                                 # alla sonda lineare). Default off; e' un'ablation.
 
-model:
-  norm: layernorm               # come SparseFormer: LayerNorm sui canali DOPO il
-                                # pooling. "batchnorm" e' una nostra variante,
-                                # "none" la lettura piu' letterale del paper.
+# La normalizzazione dello stem non e' un'opzione: e' LayerNorm sui canali
+# DOPO il pooling, come nel codice di SparseFormer. Le varianti batchnorm e
+# "none" sono state rimosse dal modello perche' nessun run le ha mai usate.
 
 augment:                        # dichiarate dal paper: "mixing and phasemix [1]"
   names: [mixing, phasemix]     # implementate seguendo datasets/batch_augs.py di EAT

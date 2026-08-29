@@ -29,9 +29,7 @@ defaults: base.yaml
 model:
   kind: dense
   channel_reading: c96         # vedi dense.yaml: il 196 e' un refuso
-  stem: paper
   num_conv_layers: 1
-  norm: layernorm
   pool_stride: [2, 1]
 
   seq_mode: flatten            # <-- l'unica differenza da dense.yaml
@@ -40,7 +38,6 @@ model:
   depth: 8
   num_heads: 7
   ffn_ratio: 4
-  pos_encoding: none
   dropout: 0.0
 
 # Sequenza risultante: [C=96, F=16, T=51] -> 51 token di dimensione 1536

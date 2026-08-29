@@ -32,9 +32,7 @@ model:
 
   # --- front-end: IDENTICO al denso, perche' il confronto sia controllato
   channel_reading: c96
-  stem: paper
   num_conv_layers: 1
-  norm: layernorm
   pool_stride: [2, 1]
 
   # --- estrattore sparso (tutto dichiarato dalla Tabella 1)

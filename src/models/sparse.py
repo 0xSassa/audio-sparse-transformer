@@ -132,15 +132,18 @@ class RegionAdjust(nn.Module):
 
     # Limite sul delta logaritmico prima dell'esponenziale.  [NOSTRA AGGIUNTA]
     #
-    # Ne' il paper ne' SparseFormer lo prevedono, e nel regime normale NON
-    # SI ATTIVA MAI: `to_delta` parte da zero e i delta restano dell'ordine
-    # dell'unita'. Ma exp() in float32 va a infinito oltre ~88, e un solo
-    # passo anomalo produrrebbe regioni di dimensione inf o 0, quindi NaN
-    # nel gradiente e un run di ore perso.
+    # Ne' il paper ne' SparseFormer lo prevedono: le equazioni (2)-(5) non
+    # pongono alcun vincolo su coordinate o dimensioni. Serve perche' exp()
+    # in float32 va a infinito oltre ~88, e un solo passo anomalo produrrebbe
+    # regioni di dimensione inf o 0, quindi NaN nel gradiente.
     #
-    # exp(4) ~ 55x di crescita per ripetizione, cioe' ~163.000x sulle tre:
-    # enormemente piu' di qualunque variazione sensata per regioni che
-    # vivono in [0,1]. E' una rete di sicurezza, non un vincolo sul modello.
+    # NON e' inerte: sul modello ADDESTRATO il limite morde su circa meta'
+    # delle componenti nell'ultima ripetizione. Ne segue che il default di
+    # questo repository non e' il metodo del paper alla lettera, e che il
+    # metodo come scritto e' numericamente instabile.
+    #
+    # Le misure, e perche' per mesi abbiamo creduto il contrario:
+    # tests/test_pipeline.py::test_region_clamp_does_not_bind_at_initialisation
     MAX_LOG_SCALE = 4.0
 
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:

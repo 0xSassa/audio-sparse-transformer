@@ -1,18 +1,9 @@
 from .dense import DenseAudioTransformer, SeqMode
-from .frontend import (
-    ChannelLayerNorm,
-    ChannelReading,
-    EarlyConv,
-    FrontendShape,
-    NormKind,
-    StemKind,
-)
+from .frontend import ChannelLayerNorm, ChannelReading, EarlyConv, FrontendShape
 from .transformer import (
     EncoderBlock,
     FeedForward,
     MultiHeadSelfAttention,
-    PosEncoding,
-    PositionalEncoding,
     TransformerEncoder,
 )
 
@@ -25,10 +16,6 @@ __all__ = [
     "FeedForward",
     "FrontendShape",
     "MultiHeadSelfAttention",
-    "NormKind",
-    "PosEncoding",
-    "PositionalEncoding",
     "SeqMode",
-    "StemKind",
     "TransformerEncoder",
 ]

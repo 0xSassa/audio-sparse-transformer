@@ -26,12 +26,12 @@ il decoding adattivo da AdaMixer, il front-end da Xiao et al. 2021.
 | 0 | Lettura paper + ancestor, setup | completata (restano form risorse e ricevimento) |
 | 1 | Prerequisiti teorici | in corso, in parallelo |
 | 2 | Dati, split ufficiali, contatore FLOPs | **completata** |
-| 3 | Baseline: early conv + dense transformer | **completata (seed 0): `flatten` 97,01 %, +0,34 sul dichiarato** |
-| 4 | Sparse feature extractor | **completata (seed 0): 95,57 %, −1,44 dal denso** |
-| 5 | Ablation, seed multipli, HPO | da fare |
-| 6 | Presentazione | da fare |
+| 3 | Baseline: early conv + dense transformer | **completata (3 seed): `flatten` 97,03 % su test, +0,36 sul dichiarato** |
+| 4 | Sparse feature extractor | **completata (3 seed): 95,52 % su test, −1,52 dal denso** |
+| 5 | Ablation, seed multipli, HPO | **completata tranne l'HPO**: ablation su *N*, regioni congelate, `L_rep`=1, vincolo sulle regioni, tre seed, test set |
+| 6 | Presentazione | **completata** |
 
-### Risultati finora (validation, modello EMA, seed 0)
+### Risultati (modello EMA; test e validation, media ± deviazione su 3 seed dove indicato)
 
 | Modello | **Test** (3 seed) | Validation | Params | GFLOP |
 |---|---|---|---|---|
@@ -74,13 +74,18 @@ Tre risultati collaterali che il paper non riporta:
 python scripts/benchmark_models.py
 ```
 
+Il confronto è contro il denso `flatten`, cioè **il baseline adottato**: una
+versione precedente di questa tabella misurava `pool_freq`, che è la
+ricostruzione scartata, e quindi riportava tempi di un modello che non
+compare nei risultati.
+
 | Modello | GFLOP | ms @ batch 1 | ms @ batch 64 |
 |---|---|---|---|
-| Denso `c96` | 0,5275 | 2,95 | 11,08 |
-| Sparso | 0,0485 | **4,65** | **6,49** |
-| rapporto | 0,092× | 1,58× (più lento) | 0,59× (più veloce) |
+| Denso `flatten` | 0,5604 | 2,97 | 11,77 |
+| Sparso | 0,0485 | **4,79** | **6,48** |
+| rapporto | 0,087× | 1,61× (più lento) | 0,55× (più veloce) |
 
-Un fattore 10,9 sui FLOPs vale 0,63 a batch 1 e 1,71 a batch 64. Il regime
+Un fattore 11,6 sui FLOPs vale 0,62 a batch 1 e 1,82 a batch 64. Il regime
 in cui il metodo perde è batch 1 — cioè il dispositivo edge che motiva il
 lavoro: a batch 1 nessuna delle matrici satura la GPU e il tempo è
 interamente costo di lancio dei kernel, che il modello sparso paga di più;

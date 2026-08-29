@@ -24,7 +24,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from .frontend import ChannelReading, EarlyConv, NormKind, StemKind
+from .frontend import ChannelReading, EarlyConv
 from .sparse import RegionConstraint, RegionMode, SparseFeatureExtractor
 from .transformer import TransformerEncoder
 
@@ -36,11 +36,10 @@ class SparseAudioTransformer(nn.Module):
         n_mels: int = 64,
         n_frames: int = 101,
         *,
-        # front-end: identico al denso, cosi' il confronto e' controllato
-        channel_reading: ChannelReading = "c196_proj96",
-        stem: StemKind = "paper",
+        # front-end: identico al denso, cosi' il confronto e' controllato.
+        # I default sono la configurazione adottata (`configs/sparse.yaml`).
+        channel_reading: ChannelReading = "c96",
         num_conv_layers: int = 1,
-        norm: NormKind = "layernorm",
         pool_stride: tuple[int, int] = (2, 1),
         # estrattore sparso
         num_tokens: int = 4,
@@ -60,8 +59,8 @@ class SparseAudioTransformer(nn.Module):
     ) -> None:
         super().__init__()
         self.frontend = EarlyConv(
-            channel_reading=channel_reading, stem=stem, pool_stride=pool_stride,
-            num_conv_layers=num_conv_layers, norm=norm,
+            channel_reading=channel_reading, pool_stride=pool_stride,
+            num_conv_layers=num_conv_layers,
         )
         shape = self.frontend.output_shape(n_mels, n_frames)
         self.feature_shape = shape
