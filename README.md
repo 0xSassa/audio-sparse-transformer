@@ -89,6 +89,16 @@ interamente costo di lancio dei kernel, che il modello sparso paga di più;
 a batch 64 le matrici del denso diventano grandi abbastanza da far contare
 l'aritmetica, e l'ordine si rovescia.
 
+**La latenza, a differenza dei FLOPs, dipende dallo stato della macchina.**
+Questi numeri sono misurati sulla RTX 5050 Laptop **con l'alimentatore
+collegato**. Rimisurati a batteria, con la GPU limitata a una frazione del
+clock di boost, tutti i tempi salgono di circa 3× e il vantaggio del modello
+sparso a batch 64 sparisce: l'ordine si rovescia solo quando la GPU può
+salire in frequenza abbastanza da rendere l'aritmetica il termine dominante.
+Chi rigenera `results/benchmark.json` deve quindi verificare
+`nvidia-smi` — alimentazione collegata, nessun altro processo sulla GPU —
+altrimenti confronta stati di clock, non modelli.
+
 ### Cosa non è stato fatto
 
 L'ottimizzazione automatica degli iperparametri (Optuna / Hyperband) era in
