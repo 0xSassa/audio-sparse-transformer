@@ -21,15 +21,17 @@
 # nostra scelta MENO SICURA di tutta la ricostruzione; questo run la mette
 # alla prova.
 #
-# Nota: il primo run di riferimento (94,67 % di validation) usava ancora
-# c196_proj96 e va rifatto con c96 per un confronto controllato.
+# Nota sui run archiviati: il primo denso `pool_freq` (94,67 %, cartella
+# `results/dense_seed0`) usava ancora c196_proj96. E' stato rifatto con c96
+# (94,09 %, `results/dense_c96_seed0`) perche' il confronto col flatten fosse
+# controllato: la differenza fra le due letture dei canali vale 0,58 punti,
+# cioe' meno di un quinto dei 2,9 che separano `pool_freq` da `flatten`.
 
 defaults: base.yaml
 
 model:
   kind: dense
   channel_reading: c96         # vedi dense.yaml: il 196 e' un refuso
-  num_conv_layers: 1
   pool_stride: [2, 1]
 
   seq_mode: flatten            # <-- l'unica differenza da dense.yaml

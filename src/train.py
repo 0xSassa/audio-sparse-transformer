@@ -69,11 +69,25 @@ def build_frontend(cfg: dict[str, Any]) -> LogMelSpectrogram:
         sample_rate=cfg["data"]["sample_rate"],
         n_fft=f["n_fft"], hop_length=f["hop_length"], n_mels=f["n_mels"],
         f_min=f["f_min"], f_max=f["f_max"], top_db=f["top_db"],
-        normalize=f["normalize"],
     )
 
 
 MODELS = {"dense": DenseAudioTransformer, "sparse": SparseAudioTransformer}
+
+# Chiavi di `model` che i CHECKPOINT e i `resolved_config.json` ARCHIVIATI
+# portano dentro di se' ma che il codice non conosce piu': le opzioni
+# corrispondenti sono state rimosse perche' nessun run le ha mai usate.
+#
+# Vanno ignorate in DUE posti, ed e' il motivo per cui l'elenco sta qui e non
+# dentro una funzione: `build_model` le scarta per poter ricaricare i pesi
+# vecchi, e `scripts/plot_results.py` le scarta per non spaccare un gruppo di
+# seed a seconda che il run sia stato archiviato prima o dopo la rimozione.
+# Un'opzione tolta dal codice e' esattamente speculare a un'opzione aggiunta,
+# e produce lo stesso difetto silenzioso.
+#
+# Il valore archiviato coincide sempre con l'unico comportamento rimasto,
+# quindi scartarle non cambia il modello ricostruito.
+OBSOLETE_MODEL_KEYS = ("stem", "norm", "pos_encoding", "num_conv_layers")
 
 
 def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
@@ -90,14 +104,10 @@ def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
     if kind not in MODELS:
         raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
 
-    # Chiavi di configurazioni vecchie. Le opzioni corrispondenti sono state
-    # rimosse dai modelli perche' nessun run le ha mai usate, ma i CHECKPOINT
-    # ARCHIVIATI portano dentro `state["config"]` la config con cui furono
-    # addestrati — ed e' da li' che `evaluate.py` e `plot_sampling.py`
-    # ricostruiscono il modello. Ignorarle e' cio' che li tiene ricaricabili,
-    # e non cambia il modello: i valori archiviati coincidono con l'unico
-    # comportamento rimasto.
-    for obsoleta in ("stem", "norm", "pos_encoding"):
+    # Vedi OBSOLETE_MODEL_KEYS: e' cio' che tiene ricaricabili i checkpoint
+    # archiviati, da cui `evaluate.py` e `plot_sampling.py` ricostruiscono il
+    # modello leggendo `state["config"]`.
+    for obsoleta in OBSOLETE_MODEL_KEYS:
         m.pop(obsoleta, None)
 
     # `pool_stride` invece non si assume: e' un parametro DEDOTTO dai vincoli
@@ -128,29 +138,11 @@ def build_optimizer(model: nn.Module, cfg: dict[str, Any]) -> torch.optim.Optimi
 # Un'epoca
 # --------------------------------------------------------------------------
 
-def amp_context(cfg: dict[str, Any], device: torch.device):
-    """Contesto di precisione mista per il TRAINING.
-
-    `optim.amp` puo' valere "none" o "bf16".
-
-    Perche' solo bf16 e non fp16: bf16 ha lo stesso esponente di fp32, quindi
-    non serve un GradScaler e non ci sono underflow dei gradienti. Su
-    Blackwell e' anche la precisione ridotta meglio supportata. fp16 darebbe
-    forse un filo di velocita' in piu' al prezzo di una macchina di scaling
-    che puo' nascondere problemi di ottimizzazione: non ne vale la pena.
-
-    NOTA IMPORTANTE: l'autocast si applica al solo training. La VALUTAZIONE
-    resta sempre in fp32, cosi' l'accuratezza riportata e' misurata allo
-    stesso modo qualunque sia la precisione di training — che e' esattamente
-    la condizione per poter verificare che attivare bf16 non sposti il
-    risultato.
-    """
-    kind = cfg["optim"].get("amp", "none")
-    if kind == "none" or device.type != "cuda":
-        return torch.autocast(device_type="cuda", enabled=False)
-    if kind == "bf16":
-        return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-    raise ValueError(f"optim.amp sconosciuto: {kind!r} (attesi 'none' o 'bf16')")
+# TUTTO IN fp32, training compreso. Era stata predisposta l'autocast in bf16,
+# con la valutazione lasciata in fp32 perche' il confronto restasse equo; non
+# e' mai stata attivata in nessuno dei run riportati, quindi la macchina e'
+# stata rimossa. Riattivarla e' un `torch.autocast` attorno al forward, ma va
+# fatto verificando che l'accuratezza non si muova.
 
 
 def train_one_epoch(
@@ -195,9 +187,8 @@ def train_one_epoch(
             names=tuple(a["names"]), mix_ratio=a["mix_ratio"],
             epoch=epoch, epoch_mix=a["epoch_mix"],
         )
-        with amp_context(cfg, device):
-            logits = model(frontend(wave))
-            loss = F.binary_cross_entropy_with_logits(logits, targets)
+        logits = model(frontend(wave))
+        loss = F.binary_cross_entropy_with_logits(logits, targets)
 
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
@@ -227,8 +218,8 @@ def evaluate(
 ) -> dict[str, Any]:
     """Accuratezza top-1 e loss su target one-hot (nessuna augmentation).
 
-    Sempre in fp32, anche quando il training usa bf16: cosi' il numero
-    riportato non dipende dalla precisione con cui si e' addestrato.
+    Sempre in fp32, come il training: il numero riportato non dipende dalla
+    precisione con cui si e' addestrato.
 
     Con `collect=True` restituisce anche etichette e predizioni, per le
     metriche per classe.
@@ -291,8 +282,6 @@ def main() -> int:
                     default=None, help="forza il determinismo (default dal config)")
     ap.add_argument("--no-deterministic", dest="deterministic",
                     action="store_false", help="disattiva il determinismo")
-    ap.add_argument("--amp", choices=["none", "bf16"], default=None,
-                    help="sovrascrive optim.amp; la valutazione resta in fp32")
     ap.add_argument("--set", dest="overrides", action="append", default=[],
                     metavar="CHIAVE=VALORE",
                     help="sovrascrive una voce della config, es. "
@@ -309,8 +298,6 @@ def main() -> int:
     cfg = load_config(args.config)
     if args.epochs is not None:
         cfg["optim"]["epochs"] = args.epochs
-    if args.amp is not None:
-        cfg["optim"]["amp"] = args.amp
 
     # Gli override si applicano PRIMA di archiviare resolved_config.json, cosi'
     # il file accanto ai risultati riporta i valori realmente usati e non quelli
@@ -394,8 +381,7 @@ def main() -> int:
     print(f"run          : {tag}")
     print(f"codice       : commit {(prov['commit'] or '?')[:8]}"
           f"{'  ALBERO SPORCO' if prov['dirty'] else ''}")
-    print(f"costo        : {cost.native_flops/1e9:.4f} GFLOP · "
-          f"{cost.fvcore_macs/1e9:.4f} GMAC" if cost.fvcore_macs else "")
+    print(f"costo        : {cost.native_flops/1e9:.4f} GFLOP")
     print(f"device       : {device} · {torch.cuda.get_device_name(0) if device.type=='cuda' else ''}")
     print(f"modello      : {n_params:,} parametri · sequenza {model.seq_len} · "
           f"feature {model.feature_shape}")
@@ -405,7 +391,7 @@ def main() -> int:
           f"EMA {cfg['optim']['ema_decay']} · augment {cfg['augment']['names']}")
     note = {"strict": "bit-riproducibile", "warn_only": "grid_sample non deterministico",
             "off": "non riproducibile"}[determinism]
-    print(f"riproducibile: determinismo={determinism} ({note}) · amp={cfg['optim']['amp']}")
+    print(f"riproducibile: determinismo={determinism} ({note})")
     print()
 
     start_epoch, best_acc = 1, 0.0
@@ -444,7 +430,7 @@ def main() -> int:
         rng_note = "con stato RNG" if state.get("rng") else "SENZA stato RNG (checkpoint vecchio)"
         print(f"ripreso da epoca {state['epoch']} (best {100*best_acc:.2f}%) — {rng_note}\n")
 
-    tracker = RunTracker(run_dir, cfg, tag, args.seed, resume=args.resume)
+    tracker = RunTracker(run_dir, cfg, tag, args.seed)
 
     for epoch in range(start_epoch, epochs + 1):
         # Ordine dei dati E flusso casuale delle augmentation dipendono solo
@@ -517,11 +503,8 @@ def main() -> int:
         best_val_accuracy=best_acc, peak_gpu_mb=round(peak),
         seq_len=model.seq_len,
         gflops=cost.native_flops / 1e9,
-        gmacs=(cost.fvcore_macs / 1e9) if cost.fvcore_macs else None,
         provenance=prov, determinism=determinism,
     )
-    if cfg["log"].get("wandb", {}).get("log_checkpoints", False):
-        tracker.save_artifact(ckpt_best)
     tracker.finish()
 
     print(f"\nmigliore accuratezza di validation: {100*best_acc:.2f}%")

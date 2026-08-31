@@ -61,9 +61,9 @@ def main() -> int:
         ("soundfile", "OBBLIGATORIO: senza, i .wav non si caricano"),
         ("numpy", ""),
         ("yaml", "file di configurazione"),
-        ("fvcore", "secondo contatore di FLOPs"),
         ("einops", ""),
-        ("optuna", "solo Fase 5"),
+        ("matplotlib", "solo per le figure"),
+        ("tqdm", "avanzamento del training"),
     ]:
         try:
             mod = importlib.import_module(name)

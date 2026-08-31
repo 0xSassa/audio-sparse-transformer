@@ -32,7 +32,6 @@ model:
 
   # --- front-end: IDENTICO al denso, perche' il confronto sia controllato
   channel_reading: c96
-  num_conv_layers: 1
   pool_stride: [2, 1]
 
   # --- estrattore sparso (tutto dichiarato dalla Tabella 1)
@@ -49,10 +48,8 @@ model:
   region_mode: learned         # [ABLATION, default = metodo del paper]
                                # "learned": regioni apprese + aggiustamento
                                #   per campione. E' il metodo.
-                               # "static": `to_delta` congelato -> regioni
-                               #   apprese ma UGUALI per ogni ingresso.
-                               # "grid": congelato anche `box_init` -> regioni
-                               #   fisse sulla griglia iniziale.
+                               # "grid": congelati `to_delta` e `box_init`
+                               #   -> regioni fisse sulla griglia iniziale.
                                # Risponde alla domanda che il paper non pone:
                                # la saliency appresa serve, o basta la griglia?
                                # Il congelamento non cambia forma, parametri

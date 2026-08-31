@@ -15,17 +15,18 @@ monotona. Adottiamo 64 bin: a 0.22 punti dal migliore (dentro il rumore)
 ed e' l'unico valore che dopo lo stem da' F=16, potenza di due, utile alla
 geometria del campionamento sparso.
 
->>> NORMALIZZAZIONE PER-CAMPIONE: DEFAULT DISATTIVO <<<
-`normalize=True` porta ogni spettrogramma a media 0 e deviazione 1. Era
-una NOSTRA aggiunta, motivata dal fatto che il livello di registrazione in
-SC-V2 varia di 28.5 dB fra 1o e 99o percentile (fattore 27 in ampiezza).
-La premessa e' vera, ma la stessa sonda lineare da' 42.83% SENZA
+>>> NIENTE NORMALIZZAZIONE PER-CAMPIONE, ED E' UNA MISURA <<<
+Avevamo aggiunto un'opzione che portava ogni spettrogramma a media 0 e
+deviazione 1, motivata dal fatto che il livello di registrazione in SC-V2
+varia di 28.5 dB fra 1o e 99o percentile (fattore 27 in ampiezza). La
+premessa e' vera, ma la sonda lineare sui bin mel da' 42.83% SENZA
 normalizzazione contro 42.33% CON: il livello assoluto porta un po' di
 segnale utile e azzerarlo lo distrugge.
 
-Ne' il paper ne' gli ancestor (SparseFormer, EAT) normalizzano lo
-spettrogramma. Il default e' quindi False, e la variante resta come
-ablation dichiarata.
+Ne' il paper ne' gli ancestor (SparseFormer, EAT) normalizzano. L'opzione
+e' stata rimossa invece che lasciata a False: nessuno dei run riportati
+l'ha mai attivata, e una via di codice mai percorsa e' solo un modo di
+suggerire una scelta che non e' stata fatta.
 """
 
 from __future__ import annotations
@@ -50,7 +51,6 @@ class LogMelSpectrogram(nn.Module):
         f_min: float = 20.0,
         f_max: float = 7_600.0,
         top_db: float = 80.0,
-        normalize: bool = False,
     ) -> None:
         super().__init__()
         self.mel = T.MelSpectrogram(
@@ -65,7 +65,6 @@ class LogMelSpectrogram(nn.Module):
             center=True,
         )
         self.to_db = T.AmplitudeToDB(stype="power", top_db=top_db)
-        self.normalize = normalize
 
     @property
     def n_mels(self) -> int:
@@ -78,10 +77,4 @@ class LogMelSpectrogram(nn.Module):
         if wave.dim() != 2:
             raise ValueError(f"atteso [B, T], ricevuto {tuple(wave.shape)}")
         spec = self.to_db(self.mel(wave))          # [B, n_mels, n_frames]
-        if self.normalize:
-            # Normalizzazione per-campione: rende il modello insensibile
-            # al livello di registrazione, che in SC-V2 varia molto.
-            mean = spec.mean(dim=(1, 2), keepdim=True)
-            std = spec.std(dim=(1, 2), keepdim=True).clamp_min(1e-5)
-            spec = (spec - mean) / std
         return spec.unsqueeze(1)                    # [B, 1, n_mels, n_frames]

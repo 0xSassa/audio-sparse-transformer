@@ -26,8 +26,10 @@ features:                       # [ASSUNZIONE] il paper non dichiara nulla di
   f_min: 20.0
   f_max: 7600.0
   top_db: 80.0
-  normalize: false              # NOSTRA aggiunta, evidenza contraria (-0.5 punti
-                                # alla sonda lineare). Default off; e' un'ablation.
+                                # Niente normalizzazione per-campione: era una
+                                # nostra aggiunta, la sonda lineare la boccia
+                                # (-0.5 punti) e ne' il paper ne' gli ancestor
+                                # la usano. Rimossa dal codice, non spenta.
 
 # La normalizzazione dello stem non e' un'opzione: e' LayerNorm sui canali
 # DOPO il pooling, come nel codice di SparseFormer. Le varianti batchnorm e
@@ -44,7 +46,9 @@ augment:                        # dichiarate dal paper: "mixing and phasemix [1]
                                 # lam: mixing ~ U[0.1,1], phasemix ~ U[0,1] (da EAT)
 
 optim:
-  optimizer: adamw              # dichiarato dal paper, sez. 3.2
+  # AdamW e one-cycle sono DICHIARATI dal paper (sez. 3.2) e sono cablati nel
+  # codice: non compaiono qui come chiavi perche' non c'e' nulla da scegliere,
+  # e una chiave che il codice non legge e' una scelta che non esiste.
   lr: 0.0003                    # dichiarato
   betas: [0.9, 0.99]            # dichiarato
   eps: 1.0e-8                   # dichiarato
@@ -52,41 +56,27 @@ optim:
   wd_skip_1d_params: true       # EAT esclude dal decay ogni parametro con
                                 # len(shape)==1: bias, LayerNorm, BatchNorm.
                                 # Non e' una nostra aggiunta, e' il riferimento.
-  scheduler: one_cycle          # dichiarato
-  pct_start: 0.1                # dal trainer.py di EAT
+  pct_start: 0.1                # parametri di one-cycle, dal trainer.py di EAT
   div_factor: 25.0              # default PyTorch, usato da EAT
   final_div_factor: 10000.0     # default PyTorch, usato da EAT
   batch_size: 64                # dichiarato
   epochs: 100                   # [ASSUNZIONE] unico iperparametro di training
                                 # che nessuna fonte fissa
-  amp: none                     # "none" o "bf16". SPENTO per il run di
-                                # riferimento: si attiva dopo, verificando che
-                                # l'accuratezza non si muova. La valutazione e'
-                                # sempre in fp32, quindi il confronto e' equo.
   ema_decay: 0.995              # dichiarato
-  loss: bce                     # target multi-hot, ramo 'bce' di EAT
-  label_smoothing: 0.0          # [ASSUNZIONE] EAT usa 0.1 nel ramo CE; con la
-                                # BCE multi-hot non si applica e Kavaki tace
+                                # La loss e' la BCE su target multi-hot (ramo
+                                # 'bce' di EAT), cablata: il mixing produce due
+                                # etichette per campione, quindi la CE non e'
+                                # applicabile e non c'e' scelta da esporre.
 
 eval:
-  metric: accuracy
   use_ema: true                 # si valuta il modello EMA
   test_once: true               # il test set si tocca una sola volta
 
 log:
   dir: results
   tensorboard: true
-  wandb:
-    enabled: true
-    project: audio-sparse-transformer
-    entity: null                # null = entity di default dell'utente loggato.
-                                # Lasciato tale di proposito: fissarla renderebbe
-                                # il repo non eseguibile da altri. Per questo
-                                # account risolve a
-                                # alessandro-simone001-universit-di-firenze
-    mode: online                # i run si sincronizzano mentre girano.
-                                # "offline" se la rete non e' stabile: si
-                                # recupera dopo con
-                                # `wandb sync results/<tag>/wandb/offline-*`
-    log_checkpoints: false      # caricare best.pt a ogni run occupa spazio
-                                # e serve solo se si lavora da piu' macchine
+  # Il tracciamento vive in due posti e basta: `metrics.csv` nella cartella del
+  # run — la fonte da cui plot_results.py ricostruisce ogni figura — e i log
+  # TensorBoard. Weights & Biases era la terza destinazione ed e' stato
+  # rimosso: il confronto fra run che lo giustificava lo fa gia' il CSV, e un
+  # servizio con account e rete e' un requisito in piu' per chi riproduce.

@@ -41,7 +41,7 @@ from typing import Literal
 import torch
 from torch import nn
 
-ChannelReading = Literal["c96", "c196", "c196_proj96"]
+ChannelReading = Literal["c96", "c196_proj96"]
 
 
 @dataclass(frozen=True)
@@ -93,16 +93,19 @@ class EarlyConv(nn.Module):
 
     >>> AMBIGUITA' DEL PAPER <<<
     La sez. 3.2 si contraddice: "extract 96 dimensional feature" ma "196
-    kernels with a size 7x7 and a stride 2". Il modulo supporta tutte e tre
-    le letture possibili via `channel_reading`, cosi' la scelta si e' fatta
-    sul conteggio dei parametri invece che a intuito.
+    kernels with a size 7x7 and a stride 2". Il modulo supporta via
+    `channel_reading` le due letture che restano in piedi, cosi' la scelta si
+    e' fatta sul conteggio dei parametri invece che a intuito.
+
+    La terza lettura possibile — 196 kernel SENZA proiezione, cioe' 196 canali
+    in uscita — e' stata rimossa: nessun run l'ha mai usata, perche' e' la
+    lettura che il conteggio dei parametri esclude per prima.
     """
 
     def __init__(
         self,
         in_channels: int = 1,
         channel_reading: ChannelReading = "c96",
-        num_conv_layers: int = 1,
         pool_stride: tuple[int, int] = (2, 1),
     ) -> None:
         """`pool_stride` e' (frequenza, tempo).
@@ -128,15 +131,10 @@ class EarlyConv(nn.Module):
                       bias=True),
             nn.ReLU(inplace=True),
         ]
-        # `num_conv_layers` > 1 esiste per testare l'ipotesi sul plurale di
-        # "convolutional layers". Confutata: due strati portano i FLOPs a
-        # +164% invece che a +11%. Tenuto per documentazione.
-        for _ in range(num_conv_layers - 1):
-            layers += [
-                nn.Conv2d(conv_channels, conv_channels, 3, stride=1,
-                          padding=1, bias=True),
-                nn.ReLU(inplace=True),
-            ]
+        # UNO SOLO strato convolutivo. Il plurale di "convolutional layers"
+        # della sez. 3.2 aveva suggerito il contrario: ipotesi TESTATA e
+        # CONFUTATA il 18/08 — due strati portano i FLOPs a +164% invece che
+        # a +11%, cioe' fuori da qualunque lettura dei numeri dichiarati.
         layers.append(nn.MaxPool2d(3, stride=pool_stride, padding=1))
 
         # Terza lettura dell'ambiguita': 196 kernel, poi proiezione a 96.
@@ -153,8 +151,6 @@ class EarlyConv(nn.Module):
         """(canali delle conv, canali in uscita)."""
         if reading == "c96":
             return 96, 96          # "96 dimensional feature", il 196 e' un refuso
-        if reading == "c196":
-            return 196, 196        # "196 kernels", il 96 e' un refuso
         if reading == "c196_proj96":
             return 196, 96         # entrambi veri: 196 kernel, poi 1x1 a 96
         raise ValueError(f"lettura sconosciuta: {reading}")

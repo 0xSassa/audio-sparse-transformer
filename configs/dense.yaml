@@ -1,4 +1,4 @@
-﻿# Dense-transformer: il baseline del confronto controllato di Kavaki & Mandel.
+# Dense-transformer: il baseline del confronto controllato di Kavaki & Mandel.
 #
 # Del modello denso il paper NON dichiara alcun iperparametro: solo 4.80 M
 # parametri e 0.645 G FLOPs (Tabella 2). Questa configurazione e' quindi una
@@ -24,7 +24,6 @@ model:
                                # FLOPs del modello SPARSO, dove la early conv
                                # e' il 65% del costo (contro l'11% nel denso)
                                # e c196_proj96 sbaglia del +73%.
-  num_conv_layers: 1
   pool_stride: [2, 1]          # DEDOTTO: solo sull'asse frequenza. Con (2,2)
                                # la sequenza scende a 26 frame e il costo si
                                # ferma al 70 % di quello dichiarato

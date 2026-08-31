@@ -1,10 +1,11 @@
 # =============================================================================
 #  Progetto d'esame - B031278 Deep Learning (UNIFI, Fall 2025)
-#  Audio Sparse-Transformer (Kavaki & Mandel 2025) / baseline EAT-S
+#  Audio Sparse-Transformer (Kavaki & Mandel, ICASSP 2025)
 #  su Google Speech Commands V2
 #
-#  Ambiente target: Windows 11 - Python 3.12.4
-#                   NVIDIA GeForce RTX 5050 Laptop (Blackwell, sm_120, 8 GB)
+#  Ambiente in cui sono stati prodotti i risultati:
+#      Windows 11 - Python 3.12.4
+#      NVIDIA GeForce RTX 5050 Laptop (Blackwell, sm_120, 8 GB)
 # =============================================================================
 #
 #  INSTALLAZIONE IN DUE PASSI - l'ordine conta.
@@ -14,21 +15,20 @@
 #    python -m pip install -U pip setuptools wheel
 #
 #    # passo 1: stack CUDA dall'indice PyTorch (NON da PyPI)
-#    pip install torch==2.9.1+cu128 torchaudio==2.9.1 ^
+#    pip install torch==2.9.1+cu128 torchaudio==2.9.1 \
 #        --index-url https://download.pytorch.org/whl/cu128
 #
 #    # passo 2: tutto il resto da PyPI (torch risulta gia' soddisfatto)
 #    pip install -r requirements.txt
 #
-#  VERIFICA - deve stampare "(12, 0) True":
-#    python -c "import torch; print(torch.cuda.get_device_capability(), torch.cuda.is_available())"
-#    python -c "import soundfile; print('audio backend ok')"
+#    # verifica
+#    python scripts/check_env.py
 #
-#  DOPO la prima installazione riuscita, congela le versioni esatte:
-#    pip freeze > requirements.lock.txt
-#  Il file .lock e' quello che accompagna la consegna: garantisce la
-#  riproducibilita' bit-per-bit dell'ambiente, questo file garantisce
-#  solo che l'installazione vada a buon fine.
+#  Questo file garantisce che l'installazione vada a buon fine.
+#  requirements.lock.txt fissa le versioni ESATTE dei run riportati.
+#
+#  L'elenco contiene solo cio' che il codice importa davvero: se un pacchetto
+#  non compare qui, nessun file di questo repository lo usa.
 # =============================================================================
 
 
@@ -53,73 +53,32 @@ torchaudio==2.9.1
 soundfile>=0.12.1,<1.0
 
 # ---------------------------------------------------------------------------
-# Stack scientifico
+# Modello e dati
 # ---------------------------------------------------------------------------
 numpy>=2.1,<3.0
-scipy>=1.14,<2.0
-pandas>=2.2,<3.0
-scikit-learn>=1.5,<2.0          # confusion matrix, metriche, stratificazioni
-
-# ---------------------------------------------------------------------------
-# Architettura del modello
-# ---------------------------------------------------------------------------
 # einops: Rogozhnikov 2022 e' LETTURA RICHIESTA del corso (lezione 21/11).
 # Usarlo per il reshape del multi-head attention e' coerente col programma.
 einops>=0.8,<1.0
-torchmetrics>=1.4,<2.0          # accuracy/mAP consistenti fra train ed eval
+PyYAML>=6.0,<7.0                # i file in configs/
 
 # ---------------------------------------------------------------------------
-# Misura del costo computazionale - FASE 2, il cuore della riproduzione
+# Costo computazionale
 # ---------------------------------------------------------------------------
-# Il claim da riprodurre e' -85.25% di FLOPs: servono DUE contatori indipendenti
-# che concordino. Il terzo, torch.utils.flop_counter.FlopCounterMode, e' nativo
-# in torch e non richiede dipendenze.
-fvcore>=0.1.5
-torchinfo>=1.8,<2.0
+# Nessuna dipendenza: il contatore e' torch.utils.flop_counter.FlopCounterMode,
+# NATIVO in torch. In fase 2 girava in parallelo anche fvcore, come secondo
+# contatore indipendente, per decidere se il paper riportasse FLOPs o MAC:
+# deciso il punto (FLOPs), non discriminava piu' nulla ed e' stato tolto
+# insieme alla sua dipendenza.
 
 # ---------------------------------------------------------------------------
-# Tracking degli esperimenti
+# Tracking, figure, test
 # ---------------------------------------------------------------------------
+# Il CSV per epoca lo scrive src/tracking.py senza dipendenze; TensorBoard
+# serve solo a guardare le curve mentre il run gira. Weights & Biases era la
+# terza destinazione ed e' stato rimosso: nessun numero riportato veniva da
+# li', e un servizio con account e rete e' un requisito in piu' per chi deve
+# solo riprodurre i risultati.
 tensorboard>=2.17,<3.0
-# W&B da' il confronto FRA run, che e' cio' che serve con tre seed per
-# configurazione. Funziona anche senza rete: `mode: offline` in
-# configs/base.yaml, poi `wandb sync results/<run>/wandb/offline-*`.
-# Se manca il login il training PROSEGUE comunque, con CSV e TensorBoard.
-wandb>=0.18,<1.0
-
-# ---------------------------------------------------------------------------
-# Hyperparameter optimization - FASE 5
-# ---------------------------------------------------------------------------
-# Optuna con Hyperband/ASHA su K (numero di token) e learning rate.
-# Successive halving e Hyperband (Li et al. 2018) sono programma d'esame:
-# eseguirli davvero e' il modo piu' economico di padroneggiarli.
-optuna>=4.0,<5.0
-
-# ---------------------------------------------------------------------------
-# Figure e analisi
-# ---------------------------------------------------------------------------
-matplotlib>=3.9,<4.0
-seaborn>=0.13,<1.0
-jupyterlab>=4.2,<5.0
-ipykernel>=6.29,<7.0
-
-# ---------------------------------------------------------------------------
-# Utilita' e qualita' del codice
-# ---------------------------------------------------------------------------
-tqdm>=4.66,<5.0
-PyYAML>=6.0,<7.0                # file di configurazione in configs/
-pytest>=8.3,<9.0                # test su shape e tokenizer sparso
-ruff>=0.6                       # lint + format, dipendenza singola
-
-# ---------------------------------------------------------------------------
-# OPZIONALI - installare solo se servono davvero
-# ---------------------------------------------------------------------------
-# librosa>=0.10                 # feature audio extra. ATTENZIONE: tira dentro
-#                               # numba, che vincola la versione di Python.
-#                               # torchaudio copre gia' mel-spectrogram, MFCC,
-#                               # resampling e SpecAugment: quasi certamente
-#                               # non serve.
-# torchcodec>=0.1               # backend di decoding alternativo a soundfile,
-#                               # utile solo per formati diversi dal wav.
-# datasets>=3.0                 # HuggingFace. Non serve: Speech Commands e'
-#                               # in torchaudio.datasets.SPEECHCOMMANDS.
+matplotlib>=3.9,<4.0            # scripts/plot_results.py, plot_sampling.py
+tqdm>=4.66,<5.0                 # avanzamento del training
+pytest>=8.3,<9.0                # tests/test_pipeline.py, girano senza dataset

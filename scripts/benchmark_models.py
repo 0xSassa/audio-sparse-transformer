@@ -95,7 +95,6 @@ def main() -> int:
             "kind": cfg["model"].get("kind"),
             "params": cost.params,
             "gflops": cost.native_flops / 1e9,
-            "gmacs": (cost.fvcore_macs / 1e9) if cost.fvcore_macs else None,
             "seq_len": model.seq_len,
             "latency_ms": {},
         }

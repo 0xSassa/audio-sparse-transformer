@@ -60,17 +60,20 @@ def test_logmel_shape_is_64x101():
     assert front.n_frames(CLIP) == 101
 
 
-def test_logmel_normalisation_is_per_sample():
-    front = LogMelSpectrogram(normalize=True)
-    # Due campioni con guadagni molto diversi devono normalizzare allo stesso
-    # regime: e' il punto della normalizzazione per-campione.
-    wave = torch.randn(2, CLIP)
-    wave[1] *= 100.0
-    spec = front(wave)
-    per_sample_mean = spec.mean(dim=(1, 2, 3))
-    per_sample_std = spec.std(dim=(1, 2, 3))
-    assert torch.allclose(per_sample_mean, torch.zeros(2), atol=1e-4)
-    assert torch.allclose(per_sample_std, torch.ones(2), atol=1e-2)
+def test_logmel_keeps_the_recording_level():
+    """Il livello assoluto NON viene normalizzato via, ed e' una scelta.
+
+    Avevamo un'opzione che portava ogni spettrogramma a media 0 e deviazione
+    1; la sonda lineare sui bin mel la boccia (42.83% senza contro 42.33%
+    con), e ne' il paper ne' gli ancestor normalizzano. Questo test fissa
+    l'assenza: due clip identiche a meno del guadagno devono restare
+    DIVERSE dopo il front-end, perche' e' il livello a portare segnale.
+    """
+    front = LogMelSpectrogram()
+    wave = torch.randn(1, CLIP)
+    forte = front(wave * 100.0)
+    piano = front(wave)
+    assert not torch.allclose(forte, piano, atol=1e-3)
 
 
 def test_logmel_rejects_wrong_rank():
@@ -325,21 +328,23 @@ class _TinyNet(torch.nn.Module):
         return self.fc(x)
 
 
-def test_flops_counters_agree_up_to_factor_two():
-    """fvcore conta MAC, il contatore nativo conta FLOPs: rapporto ~2x.
+def test_flops_counter_counts_flops_not_macs():
+    """Il contatore conta FLOPs, non MAC — la convenzione del paper.
 
     E' l'avvertenza centrale di src/flops.py. Un Linear 100->200 senza bias
-    costa 100*200 = 20_000 MAC, cioe' 40_000 FLOPs.
+    costa 100*200 = 20_000 MAC, cioe' 40_000 FLOPs: il test fissa che il
+    numero riportato sia il secondo. Sbagliare convenzione sposta di un
+    fattore 2 l'unico claim del paper che si riproduce esattamente.
+
+    In fase 2 la stessa proprieta' era verificata confrontando due contatori
+    indipendenti (nativo e fvcore, che concordavano sul fattore 2). Deciso il
+    punto, fvcore e' stato rimosso: qui resta il valore assoluto atteso, che
+    e' cio' che il confronto col paper usa davvero.
     """
     report = analyze(_TinyNet(), (100,))
     assert report.params == 100 * 200
-
-    if report.fvcore_macs is not None:
-        assert report.fvcore_macs == pytest.approx(20_000, rel=1e-6)
     if report.native_flops is not None:
         assert report.native_flops == pytest.approx(40_000, rel=1e-6)
-    if report.native_flops is not None and report.fvcore_macs is not None:
-        assert report.native_flops / report.fvcore_macs == pytest.approx(2.0, rel=1e-6)
 
 
 def test_flops_report_adds_manual_extras():
@@ -656,7 +661,7 @@ def test_grouping_fills_options_added_after_a_run_was_archived():
 
 
 def test_region_mode_freezes_the_right_parameters():
-    """`static` e `grid` congelano, senza cambiare la forma del modello.
+    """`grid` congela, senza cambiare la forma del modello.
 
     Il punto dell'ablation e' che sia un confronto CONTROLLATO: congelare non
     deve togliere parametri ne' FLOPs, altrimenti si starebbe confrontando un
@@ -665,7 +670,7 @@ def test_region_mode_freezes_the_right_parameters():
     from src.models.sparse import SparseFeatureExtractor
 
     tot = None
-    for mode in ("learned", "static", "grid"):
+    for mode in ("learned", "grid"):
         ex = SparseFeatureExtractor(region_mode=mode)
         n = sum(p.numel() for p in ex.parameters())
         tot = n if tot is None else tot

@@ -60,7 +60,6 @@ class DenseAudioTransformer(nn.Module):
         # Le alternative esplorate restano negli YAML, che e' dove sono
         # documentate: `configs/dense.yaml` tiene `pool_freq` come ablation.
         channel_reading: ChannelReading = "c96",
-        num_conv_layers: int = 1,
         pool_stride: tuple[int, int] = (2, 1),
         seq_mode: SeqMode = "flatten",
         dim: int = 224,
@@ -74,7 +73,6 @@ class DenseAudioTransformer(nn.Module):
 
         self.frontend = EarlyConv(
             channel_reading=channel_reading, pool_stride=pool_stride,
-            num_conv_layers=num_conv_layers,
         )
         shape = self.frontend.output_shape(n_mels, n_frames)
         self.feature_shape = shape

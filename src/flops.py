@@ -2,19 +2,20 @@
 
 Il claim da riprodurre e' -85.25% di FLOPs rispetto a EAT-S. Un contatore
 scritto DOPO il modello tende a essere costruito per confermare il risultato
-atteso: per questo si scrive prima, e si usano due strumenti indipendenti.
+atteso: per questo e' stato scritto PRIMA dei modelli.
 
 TRE AVVERTENZE, tutte capaci da sole di invalidare il confronto.
 
-1. FLOPs != MAC. fvcore conta MAC ma li chiama "flops"; il contatore nativo
-   di torch conta le moltiplicazioni-addizioni come 2 operazioni. I due
-   numeri differiscono quindi di circa 2x. Il paper non dichiara quale
-   convenzione usi.
+1. FLOPs != MAC, e qui si contano FLOPs. `torch.utils.flop_counter` conta le
+   moltiplicazioni-addizioni come 2 operazioni; una libreria come fvcore
+   conta MAC e li chiama "flops", cioe' meta'. Il paper non dichiara la
+   convenzione: e' stata dedotta dai suoi stessi numeri (il denso della
+   Tabella 2 torna in FLOPs, non in MAC).
 
-   CALIBRAZIONE: implementa EAT-S, misuralo con entrambi i contatori e vedi
-   quale dei due si avvicina a 0.373 G. Quella e' la convenzione del paper.
-   Finche' non l'hai fatto, confronta i TUOI modelli fra loro, mai coi
-   numeri pubblicati.
+   In fase 2 la misura girava anche con fvcore come secondo contatore
+   indipendente, e i due concordavano sul fattore 2 esatto. Deciso il punto,
+   il secondo contatore non discriminava piu' nulla: e' stato rimosso, con
+   la sua dipendenza. Per convertire in MAC basta dividere per 2.
 
 2. `grid_sample` (l'interpolazione bilineare del campionamento sparso) NON
    e' contata da nessuno dei due strumenti: e' un'op di gather+lerp senza
@@ -35,7 +36,6 @@ from torch import nn
 @dataclass
 class FlopReport:
     native_flops: float | None
-    fvcore_macs: float | None
     manual_extra_flops: float
     params: int
 
@@ -49,9 +49,6 @@ class FlopReport:
         lines = [f"parametri            : {self.params / 1e6:8.3f} M"]
         if self.native_flops is not None:
             lines.append(f"FLOPs (torch nativo) : {self.native_flops / 1e9:8.4f} G")
-        if self.fvcore_macs is not None:
-            lines.append(f"MAC   (fvcore)       : {self.fvcore_macs / 1e9:8.4f} G")
-            lines.append(f"  -> x2 in FLOPs     : {2 * self.fvcore_macs / 1e9:8.4f} G")
         if self.manual_extra_flops:
             lines.append(f"extra manuali        : {self.manual_extra_flops / 1e9:8.4f} G")
             if self.native_total is not None:
@@ -90,12 +87,8 @@ def analyze(
     model = model.to(device).eval()
     x = torch.zeros(1, *input_shape, device=device)
 
-    native = _count_native(model, x)
-    fvcore = _count_fvcore(model, x)
-
     return FlopReport(
-        native_flops=native,
-        fvcore_macs=fvcore,
+        native_flops=_count_native(model, x),
         manual_extra_flops=manual_extra_flops,
         params=count_parameters(model),
     )
@@ -119,18 +112,6 @@ def _count_native(model: nn.Module, x: torch.Tensor) -> float | None:
     with counter:
         model(x)
     return float(counter.get_total_flops())
-
-
-def _count_fvcore(model: nn.Module, x: torch.Tensor) -> float | None:
-    try:
-        from fvcore.nn import FlopCountAnalysis
-    except ImportError:
-        return None
-    analysis = FlopCountAnalysis(model, x)
-    analysis.unsupported_ops_warnings(False)
-    analysis.uncalled_modules_warnings(False)
-    with torch.no_grad():
-        return float(analysis.total())
 
 
 def benchmark_latency(

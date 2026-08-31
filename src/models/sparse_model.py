@@ -39,7 +39,6 @@ class SparseAudioTransformer(nn.Module):
         # front-end: identico al denso, cosi' il confronto e' controllato.
         # I default sono la configurazione adottata (`configs/sparse.yaml`).
         channel_reading: ChannelReading = "c96",
-        num_conv_layers: int = 1,
         pool_stride: tuple[int, int] = (2, 1),
         # estrattore sparso
         num_tokens: int = 4,
@@ -60,7 +59,6 @@ class SparseAudioTransformer(nn.Module):
         super().__init__()
         self.frontend = EarlyConv(
             channel_reading=channel_reading, pool_stride=pool_stride,
-            num_conv_layers=num_conv_layers,
         )
         shape = self.frontend.output_shape(n_mels, n_frames)
         self.feature_shape = shape

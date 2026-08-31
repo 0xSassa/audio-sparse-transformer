@@ -43,17 +43,20 @@ RegionConstraint = Literal["none", "clip"]
 #
 #   "learned"  il metodo del paper: regioni iniziali apprese, piu' un
 #              aggiustamento per campione a ogni ripetizione.
-#   "static"   `to_delta` congelato a zero: le regioni restano dove le mette
-#              `box_init`, che resta appreso. Regioni APPRESE ma UGUALI PER
-#              OGNI INGRESSO — isola il contributo dell'adattivita'.
-#   "grid"     congelati anche i `box_init`: le regioni restano sulla griglia
-#              regolare iniziale. Nessuna saliency, ne' appresa ne' adattiva.
+#   "grid"     congelati sia `to_delta` sia `box_init`: le regioni restano
+#              sulla griglia regolare iniziale. Nessuna saliency, ne' appresa
+#              ne' adattiva.
+#
+# Esisteva un terzo modo, "static" (solo `to_delta` congelato: regioni apprese
+# ma uguali per ogni ingresso), che avrebbe separato "appreso" da "adattivo".
+# E' stato rimosso perche' non e' mai stato eseguito: era un esperimento
+# dichiarato e non fatto, non una via di codice usata.
 #
 # Nota utile a leggere il risultato: alla PRIMA ripetizione le regioni sono
 # gia' identiche per ogni ingresso anche in "learned", perche' i token
 # entrano come `token_init`, che e' un parametro. L'adattivita' esiste solo
 # dalla seconda in poi.
-RegionMode = Literal["learned", "static", "grid"]
+RegionMode = Literal["learned", "grid"]
 
 
 def boxes_to_cwh(boxes: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -341,11 +344,10 @@ class SparseFeatureExtractor(nn.Module):
         # in FLOPs restano identici a "learned". E' cio' che rende l'ablation
         # un confronto controllato invece di un modello piu' piccolo.
         self.region_mode = region_mode
-        if region_mode in ("static", "grid"):
+        if region_mode == "grid":
             for stage in self.stages:
                 for param in stage["adjust"].parameters():
                     param.requires_grad_(False)
-        if region_mode == "grid":
             self.box_init.requires_grad_(False)
 
     def forward(self, features: torch.Tensor,

@@ -42,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.train import MODELS
+from src.train import MODELS, OBSOLETE_MODEL_KEYS
 
 # --------------------------------------------------------------------------
 # Numeri dichiarati da Kavaki & Mandel, ICASSP 2025 — trascritti dal PDF.
@@ -129,11 +129,18 @@ def group(runs: list[dict]) -> dict[tuple, dict]:
 
         I default si leggono dalla firma della classe, quindi anche questo
         non richiede che nessuno si ricordi di aggiornare un elenco.
+
+        Il caso SPECULARE — un'opzione RIMOSSA dal codice dopo che dei run
+        l'avevano archiviata — non si risolve dalla firma, perche' li' non
+        c'e' piu' nulla da leggere. Va scartata esplicitamente, ed e' a cosa
+        serve `OBSOLETE_MODEL_KEYS`: senza, gli stessi tre seed finirebbero
+        in due gruppi a seconda che siano stati addestrati prima o dopo la
+        rimozione.
         """
         model = MODELS.get(cfg.get("kind"))
         if model is None:
             return cfg
-        out = dict(cfg)
+        out = {k: v for k, v in cfg.items() if k not in OBSOLETE_MODEL_KEYS}
         for name, param in inspect.signature(model.__init__).parameters.items():
             if param.default is not inspect.Parameter.empty and name not in out:
                 out[name] = param.default
