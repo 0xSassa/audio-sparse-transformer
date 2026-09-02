@@ -1,37 +1,22 @@
-"""Dense-transformer: il baseline del confronto controllato di Kavaki & Mandel.
+"""Dense-transformer: il baseline del confronto controllato del paper.
 
-Stessa struttura del modello sparso, ma i token del transformer sono i
-FRAME TEMPORALI prodotti dalla early convolution, non i token latenti
-campionati. Il paper lo usa come termine di paragone diretto (96.67 %,
-4.80 M parametri, 0.645 G FLOPs) e da esso ricava il -91.47 % di costo.
+Stessa struttura del modello sparso, ma i token sono i FRAME TEMPORALI della
+early convolution invece dei token latenti campionati (96.67%, 4.80 M
+parametri, 0.645 GFLOPs dichiarati; e' da qui che il paper ricava il -91.47%
+di costo).
 
->>> AMBIGUITA' <<<
-Del dense-transformer il paper NON dichiara alcun iperparametro: solo il
-totale di parametri e FLOPs. La configurazione va quindi RICOSTRUITA
-usando quei due numeri come vincoli. Da qui la parametrizzazione spinta di
-questa classe: `seq_mode`, `pool_stride`, `dim`, `depth`, `ffn_ratio` sono
-gradi di liberta' su cui si cerca, non scelte gia' fatte.
+Il paper non dichiara alcun iperparametro del denso, solo parametri e FLOPs:
+la configurazione e' RICOSTRUITA usando quei due numeri come vincoli, da cui
+la parametrizzazione spinta della classe.
 
-`seq_mode` — come una feature map [B, C, F, T] diventa una sequenza:
+`seq_mode` — come [B, C, F, T] diventa una sequenza:
 
-    "flatten"    ogni istante porta tutti i suoi bin: N = T, dim = C*F.
-                 Conserva tutto ma la proiezione iniziale e' costosa
-                 (C*F*dim parametri).
-    "pool_freq"  media sull'asse frequenza: N = T, dim = C.
-                 Proiezione economica; l'informazione spettrale resta nei
-                 canali della convoluzione.
+    "flatten"    ogni istante porta tutti i suoi bin: N = T, dim = C*F
+    "pool_freq"  media sull'asse frequenza:           N = T, dim = C
 
-E' la scelta piu' importante della ricostruzione: vale 2,92 punti, e con
-"pool_freq" il claim del paper si riproduce mentre con "flatten" no. Vedi
-l'intestazione di configs/dense_flatten.yaml.
-
->>> NIENTE CODIFICA POSIZIONALE <<<
-Il paper la dichiara assente per il modello SPARSO — i token latenti non
-hanno un ordine intrinseco. Sul DENSO tace, e i frame temporali un ordine
-ce l'hanno: senza codifica il transformer e' invariante a permutazioni del
-tempo. E' quindi una nostra ASSUNZIONE, presa per simmetria col modello
-sparso. Testarla nelle due varianti era previsto e non e' stato fatto: e'
-un esperimento mancante, non una scelta misurata.
+E' la scelta piu' importante della ricostruzione, vale 2.92 punti.
+Niente codifica posizionale: e' una nostra ASSUNZIONE per simmetria col
+modello sparso, non una scelta misurata.
 """
 
 from __future__ import annotations
@@ -55,10 +40,8 @@ class DenseAudioTransformer(nn.Module):
         n_mels: int = 64,
         n_frames: int = 101,
         *,
-        # I default sono la CONFIGURAZIONE ADOTTATA, quella di
-        # `configs/dense_flatten.yaml` da cui vengono i risultati riportati.
-        # Le alternative esplorate restano negli YAML, che e' dove sono
-        # documentate: `configs/dense.yaml` tiene `pool_freq` come ablation.
+        # default = configurazione adottata (`configs/dense_flatten.yaml`),
+        # quella da cui vengono i risultati riportati
         channel_reading: ChannelReading = "c96",
         pool_stride: tuple[int, int] = (2, 1),
         seq_mode: SeqMode = "flatten",

@@ -1,16 +1,9 @@
 """Metriche per classe e analisi delle confusioni.
 
-L'accuratezza aggregata su 35 classi nasconde molto, tanto piu' che in
-Speech Commands V2 lo sbilanciamento fra classi e' di 2.6x (da 1.256 a
-3.250 campioni di training). Due modelli con la stessa accuratezza globale
-possono sbagliare in modi completamente diversi.
-
-SCELTA DI PRESENTAZIONE. Si producono i numeri, non una mappa di calore
-35x35 — che a quella dimensione e' quasi illeggibile. Molto piu' utile in
-diagnosi, e all'orale, e' l'elenco delle COPPIE piu' confuse: se il modello
-scambia "three" con "tree" o "no" con "go" sta facendo errori
-fonologicamente sensati, e la cosa si commenta; se scambia coppie senza
-alcuna somiglianza acustica, c'e' qualcosa che non va nella pipeline.
+L'accuratezza aggregata su 35 classi nasconde molto: in SC-V2 lo
+sbilanciamento fra classi e' di 2.6x. Si riportano quindi anche
+l'accuratezza bilanciata, le classi peggiori e le coppie piu' confuse —
+piu' leggibili di una matrice 35x35.
 """
 
 from __future__ import annotations
@@ -40,9 +33,7 @@ def classification_summary(
     with np.errstate(divide="ignore", invalid="ignore"):
         per_class = np.where(support > 0, correct / np.maximum(support, 1), np.nan)
 
-    # accuratezza bilanciata: media delle accuratezze per classe, insensibile
-    # allo sbilanciamento. Con 2.6x di squilibrio puo' divergere sensibilmente
-    # da quella globale, ed e' la coppia di numeri che vale la pena riportare.
+    # media delle accuratezze per classe: insensibile allo sbilanciamento
     balanced = float(np.nanmean(per_class))
 
     confusions = []

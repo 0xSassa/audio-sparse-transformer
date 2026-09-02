@@ -1,17 +1,10 @@
 """
 Pipeline dati per Google Speech Commands V2 (Warden, arXiv:1804.03209).
 
-PROTOCOLLO — confermato dal testo di Kavaki & Mandel (ICASSP 2025, sez. 3.1):
-    35 classi · 16 kHz · clip zero-paddate a 1 secondo esatto
-    train 84_843   validation 9_981   test 11_005
-
-Gli split sono quelli UFFICIALI del dataset (`validation_list.txt` e
-`testing_list.txt`), costruiti sull'hash dello speaker ID e quindi
-SPEAKER-DISJOINT. Uno split casuale gonfia l'accuratezza di punti interi.
-
-I conteggi attesi sono un test di correttezza gratuito: se non tornano
-esattamente, la pipeline e' sbagliata e ogni numero prodotto a valle
-e' privo di valore. `build_splits()` fallisce esplicitamente in quel caso.
+Protocollo del paper (sez. 3.1): 35 classi, 16 kHz, clip zero-paddate a 1 s,
+split UFFICIALI (`validation_list.txt` / `testing_list.txt`), che sono
+speaker-disjoint. I conteggi attesi 84_843 / 9_981 / 11_005 sono un test di
+correttezza: se non tornano, `build_splits()` fallisce.
 """
 
 from __future__ import annotations
@@ -31,9 +24,8 @@ ARCHIVE_MD5 = "6b74f3901214cb2c2934e98196829835"
 SAMPLE_RATE = 16_000
 CLIP_SAMPLES = SAMPLE_RATE  # esattamente 1 secondo
 
-# Le 35 etichette di SC-V2, in ordine alfabetico: l'indice di classe e'
-# la posizione in questa lista. Fissarla qui (invece di derivarla dal
-# filesystem) rende la label map riproducibile su macchine diverse.
+# L'indice di classe e' la posizione in questa lista. Fissata qui, e non
+# derivata dal filesystem, cosi' la label map non dipende dalla macchina.
 LABELS: tuple[str, ...] = (
     "backward", "bed", "bird", "cat", "dog", "down", "eight", "five",
     "follow", "forward", "four", "go", "happy", "house", "learn", "left",
@@ -183,14 +175,8 @@ def _read_list(path: Path) -> set[str]:
 def build_cache(splits: Splits, out_dir: Path) -> None:
     """Materializza ogni split in un `.npy` int16 di forma [N, 16000].
 
-    Motivo: leggere ~85k file .wav a ogni epoca satura il DataLoader molto
-    prima della GPU. Con la cache si legge da memmap (il SO tiene in page
-    cache le parti calde) e le augmentation si spostano su GPU.
-
-    Ingombro su disco, int16:
-        train       84_843 x 16_000 x 2 B  ~=  2.72 GB
-        validation   9_981 x 16_000 x 2 B  ~=  0.32 GB
-        test        11_005 x 16_000 x 2 B  ~=  0.35 GB
+    Leggere ~85k .wav a ogni epoca satura il DataLoader prima della GPU; la
+    cache si legge da memmap. Costa ~3.4 GB su disco in totale.
     """
     import soundfile as sf  # import locale: serve solo qui
 
@@ -215,8 +201,7 @@ def build_cache(splits: Splits, out_dir: Path) -> None:
             if audio.ndim != 1:
                 raise ValueError(f"{path}: atteso audio mono, shape {audio.shape}")
 
-            # Zero-padding a destra / troncamento: il paper dichiara
-            # esplicitamente il padding a 1 s.
+            # zero-padding a destra o troncamento a 1 s, come nel paper
             if audio.shape[0] < CLIP_SAMPLES:
                 waves[i, : audio.shape[0]] = audio
                 waves[i, audio.shape[0] :] = 0

@@ -11,37 +11,22 @@ from typing import Any
 import numpy as np
 import torch
 
-# Operazioni senza implementazione deterministica su CUDA che il progetto
-# usa davvero. `grid_sample` e' il campionamento bilineare del modello
-# sparso: il suo backward accumula con atomicAdd, e l'ordine delle somme in
-# virgola mobile varia fra esecuzioni.
+# Operazioni senza implementazione deterministica su CUDA che il progetto usa
+# davvero: il backward di `grid_sample` accumula con atomicAdd, quindi
+# l'ordine delle somme in virgola mobile varia fra esecuzioni.
 NONDETERMINISTIC_OPS = {"sparse": ("grid_sampler_2d_backward_cuda",)}
 
 
 def seed_everything(seed: int, *, deterministic: bool = False,
                     warn_only: bool = False) -> str:
-    """Fissa i seed. Ritorna il livello di determinismo effettivamente ottenuto.
+    """Fissa i seed. Ritorna il livello di determinismo ottenuto.
 
-    `deterministic=True` costa velocita' ma rende i run ripetibili.
-
-    IL CASO DEL MODELLO SPARSO. `grid_sampler_2d_backward_cuda` non ha una
-    implementazione deterministica: il backward dell'interpolazione bilineare
-    accumula i contributi dei punti campionati con atomicAdd, e l'ordine delle
-    somme in virgola mobile cambia da un'esecuzione all'altra. Con
-    `warn_only=False` PyTorch solleva un errore invece di procedere — ed e'
-    esattamente cosi' che vogliamo scoprirlo, ma significa che il modello
-    sparso NON PUO' essere addestrato in determinismo stretto su GPU.
-
-    `warn_only=True` e' la risposta giusta e non una rinuncia: ogni operazione
-    che PUO' essere deterministica lo resta, e solo `grid_sample` ricade nel
-    comportamento non deterministico, con un avviso. Il livello ottenuto viene
-    restituito e registrato accanto ai risultati, cosi' un run non
-    bit-riproducibile non si spaccia per tale.
-
-    Osservazione che vale per l'orale: il metodo del paper e' INTRINSECAMENTE
-    meno riproducibile del suo baseline denso, perche' il suo meccanismo
-    centrale ha un backward non deterministico. Rende l'ablation a singolo
-    seed della Tabella 3 ancora meno solida di quanto gia' sospettassimo.
+    Il modello sparso NON PUO' essere addestrato in determinismo stretto su
+    GPU: `grid_sampler_2d_backward_cuda` non ha implementazione
+    deterministica e PyTorch solleva un errore. `warn_only=True` e' la
+    risposta giusta e non una rinuncia — tutto cio' che puo' restare
+    deterministico lo resta — ma il livello va registrato accanto ai
+    risultati, cosi' un run non bit-riproducibile non si spaccia per tale.
     """
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
@@ -72,10 +57,8 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 def load_config(path: str | Path) -> dict[str, Any]:
     """Carica un YAML risolvendo la chiave `defaults:`.
 
-    `defaults: base.yaml` fa ereditare tutti i blocchi non ridefiniti. Serve
-    a tenere in un solo posto cio' che e' comune a tutti gli esperimenti e a
-    far vedere nel file specifico solo cio' che cambia — che e' anche il
-    modo in cui un revisore capisce al volo cosa distingue un run dall'altro.
+    `defaults: base.yaml` fa ereditare i blocchi non ridefiniti, cosi' nel
+    file specifico si vede solo cio' che cambia.
     """
     import yaml
 
@@ -95,26 +78,14 @@ def apply_overrides(cfg: dict[str, Any], assignments: list[str]) -> list[str]:
 
         apply_overrides(cfg, ["model.num_tokens=9", "optim.epochs=50"])
 
-    PERCHE' ESISTE. Le due ablation del paper (N su 5 valori, P su 4)
-    sarebbero 8 file YAML quasi identici, che divergono al primo
-    cambiamento della configurazione di base. Con questo, la stessa
-    `sparse.yaml` genera l'intera griglia e i valori effettivi finiscono
-    comunque in `resolved_config.json`: la provenienza resta completa.
+    Evita gli 8 file YAML quasi identici delle due ablation del paper; i
+    valori effettivi finiscono comunque in `resolved_config.json`.
 
-    DUE GUARDIE, entrambe deliberate.
-
-    - La chiave DEVE gia' esistere. Un refuso come `model.num_token=9`
-      creerebbe altrimenti una chiave nuova che nessuno legge, e il run
-      girerebbe con il valore di default fingendo di essere un'ablation.
-      E' il tipo di errore che non produce alcun sintomo: si scopre
-      confrontando i risultati e non capendo perche' sono identici.
-    - Il TIPO deve combaciare con quello presente. Un `epochs=cinquanta`
-      passerebbe come stringa e romperebbe molto piu' avanti.
-
-    Il valore si interpreta con il parser YAML, lo stesso dei file di
-    configurazione: `9` diventa int, `0.5` float, `true` bool,
-    `[2, 1]` lista. Ritorna la lista degli assegnamenti applicati, per
-    stamparli.
+    Due guardie deliberate: la chiave deve gia' esistere (un refuso come
+    `num_token` creerebbe una chiave che nessuno legge, e il run girerebbe
+    sul default fingendo di essere un'ablation) e il tipo deve combaciare.
+    Il valore si interpreta col parser YAML. Ritorna gli assegnamenti
+    applicati, per stamparli.
     """
     import yaml
 
@@ -160,13 +131,10 @@ def param_groups(model: torch.nn.Module, weight_decay: float,
                  skip_1d: bool = True) -> list[dict[str, Any]]:
     """Gruppi di parametri per il weight decay.
 
-    Criterio preso dal `add_weight_decay` di EAT: ogni parametro con
-    `len(shape) == 1` e' escluso dal decay. Cattura in un colpo solo i bias
-    di convoluzioni e linear e i pesi e bias di LayerNorm e BatchNorm.
-
-    La motivazione: spingere verso zero un parametro di scala di
-    normalizzazione non ha senso statistico, perche' non controlla la
-    complessita' del modello ma la sua parametrizzazione interna.
+    Criterio del `add_weight_decay` di EAT: i parametri 1-D sono esclusi dal
+    decay. Cattura in un colpo bias e parametri di normalizzazione, su cui
+    il decay non controllerebbe la complessita' del modello ma solo la sua
+    parametrizzazione interna.
     """
     if not skip_1d:
         return [{"params": [p for p in model.parameters() if p.requires_grad],
@@ -186,22 +154,12 @@ def param_groups(model: torch.nn.Module, weight_decay: float,
 def seed_epoch(base_seed: int, epoch: int) -> None:
     """Riporta i generatori a uno stato funzione pura di (seed, epoca).
 
-    Serve a rendere il flusso casuale di un'epoca INDIPENDENTE da quante
-    estrazioni sono state fatte prima. E' necessario per una ragione
-    tutt'altro che teorica: `_MultiProcessingDataLoaderIter.__init__`
-    estrae il `base_seed` dei worker dal generatore globale, e con
-    `persistent_workers` lo fa UNA sola volta per processo. Un run ripreso
-    ricostruisce l'iteratore e consuma quell'estrazione in piu', sfasando
-    tutto cio' che viene dopo — nel nostro caso la SCELTA di quale
-    augmentation applicare, che `apply_augmentations` fa con `torch.rand`
-    sul generatore globale.
-
-    Misurato: senza questa funzione, un run ripreso in modalita'
-    deterministica divergeva ancora di 0.01 punti dopo due epoche, pur
-    avendo gia' reso l'ordine dei dati indipendente dal resume.
-
-    Dopo, l'epoca N e' riproducibile da sola, il che rende anche piu'
-    facile indagare un'epoca specifica senza rieseguire le precedenti.
+    Rende il flusso casuale di un'epoca indipendente da quante estrazioni
+    sono state fatte prima: un run ripreso ne consuma una in piu' per il
+    `base_seed` dei worker, sfasando la scelta delle augmentation (misurato:
+    0.01 punti di divergenza dopo due epoche, con l'ordine dei dati gia'
+    reso indipendente dal resume). Rende anche riproducibile una singola
+    epoca senza rieseguire le precedenti.
     """
     torch.manual_seed(base_seed * 1_000_003 + epoch)   # copre anche CUDA
     np.random.seed((base_seed * 1_000_003 + epoch) % (2**32))
@@ -211,14 +169,9 @@ def seed_epoch(base_seed: int, epoch: int) -> None:
 def provenance() -> dict[str, Any]:
     """Da quale stato del codice e su quale macchina viene un risultato.
 
-    Senza questo, fra un mese non c'e' modo di sapere quale versione del
-    codice ha prodotto un numero. E' l'informazione che rende un risultato
-    verificabile invece che semplicemente registrato — e costa una chiamata
-    a git.
-
-    `dirty` segnala modifiche non committate al momento del run: un
-    risultato prodotto con l'albero sporco non e' riproducibile dal solo
-    commit, e va saputo.
+    E' cio' che rende un risultato verificabile invece che solo registrato.
+    `dirty` segnala modifiche non committate: quel risultato non e'
+    riproducibile dal solo commit.
     """
     import platform
     import subprocess
@@ -238,19 +191,11 @@ def provenance() -> dict[str, Any]:
             ["git", "rev-parse", "HEAD"], cwd=root, text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
-        # `dirty` conta SOLO le modifiche a file TRACCIATI: sono le uniche
-        # che cambiano il codice eseguito e quindi le uniche che rendono un
-        # risultato non riproducibile dal solo commit.
-        #
-        # Escludere `results/` non bastava: qualunque file di appunti nella
-        # radice (uno script di prova, un notebook) faceva risultare sporco
-        # ogni run. Il primo run completo, prodotto da un albero pulito, era
-        # marcato dirty=True per la presenza di `results/` e di uno script
-        # non tracciato. Un flag di riproducibilita' che da' falsi positivi
-        # e' peggio che non averlo, perche' smetti di fidartene.
-        #
-        # I file non tracciati si contano a parte: non incidono sul codice
-        # eseguito, ma vederli elencati evita di nascondere informazione.
+        # `dirty` conta SOLO i file tracciati: sono gli unici che cambiano il
+        # codice eseguito. Contare anche i non tracciati marcava sporco ogni
+        # run per un qualsiasi file di appunti nella radice, e un flag di
+        # riproducibilita' con falsi positivi e' peggio che non averlo. I non
+        # tracciati si contano a parte, per non nascondere informazione.
         info["dirty"] = bool(subprocess.check_output(
             ["git", "status", "--porcelain", "--untracked-files=no"],
             cwd=root, text=True, stderr=subprocess.DEVNULL,
@@ -268,12 +213,9 @@ def provenance() -> dict[str, Any]:
 def rng_state() -> dict[str, Any]:
     """Stato di TUTTI i generatori, per un resume davvero identico.
 
-    Senza questo, riprendere da un checkpoint riparte con generatori
-    reinizializzati: l'ordine dello shuffle, le permutazioni delle
-    augmentation e i lambda sono diversi da quelli che il run avrebbe
-    avuto proseguendo. Il risultato resta valido, ma un run interrotto e
-    ripreso non e' piu' confrontabile bit a bit con uno mai interrotto —
-    e su un portatile le interruzioni non sono l'eccezione.
+    Senza, riprendere da un checkpoint riparte con generatori
+    reinizializzati: il run resta valido ma non e' piu' confrontabile bit a
+    bit con uno mai interrotto.
     """
     state = {
         "python": random.getstate(),
@@ -300,10 +242,8 @@ def load_rng_state(state: dict[str, Any] | None) -> None:
 def grad_global_norm(model: torch.nn.Module) -> float:
     """Norma L2 globale del gradiente, senza modificarlo.
 
-    `clip_grad_norm_` con soglia infinita calcola la norma e non taglia
-    nulla: e' il modo idiomatico di misurarla. Serve come diagnostica —
-    una norma che esplode o che collassa a zero dice subito che qualcosa
-    non va, molto prima che si veda sulla loss.
+    Con soglia infinita `clip_grad_norm_` misura e non taglia. Diagnostica:
+    una norma che esplode o collassa si vede molto prima che sulla loss.
     """
     return float(
         torch.nn.utils.clip_grad_norm_(model.parameters(), float("inf"))
@@ -313,8 +253,8 @@ def grad_global_norm(model: torch.nn.Module) -> float:
 class ModelEMA:
     """Media mobile esponenziale dei pesi (Tarvainen & Valpola 2017).
 
-    Sia EAT sia il paper sparso usano decay 0.995. Il modello EMA e' quello
-    che si valuta: dimenticarlo costa in genere qualche decimo di punto.
+    Decay 0.995 come in entrambi i paper. E' il modello EMA quello che si
+    valuta: dimenticarlo costa qualche decimo di punto.
     """
 
     def __init__(self, model: torch.nn.Module, decay: float = 0.995) -> None:

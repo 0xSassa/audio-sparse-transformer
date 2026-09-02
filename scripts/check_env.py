@@ -3,7 +3,7 @@
     python scripts/check_env.py
 
 Controlla i due punti che su questa macchina possono far perdere giornate:
-la build CUDA giusta per Blackwell (sm_120) e il backend audio.
+la build CUDA per Blackwell (sm_120) e il backend audio.
 """
 
 from __future__ import annotations

@@ -2,19 +2,14 @@
 
     python scripts/evaluate.py --run dense_seed0
 
-PERCHE' UNA GUARDIA. Il test set di Speech Commands V2 ha 11.005 campioni.
-Valutarlo piu' volte, magari cambiando qualcosa in mezzo, equivale a
-selezionare su di esso: il numero che se ne ricava smette di essere una
-stima onesta della generalizzazione e non e' piu' confrontabile con quelli
-pubblicati. E' un errore facile da commettere senza accorgersene, perche'
-non produce alcun sintomo visibile.
+Valutare piu' volte il test set, cambiando qualcosa in mezzo, equivale a
+selezionare su di esso: il numero smette di essere una stima onesta della
+generalizzazione, ed e' un errore senza sintomi visibili.
 
-Lo script scrive un file `TEST_EVALUATED.json` nella cartella del run al
-primo utilizzo e si rifiuta di ripartire se lo trova, a meno di `--force`
-— che pero' registra l'accaduto nel file, cosi' resta traccia.
-
-La selezione del checkpoint avviene sul VALIDATION set, durante il
-training. Qui si valuta e basta.
+Al primo utilizzo lo script scrive `TEST_EVALUATED.json` nella cartella del
+run e poi si rifiuta di ripartire, salvo `--force`, che pero' resta
+registrato nel file. La selezione del checkpoint avviene sul VALIDATION,
+durante il training: qui si valuta e basta.
 """
 
 from __future__ import annotations

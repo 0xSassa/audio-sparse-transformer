@@ -1,28 +1,28 @@
-"""Contatore di FLOPs — l'infrastruttura di misura della Fase 2.
+"""Contatore di FLOPs: la metrica centrale del progetto.
 
-Il claim da riprodurre e' -85.25% di FLOPs rispetto a EAT-S. Un contatore
-scritto DOPO il modello tende a essere costruito per confermare il risultato
-atteso: per questo e' stato scritto PRIMA dei modelli.
+Tre avvertenze, ognuna capace da sola di invalidare il confronto:
 
-TRE AVVERTENZE, tutte capaci da sole di invalidare il confronto.
+1. QUI SI CONTANO FLOPs, NON MAC. `torch.utils.flop_counter` conta la
+   moltiplicazione-addizione come 2 operazioni. Il paper non dichiara la
+   convenzione: e' dedotta dai suoi numeri, che tornano in FLOPs sulla
+   configurazione di default. La conversione MAC -> FLOPs vale 2 per
+   definizione, ma due contatori reali non concordano esattamente perche'
+   coprono insiemi di operazioni diversi: `results/benchmark.json`, prodotto
+   quando il repository aveva anche un contatore fvcore, riporta un rapporto
+   di 1.99 sul denso e 1.95 sullo sparso. La differenza fra contatori e'
+   quindi di pochi punti percentuali, contro il +78 % di divergenza dalla
+   Tabella 3 del paper (README, sez. 5).
+2. `grid_sample` non e' contata da nessuno strumento — e' gather e
+   interpolazione, senza matmul — e va aggiunta a mano con
+   `grid_sample_flops()`. Lo fa `scripts/cost_ablation.py`, che ne riporta
+   la quota: 0.60 % del modello sparso.
+3. Si misura su UN input da 1 secondo, in inferenza, con batch 1. Il
+   training costa circa 3x, ma non e' quello che si riporta ne' qui ne' nel
+   paper.
 
-1. FLOPs != MAC, e qui si contano FLOPs. `torch.utils.flop_counter` conta le
-   moltiplicazioni-addizioni come 2 operazioni; una libreria come fvcore
-   conta MAC e li chiama "flops", cioe' meta'. Il paper non dichiara la
-   convenzione: e' stata dedotta dai suoi stessi numeri (il denso della
-   Tabella 2 torna in FLOPs, non in MAC).
-
-   In fase 2 la misura girava anche con fvcore come secondo contatore
-   indipendente, e i due concordavano sul fattore 2 esatto. Deciso il punto,
-   il secondo contatore non discriminava piu' nulla: e' stato rimosso, con
-   la sua dipendenza. Per convertire in MAC basta dividere per 2.
-
-2. `grid_sample` (l'interpolazione bilineare del campionamento sparso) NON
-   e' contata da nessuno dei due strumenti: e' un'op di gather+lerp senza
-   matmul. Va aggiunta a mano — vedi `grid_sample_flops()`.
-
-3. Misura sempre su UN input da 1 secondo, in inferenza, con `eval()` e
-   `no_grad()`. Il training costa circa 3x, ma non e' quello che si riporta.
+Non si contano softmax, GELU e LayerNorm: e' la convenzione con cui sono
+riportati i FLOPs in letteratura, quella del paper compresa, e cambiarla
+renderebbe i due numeri non confrontabili.
 """
 
 from __future__ import annotations
@@ -35,39 +35,27 @@ from torch import nn
 
 @dataclass
 class FlopReport:
-    native_flops: float | None
-    manual_extra_flops: float
+    """Costo di un forward. `flops` e' None se il contatore non e' disponibile."""
+
+    flops: float | None
     params: int
 
-    @property
-    def native_total(self) -> float | None:
-        if self.native_flops is None:
-            return None
-        return self.native_flops + self.manual_extra_flops
-
     def __str__(self) -> str:
-        lines = [f"parametri            : {self.params / 1e6:8.3f} M"]
-        if self.native_flops is not None:
-            lines.append(f"FLOPs (torch nativo) : {self.native_flops / 1e9:8.4f} G")
-        if self.manual_extra_flops:
-            lines.append(f"extra manuali        : {self.manual_extra_flops / 1e9:8.4f} G")
-            if self.native_total is not None:
-                lines.append(f"TOTALE (nativo+extra): {self.native_total / 1e9:8.4f} G")
+        lines = [f"parametri : {self.params / 1e6:8.3f} M"]
+        if self.flops is not None:
+            lines.append(f"FLOPs     : {self.flops / 1e9:8.4f} G")
         return "\n".join(lines)
 
 
-def count_parameters(model: nn.Module, trainable_only: bool = False) -> int:
-    ps = model.parameters()
-    if trainable_only:
-        ps = (p for p in model.parameters() if p.requires_grad)
-    return sum(p.numel() for p in ps)
+def count_parameters(model: nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters())
 
 
 def grid_sample_flops(num_points: int, channels: int) -> float:
     """FLOPs dell'interpolazione bilineare, contati a mano.
 
-    Per ogni punto e canale: 4 letture pesate + 3 somme = 7 operazioni,
-    piu' ~4 operazioni per calcolare i pesi (condivisi fra i canali).
+    Per punto e canale: 4 letture pesate + 3 somme = 7 operazioni, piu' ~4
+    per i pesi, condivisi fra i canali.
     """
     return num_points * (4.0 + channels * 7.0)
 
@@ -77,21 +65,15 @@ def analyze(
     input_shape: tuple[int, ...],
     *,
     device: str | torch.device = "cpu",
-    manual_extra_flops: float = 0.0,
 ) -> FlopReport:
     """Misura il costo di un forward con batch 1.
 
     `input_shape` e' la forma SENZA la dimensione di batch,
-    es. (16000,) per una waveform da 1 s.
+    es. (1, 64, 101) per uno spettrogramma log-mel.
     """
     model = model.to(device).eval()
     x = torch.zeros(1, *input_shape, device=device)
-
-    return FlopReport(
-        native_flops=_count_native(model, x),
-        manual_extra_flops=manual_extra_flops,
-        params=count_parameters(model),
-    )
+    return FlopReport(flops=_count_native(model, x), params=count_parameters(model))
 
 
 def _count_native(model: nn.Module, x: torch.Tensor) -> float | None:
@@ -99,15 +81,10 @@ def _count_native(model: nn.Module, x: torch.Tensor) -> float | None:
         from torch.utils.flop_counter import FlopCounterMode
     except ImportError:
         return None
-    # NIENTE torch.no_grad() qui, ed e' voluto. FlopCounterMode usa
-    # ModuleTracker, che registra hook sui tensori d'ingresso di ogni
-    # modulo: sotto no_grad un Parameter espanso (le regioni iniziali del
-    # modello sparso) non ha ne' grad_fn ne' accumulatore, e la
-    # registrazione fallisce con un AssertionError poco parlante.
-    #
-    # Contare con il grafo attivo non cambia il risultato — FlopCounterMode
-    # conta le op del forward, e il backward verrebbe contato solo
-    # chiamando .backward() — e costa un grafo per un singolo campione.
+    # Niente torch.no_grad(), ed e' voluto: sotto no_grad il ModuleTracker di
+    # FlopCounterMode fallisce sui Parameter espansi (le regioni iniziali del
+    # modello sparso), che non hanno grad_fn. Il grafo attivo non cambia il
+    # conteggio, che riguarda solo le op del forward.
     counter = FlopCounterMode(display=False)
     with counter:
         model(x)
@@ -125,20 +102,14 @@ def benchmark_latency(
 ) -> float:
     """Latenza media in ms per un forward, sul solo modello.
 
-    Serve a mostrare che il guadagno in FLOPs non si traduce
-    automaticamente in latenza: e' un'osservazione che vale una slide.
+    Mostra che il guadagno in FLOPs non si traduce automaticamente in
+    latenza. `batch_size` cambia la domanda: a 1 e' lo scenario del paper —
+    una parola alla volta — dove i lanci di kernel non sono ammortizzati e i
+    FLOPs predicono male; a 64 e' il regime di training, dove il rapporto si
+    avvicina a quello aritmetico.
 
-    `batch_size` sposta la domanda. A 1 si misura lo scenario dichiarato dal
-    paper — un dispositivo che classifica una parola alla volta — dove il
-    costo dei lanci di kernel non e' ammortizzato da nulla e i FLOPs
-    predicono male. A 64 si misura il regime di training, dove la GPU ha
-    lavoro sufficiente a nasconderli e il rapporto si avvicina a quello
-    aritmetico. Riportare le due misure insieme e' l'unico modo onesto di
-    rispondere a "quanto e' piu' veloce".
-
-    Il `warmup` non e' un dettaglio: le prime esecuzioni pagano
-    l'allocazione della cache di memoria, la scelta degli algoritmi cuDNN e
-    la compilazione dei kernel. Misurarle significa misurare l'avvio.
+    Il `warmup` non e' un dettaglio: le prime esecuzioni pagano allocazione
+    della cache, scelta degli algoritmi cuDNN e compilazione dei kernel.
     """
     import time
 

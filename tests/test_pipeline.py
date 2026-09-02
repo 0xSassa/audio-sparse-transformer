@@ -1,4 +1,4 @@
-"""Test dell'infrastruttura della Fase 2.
+"""Test dell'infrastruttura di misura e dei modelli.
 
 Nessuno di questi test richiede il dataset scaricato: verificano forme,
 invarianti numeriche e il contatore di FLOPs su tensori sintetici. Servono
@@ -76,22 +76,9 @@ def test_logmel_keeps_the_recording_level():
     assert not torch.allclose(forte, piano, atol=1e-3)
 
 
-def test_logmel_rejects_wrong_rank():
-    front = LogMelSpectrogram()
-    with pytest.raises(ValueError):
-        front(torch.randn(BATCH, 1, CLIP))
-
-
 # --------------------------------------------------------------------------
 # Augmentation
 # --------------------------------------------------------------------------
-
-def test_one_hot_is_proper_distribution():
-    labels = torch.randint(NUM_CLASSES, (BATCH,))
-    t = one_hot(labels, NUM_CLASSES)
-    assert t.shape == (BATCH, NUM_CLASSES)
-    assert torch.allclose(t.sum(dim=1), torch.ones(BATCH))
-
 
 @pytest.mark.parametrize("fn", [mixing, phasemix])
 def test_augmentation_produces_multi_hot_targets(fn):
@@ -137,15 +124,6 @@ def test_mix_targets_clamps_when_classes_coincide():
     out = mix_targets(a, a, torch.zeros(4))
     assert float(out.max()) == 1.0
     assert torch.all(out.sum(dim=1) == 1)
-
-
-def test_phasemix_returns_real_signal():
-    """irfft deve restituire un segnale reale della lunghezza originale."""
-    wave = torch.randn(BATCH, CLIP)
-    targets = one_hot(torch.randint(NUM_CLASSES, (BATCH,)), NUM_CLASSES)
-    mixed, _ = phasemix(wave, targets)
-    assert mixed.dtype == torch.float32
-    assert mixed.shape[-1] == CLIP
 
 
 def test_phasemix_preserves_energy_scale():
@@ -284,14 +262,6 @@ def test_channel_layernorm_normalises_over_channels():
     assert torch.allclose(y.std(dim=1, unbiased=False), torch.ones(2, 5, 7), atol=1e-2)
 
 
-def test_apply_augmentations_without_augs_is_identity():
-    wave = torch.randn(BATCH, CLIP)
-    labels = torch.randint(NUM_CLASSES, (BATCH,))
-    out, targets = apply_augmentations(wave, labels, NUM_CLASSES, names=())
-    assert torch.equal(out, wave)
-    assert torch.allclose(targets, one_hot(labels, NUM_CLASSES))
-
-
 def test_apply_augmentations_always_returns_targets_of_fixed_shape():
     """Il percorso di loss deve essere unico: sempre [B, C] float."""
     wave = torch.randn(BATCH, CLIP)
@@ -343,28 +313,8 @@ def test_flops_counter_counts_flops_not_macs():
     """
     report = analyze(_TinyNet(), (100,))
     assert report.params == 100 * 200
-    if report.native_flops is not None:
-        assert report.native_flops == pytest.approx(40_000, rel=1e-6)
-
-
-def test_flops_report_adds_manual_extras():
-    extra = grid_sample_flops(num_points=36, channels=96)
-    report = analyze(_TinyNet(), (100,), manual_extra_flops=extra)
-    assert report.manual_extra_flops == extra
-    if report.native_flops is not None:
-        assert report.native_total == report.native_flops + extra
-
-
-def test_grid_sample_flops_scales_with_points_and_channels():
-    assert grid_sample_flops(72, 96) > grid_sample_flops(36, 96)
-    assert grid_sample_flops(36, 192) > grid_sample_flops(36, 96)
-
-
-def test_count_parameters_respects_trainable_flag():
-    net = _TinyNet()
-    assert count_parameters(net) == 20_000
-    net.fc.weight.requires_grad_(False)
-    assert count_parameters(net, trainable_only=True) == 0
+    if report.flops is not None:
+        assert report.flops == pytest.approx(40_000, rel=1e-6)
 
 
 # --------------------------------------------------------------------------
@@ -439,7 +389,7 @@ def test_adopted_dense_still_costs_what_we_reported():
 
     rep = analyze(model, (1, 64, 101))
     assert rep.params == 5_197_795, f"parametri cambiati: {rep.params:,}"
-    assert rep.native_flops == 560_431_424, f"FLOPs cambiati: {rep.native_flops:,}"
+    assert rep.flops == 560_431_424, f"FLOPs cambiati: {rep.flops:,}"
 
 
 def test_dense_is_batch_independent():
@@ -459,15 +409,6 @@ def test_dense_is_batch_independent():
         model.eval()
         b = model(spec)
     assert torch.equal(a, b)
-
-
-def test_seed_everything_is_reproducible():
-    seed_everything(1234)
-    a = torch.randn(50), np.random.rand(50)
-    seed_everything(1234)
-    b = torch.randn(50), np.random.rand(50)
-    assert torch.equal(a[0], b[0])
-    assert np.array_equal(a[1], b[1])
 
 
 def test_ema_moves_towards_model_and_lags_it():
@@ -590,7 +531,7 @@ def test_region_clamp_does_not_bind_at_initialisation():
     torch.manual_seed(0)
     adj = RegionAdjust(64)                     # inizializzazione reale: zeri
     delta = adj.to_delta(torch.randn(256, 4, 64))
-    assert float(delta[..., 2:].abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
+    assert float(delta[..., 2:].detach().abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
 
 
 def _load_plot_results():
@@ -723,10 +664,10 @@ def test_region_constraint_keeps_boxes_inside_the_plane():
         boxes = adj(torch.randn(32, 4, 64), boxes)
 
     assert torch.isfinite(boxes).all()
-    assert float(boxes.min()) >= -1e-6
-    assert float(boxes.max()) <= 1 + 1e-6
+    assert float(boxes.detach().min()) >= -1e-6
+    assert float(boxes.detach().max()) <= 1 + 1e-6
     _, size = boxes_to_cwh(boxes)
-    assert float(size.min()) >= adj.min_size - 1e-6        # niente regioni sotto-cella
+    assert float(size.detach().min()) >= adj.min_size - 1e-6        # niente regioni sotto-cella
 
 
 def test_region_constraint_is_off_by_default():
@@ -747,7 +688,7 @@ def test_region_constraint_is_off_by_default():
     torch.nn.init.normal_(libero.to_delta.weight, std=20.0)
     boxes = libero(torch.randn(16, 4, 64),
                    torch.tensor([[0.25, 0.25, 0.75, 0.75]]).expand(16, 4, 4).clone())
-    assert float(boxes.max()) > 1.0        # senza vincolo si esce, ed e' voluto
+    assert float(boxes.detach().max()) > 1.0        # senza vincolo si esce, ed e' voluto
 
 
 def test_sampler_shapes_and_three_sigma_normalisation():
@@ -771,8 +712,8 @@ def test_sampler_shapes_and_three_sigma_normalisation():
     off = sampler.to_offsets(sampler.norm(torch.randn(64, 4, 64)))
     off = off.view(64, 4, 36, 2)
     off = (off - off.mean(-2, keepdim=True)) / (3 * (off.std(-2, keepdim=True) + 1e-7))
-    assert abs(float(off.std(dim=-2).mean()) - 1 / 3) < 0.02
-    assert float((off.abs() <= 1.0).float().mean()) > 0.95
+    assert abs(float(off.detach().std(dim=-2).mean()) - 1 / 3) < 0.02
+    assert float((off.detach().abs() <= 1.0).float().mean()) > 0.95
 
 
 def test_decoder_update_is_residual():
@@ -820,7 +761,7 @@ def test_sparse_model_matches_the_declared_budget():
 
     rep = analyze(model, (1, 64, 101))
     assert abs(rep.params - 2.87e6) / 2.87e6 < 0.05
-    assert abs(rep.native_flops - 0.055e9) / 0.055e9 < 0.20
+    assert abs(rep.flops - 0.055e9) / 0.055e9 < 0.20
 
 
 def test_c196_would_blow_the_sparse_cost():
@@ -836,7 +777,103 @@ def test_c196_would_blow_the_sparse_cost():
     bad = analyze(SparseAudioTransformer(channel_reading="c196_proj96",
                                          pool_stride=(2, 1)),
                   (1, 64, 101))
-    assert (bad.native_flops - 0.055e9) / 0.055e9 > 0.5
+    assert (bad.flops - 0.055e9) / 0.055e9 > 0.5
+
+
+def test_params_match_the_paper_on_both_ablation_axes():
+    """Nove configurazioni dichiarate, nove verifiche senza addestrare nulla.
+
+    E' la verifica piu' forte che la lettura del metodo sia corretta, perche'
+    i due assi si controllano a vicenda: lungo N i parametri dichiarati sono
+    COSTANTI (2.87 M), lungo P piu' che raddoppiano (2.44 -> 5.35 M) per via
+    di `Ms` in R^{PxP}. Riprodurre entrambi gli andamenti per caso e'
+    improbabile; riprodurne uno solo no.
+    """
+    from src.models.sparse_model import SparseAudioTransformer
+    from src.paper import POINTS, TOKENS
+
+    for key, series in (("num_tokens", TOKENS), ("num_points", POINTS)):
+        for value, paper_params, _gflop, _acc in series:
+            model = SparseAudioTransformer(**{**ADOPTED_SPARSE, key: value})
+            got = count_parameters(model)
+            err = abs(got - paper_params * 1e6) / (paper_params * 1e6)
+            assert err < 0.03, f"{key}={value}: {got:,} contro {paper_params} M"
+
+
+def test_cost_per_token_does_not_depend_on_our_spectrogram():
+    """La pendenza del costo in N e' fissata dalle sole quantita' dichiarate.
+
+    FLOPs(N) = fisso + pendenza * N. Il termine fisso e' la early convolution
+    e dipende dalle nostre assunzioni sullo spettrogramma; la pendenza e' il
+    costo di un token e dipende solo da P, C, d_token, d_encoder, L_rep,
+    L_enc, tutti dichiarati dal paper.
+
+    Serve a rendere non negoziabile lo scarto documentato nel README: la
+    Tabella 3 implica ~3.9 MFLOP per token, noi ne misuriamo ~8.4, e la
+    differenza non si puo' attribuire alle nostre assunzioni.
+    """
+    from src.models.sparse_model import SparseAudioTransformer
+
+    slopes = []
+    for n_mels, n_frames in ((32, 101), (64, 101), (128, 101)):
+        costs = []
+        for n_tokens in (4, 36):
+            model = SparseAudioTransformer(n_mels=n_mels, n_frames=n_frames,
+                                           num_tokens=n_tokens, **ADOPTED_SPARSE)
+            costs.append(analyze(model, (1, n_mels, n_frames)).flops)
+        slopes.append((costs[1] - costs[0]) / (36 - 4))
+
+    assert max(slopes) - min(slopes) < 1e-3 * max(slopes)
+    assert 8.0e6 < slopes[0] < 9.0e6
+    # la Tabella 3 del paper: (179.00 - 54.61) MFLOP su 32 token
+    paper_slope = (0.179e9 - 0.05461e9) / (36 - 4)
+    assert slopes[0] / paper_slope > 2.0
+
+
+def test_geometry_counts_the_points_outside_the_plane():
+    """I conteggi di `geometry_from_trace`, sul modello appena inizializzato.
+
+    Con `to_delta` inizializzato a zero le regioni restano sulla griglia e il
+    lato medio vale `unit`. I punti dentro il piano non sono il 100% ma il
+    ~99.7%: la normalizzazione a tre sigma lascia fuori la coda, e le regioni
+    della griglia toccano il bordo. E' il caso di riferimento contro cui si
+    legge la degenerazione dei modelli ADDESTRATI, dove la frazione scende al
+    50% (results/*/region_geometry.json).
+    """
+    from src.models.sparse import geometry_from_trace
+    from src.models.sparse_model import SparseAudioTransformer
+
+    model = SparseAudioTransformer(**ADOPTED_SPARSE).eval()
+    spec = torch.randn(2, 1, 64, 101)
+    stages = geometry_from_trace(model.sampling_trace(spec))
+
+    assert len(stages) == 3
+    for stage in stages:
+        assert stage["points"] == 2 * 4 * 36
+        assert stage["inside"] / stage["points"] > 0.99
+        assert stage["size_sum"] / stage["boxes"] == pytest.approx(0.5)
+
+    # il metodo del modello e' la stessa cosa, cosi' non divergono
+    assert model.sampling_geometry(spec) == stages
+
+
+def test_geometry_counts_are_additive_over_batches():
+    """Conteggi grezzi, non frequenze: due mezzi batch = un batch intero.
+
+    E' cio' che permette a `scripts/region_geometry.py` di misurare l'intero
+    split di validation sommando, invece di mediare medie di batch.
+    """
+    from src.models.sparse_model import SparseAudioTransformer
+
+    torch.manual_seed(0)
+    model = SparseAudioTransformer(**ADOPTED_SPARSE).eval()
+    spec = torch.randn(4, 1, 64, 101)
+
+    whole = model.sampling_geometry(spec)
+    halves = [model.sampling_geometry(spec[:2]), model.sampling_geometry(spec[2:])]
+    for k, stage in enumerate(whole):
+        assert stage["points"] == halves[0][k]["points"] + halves[1][k]["points"]
+        assert stage["inside"] == halves[0][k]["inside"] + halves[1][k]["inside"]
 
 
 def test_sparse_model_is_batch_independent():

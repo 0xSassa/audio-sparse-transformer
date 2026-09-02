@@ -1,4 +1,4 @@
-"""Fase 2 — scarica Speech Commands V2, verifica gli split, costruisce la cache.
+"""Scarica Speech Commands V2, verifica gli split, costruisce la cache.
 
     python scripts/prepare_data.py --root data/raw --cache data/cache
 
@@ -49,7 +49,7 @@ def main() -> int:
 
     print()
     sanity_check(args.cache)
-    print("\nFase 2 (dati) completata.")
+    print("\nDati pronti.")
     return 0
 
 

@@ -1,8 +1,8 @@
 """Dataset e DataLoader su cache memory-mapped.
 
-Il Dataset restituisce forme d'onda grezze float32 in [-1, 1]. Tutto il
-resto — spettrogramma e augmentation — avviene sul batch in GPU: e' la
-scelta che tiene il DataLoader fuori dal percorso critico.
+Restituisce forme d'onda grezze float32 in [-1, 1]; spettrogramma e
+augmentation avvengono sul batch in GPU, per tenere il DataLoader fuori dal
+percorso critico.
 """
 
 from __future__ import annotations
@@ -21,16 +21,10 @@ INT16_SCALE = 32_768.0
 class SpeechCommandsCached(Dataset):
     """Dataset sulla cache memmap.
 
-    NOTA SUL MULTIPROCESSING (Windows). Il DataLoader con num_workers > 0 usa
-    il metodo 'spawn': l'oggetto Dataset viene PICKLATO e inviato a ogni
-    worker. Se la memmap fosse un attributo dell'istanza, pickle proverebbe a
-    serializzare l'intero array da 2.7 GB e fallirebbe con
-    `OSError: [Errno 22] Invalid argument`.
-
-    Soluzione: la memmap viene aperta pigramente alla prima lettura e
-    rimossa dallo stato in `__getstate__`. Ogni worker riapre la propria vista
-    sullo stesso file — che e' esattamente il comportamento voluto, perche' il
-    sistema operativo condivide le pagine fra i processi.
+    La memmap si apre pigramente e viene rimossa in `__getstate__`: con
+    'spawn' (Windows) il Dataset viene picklato per ogni worker, e
+    serializzare l'array da 2.7 GB fallirebbe. Ogni worker riapre la propria
+    vista sullo stesso file, condividendo le pagine.
     """
 
     def __init__(self, cache_dir: Path, split: str) -> None:
@@ -59,35 +53,20 @@ class SpeechCommandsCached(Dataset):
         return int(self.labels.shape[0])
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        # np.asarray forza la copia dalla memmap: senza, il tensore
-        # resterebbe una vista su pagine condivise e pin_memory fallirebbe.
+        # np.asarray copia dalla memmap: una vista su pagine condivise
+        # farebbe fallire pin_memory
         wave = np.asarray(self.waves[idx], dtype=np.float32) / INT16_SCALE
         return torch.from_numpy(wave), int(self.labels[idx])
 
 
 class EpochShuffleSampler(Sampler[int]):
-    """Permutazione che dipende SOLO da (seed, epoca).
+    """Permutazione che dipende solo da (seed, epoca).
 
-    >>> PERCHE' NON `shuffle=True` <<<
-    `RandomSampler.__iter__`, quando non riceve un generatore, estrae il
-    proprio seed dal generatore GLOBALE della CPU. E
-    `_MultiProcessingDataLoaderIter.__init__` ne consuma un'altra per il
-    `base_seed` dei worker.
-
-    Con `persistent_workers=True` l'iteratore viene costruito UNA VOLTA e poi
-    riusato: un run ininterrotto consuma quindi un'estrazione per epoca,
-    mentre un run RIPRESO ricostruisce l'iteratore in un processo nuovo e ne
-    consuma una in piu'. Il seed del sampler risulta diverso, e da quel punto
-    in poi l'ordine dei dati diverge — anche ripristinando perfettamente tutti
-    gli stati RNG.
-
-    Misurato: 0.32 punti di accuratezza di scarto dopo due sole epoche, in
-    modalita' deterministica, cioe' con ogni altra fonte di rumore azzerata.
-
-    Qui la permutazione e' una funzione pura di (seed, epoca): immune al
-    numero di estrazioni fatte altrove, al confine di processo e all'ordine
-    di costruzione degli iteratori. E' lo stesso schema di `set_epoch` in
-    `DistributedSampler`.
+    Sostituisce `shuffle=True`, il cui seed viene estratto dal generatore
+    globale: con `persistent_workers` un run ripreso consuma un'estrazione in
+    piu' di uno continuo e l'ordine dei dati diverge, anche ripristinando
+    tutti gli stati RNG (misurato: 0.32 punti dopo due epoche). Stesso schema
+    di `set_epoch` in `DistributedSampler`.
     """
 
     def __init__(self, num_samples: int, seed: int) -> None:
@@ -119,9 +98,8 @@ def make_loader(
 ) -> DataLoader:
     """DataLoader con i default giusti per train vs eval.
 
-    Sul training usa `EpochShuffleSampler`: l'ordine dipende solo da
-    (seed, epoca), quindi resta identico anche riprendendo da checkpoint.
-    Chi lo usa deve chiamare `loader.sampler.set_epoch(epoch)` a ogni epoca.
+    Sul training usa `EpochShuffleSampler`: chi lo usa deve chiamare
+    `loader.sampler.set_epoch(epoch)` a ogni epoca.
     """
     is_train = split == "train"
     do_shuffle = is_train if shuffle is None else shuffle

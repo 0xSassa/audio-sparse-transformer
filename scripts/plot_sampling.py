@@ -3,26 +3,16 @@
     python scripts/plot_sampling.py --run sparse_seed0
 
 Sovrappone allo spettrogramma, per ognuna delle L_rep ripetizioni, le N
-regioni e i P punti effettivamente campionati, un colore per token. E' la
-verifica QUALITATIVA che il meccanismo faccia quello che dichiara: nel
-paper si vede il campionamento passare da uniforme (la griglia iniziale)
-a concentrato sulle zone informative.
+regioni e i P punti campionati, un colore per token.
 
-PERCHE' NON BASTA LA DIAGNOSTICA NUMERICA. `region_init_drift` e
-`region_adjust_norm` dicono che le regioni si muovono, non DOVE vanno. Un
-modello potrebbe spostarle in modo consistente ma insensato — per esempio
-tutte sullo stesso punto, o fuori dal parlato — e le due misure sarebbero
-identiche. Questa figura e' l'unico modo di vederlo.
+Completa la diagnostica numerica: `region_init_drift` e `region_adjust_norm`
+dicono che le regioni si muovono, non DOVE vanno — potrebbero finire tutte
+sullo stesso punto, o fuori dal parlato, e le due misure sarebbero identiche.
 
-COORDINATE. Il trace restituisce coordinate normalizzate in [0, 1]
-riferite alla FEATURE MAP [C, F', T'], non allo spettrogramma. Poiche' i
-due condividono gli assi fisici (tempo e frequenza) e la normalizzazione
-li rende adimensionali, si disegnano direttamente sopra lo spettrogramma
-con `extent=[0, 1, 0, 1]`. E' anche cio' che fa la figura del paper.
-
-Convenzione: `points[..., 0]` e' l'asse x di `grid_sample`, cioe' la
-larghezza della feature map, cioe' il TEMPO; `points[..., 1]` e' l'altezza,
-cioe' la FREQUENZA.
+COORDINATE. Il trace le restituisce normalizzate in [0, 1] sulla FEATURE MAP,
+non sullo spettrogramma: i due condividono gli assi fisici, quindi si
+disegnano direttamente sopra con `extent=[0, 1, 0, 1]`. `points[..., 0]` e'
+l'asse x di `grid_sample`, cioe' il TEMPO; `points[..., 1]` la FREQUENZA.
 """
 
 from __future__ import annotations
@@ -77,15 +67,10 @@ def main() -> int:
         print(f"[errore] checkpoint inesistente: {ckpt_path}")
         return 1
 
-    # La configurazione si legge dal CHECKPOINT, non da `config.yaml`.
-    #
-    # `config.yaml` e' la copia archiviata del sorgente, che contiene ancora
-    # `defaults: base.yaml` — e `base.yaml` sta in configs/, non nella
-    # cartella del run: risolverla da li' fallisce. Il checkpoint porta
-    # invece la config gia' risolta e, cosa piu' importante, quella
-    # REALMENTE usata, inclusi eventuali override da `--set`. E' anche cio'
-    # che fa `scripts/evaluate.py`, quindi i due script non possono
-    # divergere sulla configurazione dello stesso run.
+    # La config si legge dal CHECKPOINT, non da `config.yaml`: quest'ultimo e'
+    # la copia del sorgente e contiene ancora `defaults: base.yaml`, che dalla
+    # cartella del run non si risolve. Il checkpoint porta la config risolta e
+    # REALMENTE usata, override `--set` compresi — come fa `evaluate.py`.
     state = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = state["config"]
     if cfg["model"].get("kind") != "sparse":
@@ -102,9 +87,8 @@ def main() -> int:
     n_frames = frontend.n_frames(cfg["data"]["clip_samples"])
     model = build_model(cfg, frontend.n_mels, n_frames).to(device)
 
-    # Si disegna il modello EMA, lo stesso che produce i numeri riportati:
-    # una figura fatta con pesi diversi da quelli valutati mostrerebbe un
-    # modello che non esiste in nessuna tabella.
+    # si disegna il modello EMA, lo stesso che produce i numeri riportati:
+    # altri pesi mostrerebbero un modello che non sta in nessuna tabella
     model.load_state_dict(state["ema"])
     model.eval()
     print(f"checkpoint  : {args.checkpoint}, epoca {state['epoch']}, "
@@ -160,9 +144,8 @@ def main() -> int:
                 ax.scatter(points[t, :, 0], points[t, :, 1], s=3.2,
                            color=colors[t], edgecolors="none", alpha=0.95)
 
-            # Le regioni possono uscire dal piano: `grid_sample` usa
-            # padding_mode="border", quindi un punto fuori legge il bordo.
-            # Si mostra comunque il riquadro unitario per far vedere quanto.
+            # limiti oltre [0,1]: le regioni possono uscire dal piano, e si
+            # vuole vedere di quanto
             ax.set_xlim(-0.05, 1.05)
             ax.set_ylim(-0.05, 1.05)
             ax.set_xticks([])
@@ -185,31 +168,26 @@ def main() -> int:
     fig.savefig(out, dpi=args.dpi)
     print(f"figura      : {out}")
 
-    # Geometria per stadio: il riscontro quantitativo dell'impressione
-    # visiva, nella stessa esecuzione.
-    #
-    # Una versione precedente stampava un solo numero — lo scostamento delle
-    # regioni FINALI dalla griglia iniziale — che valeva 19106 e non voleva
-    # dire niente, perche' sommava stadi con geometrie incomparabili. La
-    # grandezza che conta e' quanti punti restano DENTRO il piano: fuori,
-    # `padding_mode="border"` li fa leggere il bordo, e il campionamento
-    # smette di essere selettivo.
-    from src.models.sparse import boxes_to_cwh
+    # Riscontro quantitativo dell'impressione visiva. La grandezza che conta e'
+    # quanti punti restano DENTRO il piano: fuori, `padding_mode="border"` li
+    # fa leggere il bordo e il campionamento smette di essere selettivo.
+    from src.models.sparse import geometry_from_trace
 
     print()
-    print("geometria per ripetizione (sui campioni disegnati):")
-    for k, stage in enumerate(trace):
-        _, size = boxes_to_cwh(stage["boxes"])
-        pts = stage["points"]
-        inside = float(((pts >= 0) & (pts <= 1)).all(-1).float().mean())
+    print("geometria per ripetizione (sui soli campioni disegnati):")
+    for k, g in enumerate(geometry_from_trace(trace)):
+        inside = g["inside"] / g["points"]
         flag = "" if inside > 0.9 else "   <-- meta' dei punti legge il bordo"
-        print(f"  rip. {k + 1}:  dimensione media {float(size.mean()):9.3f}  "
-              f"max {float(size.max()):10.3f}   punti dentro il piano "
-              f"{100 * inside:5.1f}%{flag}")
+        print(f"  rip. {k + 1}:  dimensione media "
+              f"{g['size_sum'] / g['boxes']:9.3f}  max {g['size_max']:10.3f}   "
+              f"punti dentro il piano {100 * inside:5.1f}%{flag}")
     print()
     print("(regioni molto piu' grandi del piano = il campionamento degenera:")
     print(" fuori dal piano il padding 'border' fa leggere il bordo, e il")
     print(" campionamento smette di essere selettivo)")
+    print()
+    print("gli stessi conteggi su TUTTO lo split, e su file:")
+    print(f"  python scripts/region_geometry.py --run {args.run}")
     return 0
 
 

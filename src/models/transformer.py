@@ -1,32 +1,18 @@
-"""Encoder transformer, reimplementato.
+"""Encoder transformer, reimplementato senza nn.MultiheadAttention.
 
-Non si usa nn.MultiheadAttention: il progetto chiede una reimplementazione
-autonoma e all'orale va spiegato ogni passaggio. Il costo e' trascurabile,
-perche' con sequenze da 26 elementi il collo di bottiglia e' il lancio dei
-kernel, non la moltiplicazione di matrici.
-
-COMPLESSITA' — la derivazione centrale del progetto.
-
-Per una sequenza di n elementi in dimensione d, un singolo blocco costa:
+COMPLESSITA' di un blocco, per n elementi in dimensione d:
 
     proiezioni Q, K, V, O   4 n d^2      lineare in n
     punteggi Q K^T           n^2 d       QUADRATICO in n
     aggregazione A V         n^2 d       QUADRATICO in n
     feed-forward (ratio r)  2 r n d^2    lineare in n
 
-Totale ~ (4 + 2r) n d^2 + 2 n^2 d. Il termine quadratico domina quando
-n > (2 + r) d, cioe' — con d = 128 e r = 4 — per n > 768. Le nostre
-sequenze sono molto piu' corte, quindi in ASSOLUTO domina il termine
-lineare in n.
-
-E' un punto sottile ma importante per capire il paper: passare da n = 26
-frame a n = 4 token riduce il termine quadratico di (26/4)^2 = 42 volte,
-ma il termine lineare "solo" di 6.5 volte. Il guadagno reale sta in mezzo,
-ed e' esattamente quello che misureremo col contatore di FLOPs invece di
-dedurlo dalla formula.
-
-Il numero di parametri di un blocco e' invece indipendente da n:
-    (4 + 2r) d^2  piu' i bias e le due LayerNorm.
+Totale ~ (4 + 2r) n d^2 + 2 n^2 d: il termine quadratico domina solo per
+n > (2 + r) d, cioe' n > 768 con d=128 e r=4. Le nostre sequenze sono molto
+piu' corte, quindi domina il termine LINEARE — ed e' il motivo per cui il
+guadagno del modello sparso si misura col contatore di FLOPs invece di
+dedurlo dal rapporto (26/4)^2. I parametri, (4 + 2r) d^2 piu' bias e norme,
+non dipendono da n.
 """
 
 from __future__ import annotations
@@ -41,11 +27,9 @@ from torch import nn
 class MultiHeadSelfAttention(nn.Module):
     """Self-attention multi-testa, scritta per esteso.
 
-    Lo scaling per 1/sqrt(d_head) serve a controllare la varianza dei
-    punteggi: se q e k hanno componenti indipendenti a varianza 1, il loro
-    prodotto scalare su d_head dimensioni ha varianza d_head. Senza
-    riscalare, i logit crescono con la dimensione, la softmax satura e il
-    gradiente svanisce.
+    Lo scaling 1/sqrt(d_head) tiene la varianza dei punteggi a 1: senza, i
+    logit crescono con la dimensione, la softmax satura e il gradiente
+    svanisce.
     """
 
     def __init__(self, dim: int, num_heads: int, dropout: float = 0.0) -> None:
@@ -56,8 +40,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.head_dim = dim // num_heads
         self.scale = 1.0 / math.sqrt(self.head_dim)
 
-        # Una sola proiezione per Q, K, V: e' un'ottimizzazione, non una
-        # differenza di modello (un unico GEMM invece di tre).
+        # Q, K, V in una sola proiezione: un GEMM invece di tre, il modello
+        # non cambia.
         self.qkv = nn.Linear(dim, 3 * dim)
         self.out = nn.Linear(dim, dim)
         self.attn_drop = nn.Dropout(dropout)
@@ -79,14 +63,7 @@ class MultiHeadSelfAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    """MLP posizionale con GELU.
-
-    GELU e non ReLU perche' e' la scelta di entrambi i paper. Vale la pena
-    ricordare il legame col dropout visto a lezione (25/10): GELU(x) e'
-    x * P(X <= x) con X gaussiana, cioe' il valore atteso di un dropout
-    che azzera l'input in modo deterministico in base alla sua ampiezza,
-    invece che casualmente.
-    """
+    """MLP posizionale con GELU, la scelta di entrambi i paper."""
 
     def __init__(self, dim: int, ratio: int = 4, dropout: float = 0.0) -> None:
         super().__init__()
@@ -106,11 +83,9 @@ class FeedForward(nn.Module):
 class EncoderBlock(nn.Module):
     """Blocco pre-norm: x + Attn(LN(x)), poi x + FFN(LN(x)).
 
-    Vaswani et al. 2017 usa post-norm — LN(x + Attn(x)) — ma richiede
-    warmup del learning rate per non divergere. Con il pre-norm il ramo
-    residuo resta una strada pulita dall'ingresso all'uscita, i gradienti
-    passano senza attraversare la normalizzazione, e si addestra stabile
-    anche senza warmup. E' la ragione per cui e' diventato lo standard.
+    Il post-norm di Vaswani et al. 2017 richiede warmup del learning rate
+    per non divergere; col pre-norm il ramo residuo resta pulito e il
+    training e' stabile senza.
     """
 
     def __init__(self, dim: int, num_heads: int, ratio: int = 4,
@@ -130,12 +105,15 @@ class EncoderBlock(nn.Module):
 class TransformerEncoder(nn.Module):
     """Stack di blocchi pre-norm, con LayerNorm finale.
 
-    Attenzione al costo della PROFONDITA': a queste dimensioni la GPU e'
-    limitata dal lancio dei kernel, non dal calcolo. Misurato sulla RTX
-    5050, d=128 con 24 layer (4.96 M parametri) impiega 73 min per 100
-    epoche contro i 39.5 min di d=224 con 8 layer (5.19 M): stessa
-    capacita', quasi il doppio del tempo. A parita' di parametri conviene
-    la larghezza.
+    A queste dimensioni la GPU e' limitata dal lancio dei kernel, non dal
+    calcolo: a parita' di parametri conviene la larghezza, perche' allargare
+    d aumenta il lavoro per kernel mentre aggiungere layer aumenta il numero
+    di lanci. Misurato durante la ricostruzione del denso (d=128 x 24 layer
+    contro d=224 x 8, quasi 2x di tempo per epoca a parita' di parametri);
+    e' un confronto di quella fase, i cui run non sono archiviati, e non va
+    citato come risultato del progetto. I run archiviati usano tutti
+    d=224 x 8 sul denso e d=128 x 8 sullo sparso, quest'ultimo DICHIARATO
+    dal paper.
     """
 
     def __init__(self, dim: int, depth: int, num_heads: int, ratio: int = 4,

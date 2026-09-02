@@ -1,17 +1,8 @@
 """Tracciamento degli esperimenti: CSV e TensorBoard.
 
-Due destinazioni dietro una sola interfaccia:
-
-- il CSV e' l'unica fonte di verita' che sopravvive a tutto: sta nella
-  cartella del run, si legge con pandas, si committa in git se serve, ed e'
-  cio' da cui `scripts/plot_results.py` ricostruisce ogni figura;
-- TensorBoard e' locale e istantaneo, utile mentre il run gira.
-
-Il progetto ha usato per un periodo anche Weights & Biases come terza
-destinazione. E' stato rimosso: il confronto FRA run che giustificava W&B lo
-fa gia' `plot_results.py` leggendo i CSV, e un servizio esterno con account,
-rete e stato remoto e' un requisito in piu' per chiunque debba solo
-riprodurre i risultati. Nessun numero riportato veniva da li'.
+Il CSV nella cartella del run e' la fonte di verita' da cui
+`scripts/plot_results.py` ricostruisce ogni figura; TensorBoard serve solo
+a guardare il run mentre gira.
 """
 
 from __future__ import annotations

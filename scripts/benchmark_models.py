@@ -2,30 +2,21 @@
 
     python scripts/benchmark_models.py
 
-PERCHE' ESISTE UNO SCRIPT DEDICATO. Il tempo per epoca non e' una misura di
-latenza: mescola caricamento dei dati, log-mel, augmentation (che per
-phasemix include STFT e iSTFT), EMA, norma del gradiente e DUE passate di
-validation. Confrontare due modelli sul tempo per epoca risponde a
-«quanto dura il mio training», non a «quanto costa questo modello» — e le
-due domande hanno risposte diverse.
+Il tempo per epoca non e' una misura di latenza: mescola caricamento dati,
+log-mel, augmentation, EMA e due passate di validation, e una stima ricavata
+da poche epoche paga l'avvio dei worker sbagliando di un fattore. Da qui la
+regola: la latenza si misura con warmup, su GPU scarica, sul solo modello.
 
-Peggio: una stima ricavata da un run di una o due epoche paga l'avvio dei
-worker e la cache fredda ammortizzati su pochissime epoche, e sbaglia di
-un fattore. E' successo due volte in questo progetto, in entrambe le
-direzioni. Da qui la regola: la latenza si misura con warmup, su GPU
-scarica, sul solo modello.
+Si misurano due regimi:
 
-CHE COSA SI MISURA
+  batch 1    lo scenario del paper, una parola alla volta: e' il numero che
+             rende onesto o disonesto il claim sui FLOPs.
+  batch 64   il regime di training, dove la GPU nasconde la latenza dei
+             lanci di kernel.
 
-  batch 1    lo scenario dichiarato dal paper: un dispositivo che
-             classifica una parola alla volta. E' il numero che rende
-             onesto o disonesto il claim sui FLOPs.
-  batch 64   il regime di training, dove la GPU ha lavoro sufficiente a
-             nascondere la latenza dei lanci.
-
-Il front-end log-mel e' ESCLUSO da entrambe: e' identico nei due modelli e
-nessun contatore di FLOPs lo include, quindi tenerlo dentro sposterebbe
-entrambe le colonne della stessa quantita' nascondendo il rapporto.
+Il front-end log-mel e' ESCLUSO da entrambi: identico nei due modelli e non
+incluso in nessun contatore di FLOPs, sposterebbe le due colonne della
+stessa quantita' nascondendo il rapporto.
 """
 
 from __future__ import annotations
@@ -44,10 +35,9 @@ from src.flops import analyze, benchmark_latency
 from src.train import build_frontend, build_model
 from src.utils import load_config, provenance
 
-# `dense_flatten` non e' opzionale: e' il baseline ADOTTATO, quello su cui
-# poggia il confronto centrale. `dense` (pool_freq) resta perche' e' la
-# ricostruzione scartata e il suo costo serve al confronto fra le due
-# letture, ma la riga da leggere nei risultati e' quella flatten.
+# La riga da leggere e' `dense_flatten`, il baseline ADOTTATO; `dense`
+# (pool_freq) e' la ricostruzione scartata, tenuta per confrontare le due
+# letture.
 DEFAULT_CONFIGS = [
     "configs/dense.yaml",
     "configs/dense_flatten.yaml",
@@ -66,13 +56,10 @@ def main() -> int:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cuda":
-        # `mem_get_info` e' a livello di DISPOSITIVO e include il contesto
-        # CUDA di questo stesso processo, che da solo vale ~1 GB: leggerlo
-        # dopo aver inizializzato torch e chiamarlo "occupato da altri" e'
-        # un falso positivo garantito. Si misura quindi la crescita
-        # rispetto al contesto appena creato, e si stampa come contesto e
-        # non come avviso — la verifica seria si fa con `nvidia-smi` prima
-        # di lanciare.
+        # `mem_get_info` e' a livello di DISPOSITIVO e include il contesto CUDA
+        # di questo processo, che da solo vale ~1 GB: si misura quindi la
+        # crescita rispetto al contesto appena creato, e la si stampa come
+        # informazione. La verifica seria si fa con `nvidia-smi`.
         torch.zeros(1, device="cuda")
         free_after_ctx, total = torch.cuda.mem_get_info()
         ctx_mb = (total - free_after_ctx) / 1e6
@@ -94,7 +81,7 @@ def main() -> int:
         entry: dict = {
             "kind": cfg["model"].get("kind"),
             "params": cost.params,
-            "gflops": cost.native_flops / 1e9,
+            "gflops": cost.flops / 1e9,
             "seq_len": model.seq_len,
             "latency_ms": {},
         }
@@ -120,8 +107,7 @@ def main() -> int:
             line += f"  {e['latency_ms'][str(batch)]:>10.3f}"
         print(line)
 
-    # I rapporti sono il punto: un fattore N sui FLOPs quanti fattori vale
-    # sull'orologio? E' la domanda a cui il paper non risponde.
+    # il punto: un fattore N sui FLOPs quanti fattori vale sull'orologio?
     if len(report) == 2:
         (na, a), (nb, b) = report.items()
         print()

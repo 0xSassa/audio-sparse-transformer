@@ -1,24 +1,18 @@
 """Sparse feature extractor — il metodo di Kavaki & Mandel.
 
-L'idea: invece di dare al transformer tutti i frame temporali, gli si danno
-N TOKEN LATENTI, ciascuno accoppiato a una REGIONE del piano tempo-frequenza
-da cui estrae informazione. Token e regioni iniziali sono PARAMETRI APPRESI:
-il modello impara dove guardare, non solo cosa farne.
+Invece di tutti i frame temporali, il transformer riceve N TOKEN LATENTI,
+ciascuno accoppiato a una REGIONE del piano tempo-frequenza da cui estrae
+informazione. Token e regioni iniziali sono parametri appresi: il modello
+impara dove guardare. Configurazione dichiarata: N=4, P=36, d_token=64,
+L_rep=3.
 
-Configurazione dichiarata: N=4 token, P=36 campioni, d_token=64,
-d_encoder=128, L_rep=3 ripetizioni, L_enc=8 encoder.
+Formule dal paper, dettagli non dichiarati dal codice ufficiale di
+SparseFormer (github.com/showlab/sparseformer). Nessuna riga copiata.
 
-FORMULE — trascritte dal paper (eq. 7.1-7.8 del manuale), con i dettagli
-non dichiarati presi dal codice ufficiale di SparseFormer
-(github.com/showlab/sparseformer -> imagenet/models/sparseformer.py).
-Nessuna riga copiata.
-
-CONVENZIONE SUGLI ASSI. La feature map e' [B, C, F, T]: F (frequenza) e'
-l'altezza, T (tempo) la larghezza. Le regioni vivono in coordinate
-NORMALIZZATE [0, 1] su entrambi gli assi, e sono memorizzate come angoli
-opposti (x1, y1, x2, y2) come in SparseFormer — centro e dimensione si
-ricavano al volo. `grid_sample` vuole invece coordinate in [-1, 1], da cui
-la conversione 2*c-1 al momento del campionamento.
+ASSI. La feature map e' [B, C, F, T]: F (frequenza) e' l'altezza, T (tempo)
+la larghezza. Le regioni stanno in coordinate normalizzate [0, 1] come
+angoli opposti (x1, y1, x2, y2); `grid_sample` vuole [-1, 1], da cui la
+conversione 2*c-1 al campionamento.
 """
 
 from __future__ import annotations
@@ -32,30 +26,20 @@ from einops import rearrange
 from torch import nn
 
 # "none" e' la lettura letterale del paper: nulla impedisce alle regioni di
-# uscire dal piano. "clip" e' una NOSTRA variante, introdotta dopo aver
-# misurato che dalla seconda ripetizione meta' dei punti campionati cade
-# fuori (manuale, 12.12). Il default resta "none": le nostre aggiunte sono
-# ablation dichiarate, non il comportamento di riferimento.
+# uscire dal piano. "clip" e' una NOSTRA ablation, aggiunta dopo aver misurato
+# che dalla seconda ripetizione meta' dei punti cade fuori.
 RegionConstraint = Literal["none", "clip"]
 
-# COME le regioni vengono determinate. Serve a rispondere alla domanda che il
-# paper pone implicitamente e non misura: la saliency APPRESA serve davvero?
+# Come si determinano le regioni. Serve a rispondere alla domanda che il paper
+# pone implicitamente e non misura: la saliency appresa serve davvero?
 #
-#   "learned"  il metodo del paper: regioni iniziali apprese, piu' un
-#              aggiustamento per campione a ogni ripetizione.
-#   "grid"     congelati sia `to_delta` sia `box_init`: le regioni restano
-#              sulla griglia regolare iniziale. Nessuna saliency, ne' appresa
-#              ne' adattiva.
+#   "learned"  il metodo del paper: regioni apprese piu' aggiustamento per
+#              campione a ogni ripetizione.
+#   "grid"     `to_delta` e `box_init` congelati: nessuna saliency.
 #
-# Esisteva un terzo modo, "static" (solo `to_delta` congelato: regioni apprese
-# ma uguali per ogni ingresso), che avrebbe separato "appreso" da "adattivo".
-# E' stato rimosso perche' non e' mai stato eseguito: era un esperimento
-# dichiarato e non fatto, non una via di codice usata.
-#
-# Nota utile a leggere il risultato: alla PRIMA ripetizione le regioni sono
-# gia' identiche per ogni ingresso anche in "learned", perche' i token
-# entrano come `token_init`, che e' un parametro. L'adattivita' esiste solo
-# dalla seconda in poi.
+# Alla PRIMA ripetizione le regioni sono identiche per ogni ingresso anche in
+# "learned", perche' i token entrano come `token_init`: l'adattivita' esiste
+# solo dalla seconda in poi.
 RegionMode = Literal["learned", "grid"]
 
 
@@ -77,11 +61,9 @@ def init_boxes_on_grid(num_tokens: int, unit: float = 0.5) -> torch.Tensor:
     width and height of them to half of the feature dimension» — da cui
     `unit = 0.5`.
 
-    La griglia e' root x root con root = sqrt(N), e da questo discende un
-    fatto che spiega un dettaglio del paper: N DEVE ESSERE UN QUADRATO
-    PERFETTO. Non a caso l'ablation della Tabella 3 usa N in {4, 9, 16,
-    25, 36}. Non era una scelta estetica degli autori ma un vincolo
-    strutturale ereditato da SparseFormer.
+    La griglia e' root x root con root = sqrt(N), quindi N DEVE ESSERE UN
+    QUADRATO PERFETTO: e' il vincolo strutturale, ereditato da SparseFormer,
+    che spiega perche' l'ablation della Tabella 3 usa N in {4, 9, 16, 25, 36}.
     """
     root = round(math.sqrt(num_tokens))
     if root * root != num_tokens:
@@ -106,20 +88,10 @@ class RegionAdjust(nn.Module):
         (tx, ty, tw, th) = Linear(t)
         x' = x + tx*w      w' = w * exp(tw)
 
-    PERCHE' L'ESPONENZIALE, tre ragioni tutte necessarie (Faster R-CNN):
-
-    - POSITIVITA': larghezza e altezza devono restare positive, e
-      w*exp(t) lo garantisce per costruzione qualunque cosa produca la
-      rete. Una forma additiva richiederebbe un clamp, che azzera il
-      gradiente proprio quando e' attivo.
-    - INVARIANZA DI SCALA: l'aggiornamento e' moltiplicativo, quindi lo
-      stesso t raddoppia una regione piccola e una grande. La rete impara
-      RAPPORTI, non incrementi assoluti.
-    - SIMMETRIA: t e -t danno fattori reciproci, quindi allargare e
-      restringere costano lo stesso nello spazio dei parametri.
-
-    Anche gli spostamenti sono relativi alla dimensione della regione
-    (tx*w): una regione grande si sposta di piu' a parita' di segnale.
+    L'esponenziale (come in Faster R-CNN) garantisce dimensioni positive per
+    costruzione, rende l'aggiornamento invariante di scala — la rete impara
+    rapporti, non incrementi — e simmetrico fra allargare e restringere.
+    Anche gli spostamenti sono relativi alla dimensione (tx*w).
     """
 
     def __init__(self, token_dim: int, constraint: RegionConstraint = "none",
@@ -128,28 +100,40 @@ class RegionAdjust(nn.Module):
         self.constraint = constraint
         self.min_size = min_size
         self.to_delta = nn.Linear(token_dim, 4)
-        # partenza dall'identita': senza questo, alla prima iterazione le
-        # regioni schizzerebbero via da una griglia scelta con cura
+        # partenza dall'identita': senza, alla prima iterazione le regioni
+        # schizzerebbero via dalla griglia iniziale
         nn.init.zeros_(self.to_delta.weight)
         nn.init.zeros_(self.to_delta.bias)
 
     # Limite sul delta logaritmico prima dell'esponenziale.  [NOSTRA AGGIUNTA]
+    # Serve perche' exp() in float32 va a infinito oltre ~88: un solo passo
+    # anomalo darebbe regioni inf o 0, quindi NaN nel gradiente.
     #
-    # Ne' il paper ne' SparseFormer lo prevedono: le equazioni (2)-(5) non
-    # pongono alcun vincolo su coordinate o dimensioni. Serve perche' exp()
-    # in float32 va a infinito oltre ~88, e un solo passo anomalo produrrebbe
-    # regioni di dimensione inf o 0, quindi NaN nel gradiente.
+    # QUANTO MORDE, misurato su tutto il validation set di ogni run
+    # (`scripts/region_geometry.py`, campo `clamped_fraction`):
     #
-    # NON e' inerte: sul modello ADDESTRATO il limite morde su circa meta'
-    # delle componenti nell'ultima ripetizione. Ne segue che il default di
-    # questo repository non e' il metodo del paper alla lettera, e che il
-    # metodo come scritto e' numericamente instabile.
+    #   run                 rip.1   rip.2   rip.3
+    #   sparse_seed1         0 %     0 %     0 %     geometria sana
+    #   sparse_grid_seed0    0 %     0 %     0 %     regioni congelate
+    #   sparse_seed0         0 %    46 %    50 %     geometria degenerata
+    #   sparse_seed2         0 %    26 %    50 %     geometria degenerata
     #
-    # Le misure, e perche' per mesi abbiamo creduto il contrario:
-    # tests/test_pipeline.py::test_region_clamp_does_not_bind_at_initialisation
+    # Il clamp e' esattamente inerte finche' le regioni restano nel piano, e
+    # interviene solo dove sono gia' esplose. Non sta dando forma a un
+    # modello sano: sta impedendo a un modello degenere di produrre NaN.
+    # E' la ragione per cui questa aggiunta non compromette il confronto col
+    # paper, che il clamp non ha.
     MAX_LOG_SCALE = 4.0
 
-    def forward(self, tokens: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: torch.Tensor, boxes: torch.Tensor,
+                *, return_delta: bool = False):
+        """`return_delta=True` restituisce anche il delta PRIMA del clamp.
+
+        Serve solo alla diagnostica: e' l'unico modo di misurare quanto
+        spesso `MAX_LOG_SCALE` morde, cioe' quanto il modello si discosta
+        dalla lettera del paper, che il clamp non ha. Il percorso di
+        training non lo usa.
+        """
         delta = self.to_delta(tokens)                      # [B, N, 4]
         center, size = boxes_to_cwh(boxes)
         center = center + delta[..., :2] * size
@@ -157,59 +141,38 @@ class RegionAdjust(nn.Module):
         size = size * log_scale.exp()
 
         if self.constraint == "clip":
-            # La regione viene riportata DENTRO il piano [0,1]x[0,1].
-            #
-            # Prima la dimensione, in [min_size, 1]: sopra 1 la regione non
-            # entra piu' nel piano, sotto min_size e' piu' piccola di una
-            # cella della feature map (16x51) e il campionamento legge quattro
-            # volte lo stesso valore. Poi il centro, ristretto a
-            # [size/2, 1 - size/2], che e' l'intervallo in cui la regione sta
-            # tutta dentro. L'ordine conta: vincolare il centro prima della
-            # dimensione lascerebbe passare regioni grandi centrate al bordo.
-            #
-            # NOTA SUL GRADIENTE, da dichiarare: dove il clamp morde il
-            # gradiente rispetto a `delta` e' nullo, quindi quel passo non
-            # corregge la regione. Non e' un blocco permanente — il token
-            # cambia a ogni ripetizione e a ogni batch — ma e' una differenza
-            # rispetto a una penalita' morbida, che manterrebbe segnale
-            # ovunque al prezzo di un iperparametro in piu'.
+            # Regione riportata dentro [0,1]x[0,1]: prima la dimensione, poi
+            # il centro nell'intervallo in cui la regione sta tutta dentro.
+            # L'ordine conta — vincolare il centro per primo lascerebbe
+            # passare regioni grandi centrate al bordo. Dove il clamp morde
+            # il gradiente su `delta` e' nullo.
             size = size.clamp(self.min_size, 1.0)
             half = 0.5 * size
             center = torch.min(torch.max(center, half), 1.0 - half)
 
-        return cwh_to_boxes(center, size)
+        out = cwh_to_boxes(center, size)
+        return (out, delta) if return_delta else out
 
 
 class SparseSampler(nn.Module):
-    """Passo 2 — P punti campionati dentro la regione, per interpolazione bilineare.
+    """Passo 2 — P punti campionati nella regione, per interpolazione bilineare.
 
         {(dx_i, dy_i)}_P = Linear(LayerNorm(t))
-        offset standardizzati sull'asse dei P punti, poi divisi per 3
         x~_i = x + 0.5 * dx_i * w
 
-    LA NORMALIZZAZIONE «A TRE DEVIAZIONI STANDARD». Il paper la nomina
-    senza darne la formula; SparseFormer la fornisce:
+    La normalizzazione «a tre deviazioni standard», che il paper nomina senza
+    formula, viene da SparseFormer:
 
         offset = (offset - mean(-2)) / (3 * (std(-2) + 1e-7))
 
-    Media e deviazione sono calcolate SULL'ASSE DEI P PUNTI, cioe' fra i
-    campioni di uno stesso token, non sul batch. Dopo, la deviazione vale
-    1/3, quindi per una distribuzione quasi normale il 99.7% della massa
-    cade in [-1, 1] — cioe', dopo il riscalamento, DENTRO la regione. E'
-    la regola dei tre sigma applicata per costruzione invece che sperando
-    che accada.
+    Media e deviazione sono SULL'ASSE DEI P PUNTI, non sul batch: dopo, la
+    deviazione vale 1/3, quindi il 99.7% della massa cade dentro la regione
+    per costruzione. Il modello controlla cosi' la FORMA della nuvola,
+    mentre posizione e dimensione restano governate dalla regione.
 
-    Il meccanismo e' disaccoppiato: il modello controlla la FORMA della
-    nuvola di campionamento, mentre posizione e dimensione restano
-    governate dalla regione. Per questo servono entrambi.
-
-    IL GRADIENTE. L'interpolazione bilineare rende differenziabile la
-    SELEZIONE: dF/dx~ e' una differenza finita fra celle adiacenti
-    (manuale eq. 7.6). Ne segue che il gradiente vede solo le 4 celle
-    vicine, quindi la regione si muove per piccoli passi seguendo la
-    pendenza locale — e che su una superficie ruvida quella differenza e'
-    rumore. E' esattamente il motivo per cui si campiona sull'uscita
-    della early convolution e non sullo spettrogramma grezzo.
+    L'interpolazione bilineare rende differenziabile la SELEZIONE: dF/dx~ e'
+    una differenza finita fra celle adiacenti, ed e' il motivo per cui si
+    campiona sull'uscita della early convolution e non sullo spettrogramma.
     """
 
     def __init__(self, token_dim: int, num_points: int) -> None:
@@ -222,19 +185,15 @@ class SparseSampler(nn.Module):
                 features: torch.Tensor, *, return_coords: bool = False):
         """tokens [B,N,d] · boxes [B,N,4] · features [B,C,F,T] -> [B,N,P,C].
 
-        `return_coords=True` restituisce anche le coordinate normalizzate dei
-        P punti, [B,N,P,2], in [0,1] sugli assi (tempo, frequenza) nell'ordine
-        che vuole `grid_sample`. Servono a disegnare la Figura 2 del paper —
-        i punti campionati sovrapposti allo spettrogramma — e senza di esse la
-        traccia mostrerebbe le regioni ma non ciò che il modello legge davvero
-        al loro interno. Il percorso di training non le chiede e resta
-        identico.
+        `return_coords=True` aggiunge le coordinate normalizzate dei P punti,
+        [B,N,P,2] in [0,1] sugli assi (tempo, frequenza): servono solo alla
+        Figura 2, il percorso di training resta identico.
         """
         b, n, _ = tokens.shape
         offsets = self.to_offsets(self.norm(tokens))
         offsets = offsets.view(b, n, self.num_points, 2)
 
-        # standardizzazione sull'asse dei punti, poi /3 (regola dei tre sigma)
+        # standardizzazione sull'asse dei punti, poi /3 (tre sigma)
         mean = offsets.mean(dim=-2, keepdim=True)
         std = offsets.std(dim=-2, keepdim=True) + 1e-7
         offsets = (offsets - mean) / (3.0 * std)
@@ -258,28 +217,20 @@ class AdaptiveDecoder(nn.Module):
         x2 = GELU(Ms x1)        mixing spaziale
         t' = t + Linear(x2)     aggiornamento residuo
 
-    PESI FISSI CONTRO PESI CONDIZIONATI. Uno strato lineare ordinario
-    applica gli stessi pesi a tutti gli input: impara una trasformazione
-    buona in media. Qui Mc e Ms sono FUNZIONI DEL TOKEN, quindi ogni token
-    decide come mescolare i propri campioni — uno che segue una regione di
-    bassa frequenza puo' pesare i canali diversamente da uno su un
-    transiente. E' lo stesso principio delle hypernetwork.
-
-    Il paper e' esplicito sul fatto che serva: «simply using a linear
+    Mc e Ms sono FUNZIONI DEL TOKEN — stesso principio delle hypernetwork —
+    quindi ogni token decide come mescolare i propri campioni invece di
+    subire pesi buoni in media. Il paper e' esplicito: «simply using a linear
     layer for this encoding is not effective».
 
-    Il costo si vede nei parametri: F deve produrre C^2 + P^2 valori, che
-    con C=96 e P=36 sono 10.512 uscite da una dimensione nascosta di
-    d/4 = 16. E' il blocco piu' pesante dell'estrattore.
+    E' il blocco piu' pesante dell'estrattore: F produce C^2 + P^2 valori,
+    10.512 uscite con C=96 e P=36.
 
-    L'aggiornamento e' RESIDUO: il token accumula informazione a ogni
-    ripetizione invece di essere riscritto, e il gradiente ha un percorso
-    diretto verso i parametri iniziali.
-
-    L'ultimo Linear opera sul tensore APPIATTITO P*C -> d. Non e' dedotto
-    dal testo — che dice solo «applied to a linear layer with dimension d»
-    — ma dal BUDGET DI PARAMETRI: la lettura appiattita da' 2,85 M contro
-    i 2,87 M dichiarati (-0,8%), quella ridotta sui punti 2,20 M (-23%).
+    L'ultimo Linear opera sul tensore APPIATTITO P*C -> d. Il paper non lo
+    dice, e la lettura e' stata scelta col conteggio dei parametri fatto a
+    mano PRIMA di implementare: appiattito dava 2.85 M contro i 2.87 M
+    dichiarati, ridotto sui punti 2.20 M. L'implementazione conta poi
+    2.822.711 parametri, -1.6 % dal dichiarato, e resta l'unica delle due
+    letture compatibile col budget.
     """
 
     def __init__(self, token_dim: int, channels: int, num_points: int,
@@ -308,12 +259,48 @@ class AdaptiveDecoder(nn.Module):
         return tokens + self.out(x.reshape(b, n, p * c))
 
 
+def geometry_from_trace(trace: list[dict]) -> list[dict]:
+    """Quanto del campionamento resta DENTRO il piano, ripetizione per ripetizione.
+
+    Nulla, nel metodo del paper, tiene le regioni dentro [0,1]^2: il delta di
+    `RegionAdjust` sposta il centro e moltiplica il lato per un esponenziale
+    senza vincoli. Quando una regione esce, i punti che cadono fuori vengono
+    serviti da `padding_mode="border"`, cioe' leggono il bordo della feature
+    map: il campionamento continua a produrre numeri, e smette di essere
+    selettivo. Non c'e' nessun sintomo nella loss.
+
+    Conteggi grezzi e non frequenze, cosi' chi aggrega su piu' batch somma
+    invece di mediare medie:
+
+        inside/points   punti con entrambe le coordinate in [0,1]
+        size_sum/boxes  lato medio delle regioni, in unita' di piano (1.0 =
+                        tutto l'asse); il valore iniziale e' `unit`, 0.5
+        size_max        lato massimo visto
+    """
+    out = []
+    for stage in trace:
+        _, size = boxes_to_cwh(stage["boxes"])
+        pts = stage["points"]
+        log_scale = stage["delta"][..., 2:]
+        out.append({
+            "inside": int(((pts >= 0) & (pts <= 1)).all(-1).sum()),
+            "points": int(pts.shape[0] * pts.shape[1] * pts.shape[2]),
+            "size_sum": float(size.sum()),
+            "size_max": float(size.max()),
+            "boxes": int(size.shape[0] * size.shape[1] * size.shape[2]),
+            # quante componenti di scala vengono tagliate da MAX_LOG_SCALE:
+            # e' la misura della nostra deviazione dalla lettera del paper
+            "clamped": int((log_scale.abs() >= RegionAdjust.MAX_LOG_SCALE).sum()),
+            "scales": int(log_scale.numel()),
+        })
+    return out
+
+
 class SparseFeatureExtractor(nn.Module):
     """L_rep ripetizioni di {aggiusta regione, campiona, decodifica}.
 
-    I moduli NON sono condivisi fra ripetizioni: ognuna ha i propri pesi.
-    Lo conferma il budget di parametri, che con moduli condivisi darebbe
-    un totale molto piu' basso di quello dichiarato.
+    I moduli NON sono condivisi fra ripetizioni: lo conferma il budget di
+    parametri, che con moduli condivisi sarebbe molto piu' basso.
     """
 
     def __init__(self, num_tokens: int = 4, num_points: int = 36,
@@ -325,7 +312,7 @@ class SparseFeatureExtractor(nn.Module):
         self.num_tokens = num_tokens
         self.num_points = num_points
 
-        # token e regioni iniziali: PARAMETRI APPRESI, non costanti
+        # token e regioni iniziali sono parametri appresi, non costanti
         self.token_init = nn.Parameter(torch.empty(num_tokens, token_dim))
         nn.init.trunc_normal_(self.token_init, std=1.0)
         self.box_init = nn.Parameter(init_boxes_on_grid(num_tokens, unit))
@@ -339,10 +326,9 @@ class SparseFeatureExtractor(nn.Module):
             for _ in range(repeats)
         )
 
-        # Il congelamento avviene DOPO la costruzione, e non sostituendo i
-        # moduli: la forma del modello, il conteggio dei parametri e il costo
-        # in FLOPs restano identici a "learned". E' cio' che rende l'ablation
-        # un confronto controllato invece di un modello piu' piccolo.
+        # Congelamento DOPO la costruzione, senza sostituire i moduli: forma,
+        # parametri e FLOPs restano identici a "learned", cosi' l'ablation e'
+        # un confronto controllato e non un modello piu' piccolo.
         self.region_mode = region_mode
         if region_mode == "grid":
             for stage in self.stages:
@@ -354,11 +340,9 @@ class SparseFeatureExtractor(nn.Module):
                 return_trace: bool = False):
         """features [B,C,F,T] -> token [B,N,d].
 
-        `return_trace=True` restituisce anche, per ogni stadio, le regioni
-        (`boxes`), i token e le coordinate dei P punti campionati
-        (`points`, [B,N,P,2] in [0,1]): servono a riprodurre la Figura 2 del
-        paper, in cui si vede il campionamento passare da uniforme a
-        concentrato sulle zone informative.
+        `return_trace=True` aggiunge, per ogni stadio, le regioni (`boxes`),
+        i token e le coordinate dei P punti (`points`, [B,N,P,2] in [0,1]):
+        servono a riprodurre la Figura 2 del paper.
         """
         b = features.shape[0]
         tokens = self.token_init.unsqueeze(0).expand(b, -1, -1)
@@ -366,15 +350,16 @@ class SparseFeatureExtractor(nn.Module):
         trace = []
 
         for stage in self.stages:
-            boxes = stage["adjust"](tokens, boxes)
             if return_trace:
+                boxes, delta = stage["adjust"](tokens, boxes, return_delta=True)
                 sampled, coords = stage["sample"](tokens, boxes, features,
                                                   return_coords=True)
             else:
+                boxes = stage["adjust"](tokens, boxes)
                 sampled = stage["sample"](tokens, boxes, features)
             tokens = stage["decode"](tokens, sampled)
             if return_trace:
                 trace.append({"boxes": boxes.detach(), "tokens": tokens.detach(),
-                              "points": coords.detach()})
+                              "points": coords.detach(), "delta": delta.detach()})
 
         return (tokens, trace) if return_trace else tokens

@@ -2,15 +2,10 @@
 
     python scripts/run_seeds.py --config configs/dense.yaml --seeds 0 1 2
 
-PERCHE' SERVE. Nella Tabella 3 del paper l'ablation sul numero di token non
-e' monotona (16 -> 97.53%, 25 -> 97.20%, 36 -> 97.94%) e i risultati sono su
-SINGOLO SEED. Il rumore da seed e' quindi dell'ordine di 0.3-0.4 punti,
-paragonabile a diverse delle differenze che il paper discute. Riportare un
-numero singolo, per noi, significherebbe non poter distinguere un effetto
-reale dal rumore.
+Serve perche' il rumore da seed e' di 0.3-0.4 punti, paragonabile a diverse
+delle differenze che il paper discute riportando risultati su singolo seed.
 
-Lo script salta i seed gia' completati, cosi' si puo' interrompere e
-riprendere senza rifare lavoro.
+Salta i seed gia' completati, cosi' si puo' interrompere e riprendere.
 """
 
 from __future__ import annotations
@@ -49,8 +44,7 @@ def main() -> int:
             if args.epochs is not None:
                 cmd += ["--epochs", str(args.epochs)]
             print(f"\n[run] {' '.join(cmd)}\n")
-            # check=False: l'errore lo gestiamo noi, per poter riportare
-            # quale seed ha fallito invece di sollevare un'eccezione secca
+            # check=False per poter riportare quale seed ha fallito
             proc = subprocess.run(cmd, cwd=ROOT, check=False)
             if proc.returncode != 0:
                 print(f"[errore] seed {seed} terminato con codice {proc.returncode}")

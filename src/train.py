@@ -3,28 +3,23 @@
     python -m src.train --config configs/dense.yaml --seed 0
     python -m src.train --config configs/dense.yaml --epochs 5 --tag smoke
 
-Ogni run e' completamente determinato dal file di configurazione piu' il
-seed: la config viene archiviata accanto ai risultati, cosi' un run e'
-riproducibile senza dover ricordare quali flag erano stati passati.
+Ogni run e' determinato dalla config piu' il seed, e la config viene
+archiviata accanto ai risultati.
 
-TRE SCELTE CHE VALE LA PENA CONOSCERE PRIMA DI LEGGERE IL CODICE
+Tre scelte da conoscere prima di leggere il codice:
 
-1. Si valuta il modello EMA, non i pesi correnti. E' quello che entrambi i
-   paper riportano; dimenticarlo costa qualche decimo di punto.
-
-2. L'accuratezza di TRAINING non e' interpretabile. Con mixing e phasemix
-   attive a ogni batch il modello vede target multi-hot: il numero che si
-   guarda e' solo quello di validation.
-
-3. Il test set si tocca UNA VOLTA SOLA, alla fine, e c'e' una guardia nel
-   codice che lo impedisce due volte (`scripts/evaluate.py`). Selezionare
-   il checkpoint guardando il test e' il modo piu' comune di produrre
-   numeri non confrontabili con la letteratura.
+1. Si valuta il modello EMA, non i pesi correnti, come in entrambi i paper.
+2. L'accuratezza di TRAINING non e' interpretabile: con le augmentation
+   attive a ogni batch il modello vede target multi-hot. Si guarda solo
+   quella di validation.
+3. Il test set si tocca UNA VOLTA SOLA, alla fine, con una guardia in
+   `scripts/evaluate.py` che lo impedisce due volte.
 """
 
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import shutil
 import time
@@ -74,45 +69,55 @@ def build_frontend(cfg: dict[str, Any]) -> LogMelSpectrogram:
 
 MODELS = {"dense": DenseAudioTransformer, "sparse": SparseAudioTransformer}
 
-# Chiavi di `model` che i CHECKPOINT e i `resolved_config.json` ARCHIVIATI
-# portano dentro di se' ma che il codice non conosce piu': le opzioni
-# corrispondenti sono state rimosse perche' nessun run le ha mai usate.
-#
-# Vanno ignorate in DUE posti, ed e' il motivo per cui l'elenco sta qui e non
-# dentro una funzione: `build_model` le scarta per poter ricaricare i pesi
-# vecchi, e `scripts/plot_results.py` le scarta per non spaccare un gruppo di
-# seed a seconda che il run sia stato archiviato prima o dopo la rimozione.
-# Un'opzione tolta dal codice e' esattamente speculare a un'opzione aggiunta,
-# e produce lo stesso difetto silenzioso.
-#
-# Il valore archiviato coincide sempre con l'unico comportamento rimasto,
-# quindi scartarle non cambia il modello ricostruito.
+# Chiavi che i checkpoint e i `resolved_config.json` ARCHIVIATI portano
+# ancora ma che il codice non conosce piu'. Servono in DUE posti — da cui
+# l'elenco a livello di modulo: `build_model` le scarta per ricaricare i pesi
+# vecchi, `scripts/plot_results.py` per non spaccare un gruppo di seed a
+# seconda che il run sia anteriore o posteriore alla rimozione. Il valore
+# archiviato coincide con l'unico comportamento rimasto.
 OBSOLETE_MODEL_KEYS = ("stem", "norm", "pos_encoding", "num_conv_layers")
+
+
+def model_config_with_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
+    """La config di un modello archiviato, completata coi default correnti.
+
+    Un `resolved_config.json` scritto prima che un'opzione esistesse non la
+    contiene, e confrontarlo con uno scritto dopo direbbe che sono due modelli
+    diversi quando sono lo stesso. I default si leggono dalla firma della
+    classe, cosi' non esiste un secondo elenco da tenere allineato; le opzioni
+    RIMOSSE dalla firma non si leggono piu' e vanno scartate a mano, ed e' a
+    cosa serve `OBSOLETE_MODEL_KEYS`.
+    """
+    model = MODELS.get(cfg.get("kind"))
+    if model is None:
+        return dict(cfg)
+    out = {k: v for k, v in cfg.items() if k not in OBSOLETE_MODEL_KEYS}
+    for name, param in inspect.signature(model.__init__).parameters.items():
+        if param.default is not inspect.Parameter.empty and name not in out:
+            out[name] = param.default
+    return out
 
 
 def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
     """Costruisce il modello dalla config, scegliendo su `model.kind`.
 
-    I due modelli espongono la stessa interfaccia — spettrogramma in,
-    logits fuori, piu' `seq_len` e `feature_shape` — quindi il training
-    loop, la valutazione e il contatore di FLOPs non li distinguono. E' il
-    motivo per cui il denso e' stato costruito per primo: quando si arriva
-    allo sparso l'unica variabile nuova e' l'estrattore.
+    I due modelli espongono la stessa interfaccia — spettrogramma in, logits
+    fuori, piu' `seq_len` e `feature_shape` — quindi training loop,
+    valutazione e contatore di FLOPs non li distinguono.
     """
     m = dict(cfg["model"])
     kind = m.pop("kind", "dense")
     if kind not in MODELS:
         raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
 
-    # Vedi OBSOLETE_MODEL_KEYS: e' cio' che tiene ricaricabili i checkpoint
-    # archiviati, da cui `evaluate.py` e `plot_sampling.py` ricostruiscono il
-    # modello leggendo `state["config"]`.
+    # tiene ricaricabili i checkpoint archiviati, da cui `evaluate.py` e
+    # `plot_sampling.py` ricostruiscono il modello
     for obsoleta in OBSOLETE_MODEL_KEYS:
         m.pop(obsoleta, None)
 
-    # `pool_stride` invece non si assume: e' un parametro DEDOTTO dai vincoli
-    # del paper — (2,1), solo sull'asse frequenza — e ricadere in silenzio su
-    # (2,2) darebbe 26 frame invece di 51, cioe' un altro esperimento.
+    # `pool_stride` invece non ha default: e' DEDOTTO dai vincoli del paper, e
+    # ricadere in silenzio su (2,2) darebbe 26 frame invece di 51, cioe' un
+    # altro esperimento.
     if "pool_stride" not in m:
         raise ValueError(
             "la configurazione non dichiara model.pool_stride: e' un parametro "
@@ -138,11 +143,8 @@ def build_optimizer(model: nn.Module, cfg: dict[str, Any]) -> torch.optim.Optimi
 # Un'epoca
 # --------------------------------------------------------------------------
 
-# TUTTO IN fp32, training compreso. Era stata predisposta l'autocast in bf16,
-# con la valutazione lasciata in fp32 perche' il confronto restasse equo; non
-# e' mai stata attivata in nessuno dei run riportati, quindi la macchina e'
-# stata rimossa. Riattivarla e' un `torch.autocast` attorno al forward, ma va
-# fatto verificando che l'accuratezza non si muova.
+# Tutto in fp32, training compreso: l'autocast in bf16 non e' mai stata usata
+# in nessuno dei run riportati ed e' stata rimossa.
 
 
 def train_one_epoch(
@@ -156,12 +158,10 @@ def train_one_epoch(
     total_loss, total_gnorm, seen, steps = 0.0, 0.0, 0, 0
     start = time.perf_counter()
 
-    # L'ITERATORE SI CREA QUI, NON AL `for`. E' deliberato: costruirlo
-    # consuma estrazioni dal generatore globale (`base_seed` dei worker), e
-    # lo fa SOLO nel processo che lo costruisce per la prima volta. In un run
-    # ripreso quella costruzione avviene di nuovo, mentre in uno continuo no.
-    # Seminando DOPO, lo stato dei generatori all'inizio del ciclo e'
-    # identico nei due casi, qualunque cosa il DataLoader abbia consumato.
+    # L'iteratore si crea QUI, non al `for`, e si semina DOPO: costruirlo
+    # consuma estrazioni dal generatore globale (`base_seed` dei worker) solo
+    # nel processo che lo costruisce, quindi un run ripreso e uno continuo
+    # divergerebbero. Cosi' lo stato a inizio ciclo e' identico nei due casi.
     data_iter = iter(loader)
     seed_epoch(base_seed, epoch)
 
@@ -170,8 +170,8 @@ def train_one_epoch(
 
         from tqdm import tqdm
 
-        # disattivata quando l'output non e' un terminale: in un file di log
-        # una barra di avanzamento produce migliaia di righe inutili
+        # disattivata fuori dal terminale: in un file di log una barra di
+        # avanzamento produce migliaia di righe inutili
         iterator = tqdm(data_iter, desc=f"epoca {epoch}", leave=False,
                         unit="batch", total=len(loader),
                         disable=not sys.stderr.isatty())
@@ -218,9 +218,6 @@ def evaluate(
 ) -> dict[str, Any]:
     """Accuratezza top-1 e loss su target one-hot (nessuna augmentation).
 
-    Sempre in fp32, come il training: il numero riportato non dipende dalla
-    precisione con cui si e' addestrato.
-
     Con `collect=True` restituisce anche etichette e predizioni, per le
     metriche per classe.
     """
@@ -244,10 +241,8 @@ def evaluate(
             all_true.append(labels.cpu())
             all_pred.append(pred.cpu())
 
-    # si ripristina il modo precedente invece di forzare train(): questa
-    # funzione viene chiamata anche sul modello EMA, che deve restare in
-    # eval. Con dropout=0 oggi e' innocuo, ma e' il tipo di dettaglio che
-    # diventa un bug silenzioso appena si attiva una regolarizzazione.
+    # si ripristina il modo precedente invece di forzare train(): la funzione
+    # gira anche sul modello EMA, che deve restare in eval
     model.train(was_training)
     out: dict[str, Any] = {"accuracy": correct / seen, "loss": total_loss / seen,
                            "n": seen}
@@ -299,11 +294,10 @@ def main() -> int:
     if args.epochs is not None:
         cfg["optim"]["epochs"] = args.epochs
 
-    # Gli override si applicano PRIMA di archiviare resolved_config.json, cosi'
-    # il file accanto ai risultati riporta i valori realmente usati e non quelli
-    # del YAML di partenza. Senza --tag ci si rifiuta di partire: un'ablation
-    # che scrive nella cartella del run di base lo distrugge in silenzio, e
-    # sarebbe la peggiore delle perdite — quella che si scopre dopo.
+    # Override applicati PRIMA di archiviare resolved_config.json, cosi' il
+    # file riporta i valori realmente usati. Senza --tag non si parte:
+    # un'ablation che scrive nella cartella del run di base lo distrugge in
+    # silenzio.
     if args.overrides:
         if args.tag is None:
             print("[errore] --set richiede --tag: senza, questo run scriverebbe "
@@ -316,9 +310,8 @@ def main() -> int:
             for line in apply_overrides(cfg, args.overrides):
                 print(f"[override] {line}")
         except (KeyError, TypeError, ValueError) as exc:
-            # Un traceback qui non aggiunge nulla: l'errore e' nella riga di
-            # comando dell'utente, non nel codice, e il messaggio di
-            # apply_overrides elenca gia' le chiavi disponibili.
+            # niente traceback: l'errore e' nella riga di comando, e il
+            # messaggio elenca gia' le chiavi disponibili
             print(f"[errore] {exc}")
             return 2
 
@@ -326,12 +319,9 @@ def main() -> int:
                      else args.deterministic)
     cfg["deterministic"] = deterministic
 
-    # Il modello sparso usa `grid_sample`, il cui backward su CUDA non ha
-    # implementazione deterministica: in modalita' stretta PyTorch solleva un
-    # errore invece di procedere. Si rilassa a `warn_only` SOLO per lui, e lo
-    # si dichiara: tutto cio' che puo' restare deterministico lo resta, e il
-    # livello ottenuto finisce nel summary, cosi' un run non bit-riproducibile
-    # non si spaccia per tale.
+    # Il backward di `grid_sample` non e' deterministico su CUDA: in modalita'
+    # stretta PyTorch solleverebbe un errore. Si rilassa a `warn_only` SOLO
+    # per il modello sparso, e il livello ottenuto finisce nel summary.
     needs_relaxed = cfg["model"].get("kind") == "sparse"
     determinism = seed_everything(args.seed, deterministic=deterministic,
                                   warn_only=needs_relaxed)
@@ -368,9 +358,9 @@ def main() -> int:
         final_div_factor=cfg["optim"]["final_div_factor"],
     )
 
-    # FLOPs misurati sul modello di QUESTO run: e' la metrica centrale del
-    # progetto e va registrata insieme all'accuratezza, non ricalcolata dopo
-    # sperando che la configurazione fosse la stessa.
+    # FLOPs misurati sul modello di QUESTO run e registrati col resto: sono la
+    # metrica centrale, non si ricalcolano dopo sperando che la configurazione
+    # fosse la stessa.
     from src.flops import analyze
 
     cost = analyze(build_model(cfg, frontend.n_mels, n_frames),
@@ -381,7 +371,7 @@ def main() -> int:
     print(f"run          : {tag}")
     print(f"codice       : commit {(prov['commit'] or '?')[:8]}"
           f"{'  ALBERO SPORCO' if prov['dirty'] else ''}")
-    print(f"costo        : {cost.native_flops/1e9:.4f} GFLOP")
+    print(f"costo        : {cost.flops/1e9:.4f} GFLOP")
     print(f"device       : {device} · {torch.cuda.get_device_name(0) if device.type=='cuda' else ''}")
     print(f"modello      : {n_params:,} parametri · sequenza {model.seq_len} · "
           f"feature {model.feature_shape}")
@@ -399,13 +389,11 @@ def main() -> int:
     if args.resume and ckpt_last.exists():
         state = torch.load(ckpt_last, map_location=device, weights_only=False)
 
-        # Il numero di epoche NON e' modificabile in ripresa. One-cycle lega
-        # la forma dello schedule al totale dei passi, e `load_state_dict`
-        # ripristina quel totale dal checkpoint sovrascrivendo quello appena
-        # costruito. Riprendere con un valore diverso porta a un errore
-        # criptico ("Tried to step N+1 times") al primo passo, oppure — se il
-        # nuovo totale fosse maggiore — a uno schedule silenziosamente
-        # sbagliato. Meglio fermarsi subito e dirlo.
+        # Il numero di epoche NON e' modificabile in ripresa: one-cycle lega la
+        # forma dello schedule al totale dei passi, che `load_state_dict`
+        # ripristina dal checkpoint. Riprendere con un valore diverso da' un
+        # errore criptico o, se maggiore, uno schedule silenziosamente
+        # sbagliato: meglio fermarsi subito.
         old = state.get("config", {}).get("optim", {})
         mismatches = [
             f"{k}: checkpoint {old.get(k)!r} vs richiesto {cfg['optim'][k]!r}"
@@ -433,8 +421,8 @@ def main() -> int:
     tracker = RunTracker(run_dir, cfg, tag, args.seed)
 
     for epoch in range(start_epoch, epochs + 1):
-        # Ordine dei dati E flusso casuale delle augmentation dipendono solo
-        # da (seed, epoca): identici anche riprendendo in un processo nuovo.
+        # ordine dei dati e flusso casuale delle augmentation dipendono solo da
+        # (seed, epoca): identici anche riprendendo in un processo nuovo
         train_loader.sampler.set_epoch(epoch)
         tr = train_one_epoch(model, frontend, ema, train_loader, optimizer,
                              scheduler, cfg, device, epoch, base_seed=args.seed)
@@ -451,9 +439,8 @@ def main() -> int:
               f"val(EMA) {100*ev_ema['accuracy']:.2f}%  "
               f"val(raw) {100*ev_raw['accuracy']:.2f}%  {tr['seconds']:.0f}s{mark}")
 
-        # diagnostiche specifiche del modello (per lo sparso: le regioni si
-        # stanno muovendo?). Gratuite, e l'unico modo di accorgersi che il
-        # meccanismo centrale del paper e' inerte.
+        # per lo sparso: le regioni si stanno muovendo? E' l'unico modo di
+        # accorgersi che il meccanismo centrale del paper e' inerte.
         diag = model.diagnostics() if hasattr(model, "diagnostics") else {}
         if diag:
             inerte = "   <-- MECCANISMO INERTE" if diag["region_adjust_norm"] == 0 else ""
@@ -502,7 +489,7 @@ def main() -> int:
         tag=tag, seed=args.seed, epochs=epochs, params=n_params,
         best_val_accuracy=best_acc, peak_gpu_mb=round(peak),
         seq_len=model.seq_len,
-        gflops=cost.native_flops / 1e9,
+        gflops=cost.flops / 1e9,
         provenance=prov, determinism=determinism,
     )
     tracker.finish()

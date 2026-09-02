@@ -7,16 +7,11 @@
       -> 8 transformer encoder    [B, 4, 128]     senza codifica posizionale
       -> media + classificatore   [B, 35]
 
-Condivide con il modello denso il front-end, l'encoder e l'intero training
-loop: l'unica differenza e' COME si producono i token. E' il motivo per cui
-il denso e' stato costruito per primo — quando si arriva qui, tutto il resto
-e' gia' validato e l'unica variabile nuova e' l'estrattore.
+Condivide con il modello denso il front-end, l'encoder e il training loop:
+l'unica differenza e' COME si producono i token.
 
-NIENTE CODIFICA POSIZIONALE, ed e' dichiarato dal paper: i token latenti non
-hanno un ordine intrinseco, sono un insieme e non una sequenza. Nel modello
-denso la questione era aperta — i frame temporali un ordine ce l'hanno — e
-infatti la testiamo in entrambe le varianti. Qui no: aggiungerla sarebbe un
-errore concettuale.
+Niente codifica posizionale, ed e' dichiarato dal paper: i token latenti
+sono un insieme, non una sequenza.
 """
 
 from __future__ import annotations
@@ -25,7 +20,8 @@ import torch
 from torch import nn
 
 from .frontend import ChannelReading, EarlyConv
-from .sparse import RegionConstraint, RegionMode, SparseFeatureExtractor
+from .sparse import (RegionConstraint, RegionMode, SparseFeatureExtractor,
+                     geometry_from_trace)
 from .transformer import TransformerEncoder
 
 
@@ -36,8 +32,8 @@ class SparseAudioTransformer(nn.Module):
         n_mels: int = 64,
         n_frames: int = 101,
         *,
-        # front-end: identico al denso, cosi' il confronto e' controllato.
-        # I default sono la configurazione adottata (`configs/sparse.yaml`).
+        # front-end identico al denso, cosi' il confronto e' controllato; i
+        # default sono la configurazione adottata (`configs/sparse.yaml`)
         channel_reading: ChannelReading = "c96",
         pool_stride: tuple[int, int] = (2, 1),
         # estrattore sparso
@@ -76,10 +72,9 @@ class SparseAudioTransformer(nn.Module):
         self.encoder = TransformerEncoder(dim, depth, num_heads, ffn_ratio, dropout)
         self.head = nn.Linear(dim, num_classes)
 
-        # copia immutabile della griglia iniziale, per misurare quanto le
-        # regioni si sono spostate durante il training (vedi `diagnostics`).
-        # E' un buffer non persistente: non finisce nei checkpoint e non
-        # sporca lo state_dict.
+        # copia della griglia iniziale, per misurare in `diagnostics` quanto
+        # le regioni si sono spostate. Buffer non persistente: non finisce
+        # nei checkpoint.
         self.register_buffer("_box_init_0", self.extractor.box_init.detach().clone(),
                              persistent=False)
 
@@ -94,23 +89,14 @@ class SparseAudioTransformer(nn.Module):
     def diagnostics(self) -> dict[str, float]:
         """Il meccanismo centrale del paper sta funzionando?
 
-        Il rischio silenzioso di questo metodo e' che le regioni NON si
-        muovano: il gradiente rispetto alle coordinate e' una differenza
-        finita fra celle adiacenti, e se non porta segnale utile le regioni
-        restano dove la griglia le ha messe. Il modello si addestrerebbe
-        comunque — degradando a un campionamento fisso — e produrrebbe un
-        numero plausibile senza che nulla nei log lo segnali.
+        Se le regioni non si muovono il modello si addestra comunque,
+        degradando a un campionamento fisso, e nulla nei log lo segnala.
+        Due misure gratuite (nessun forward):
 
-        Due misure, entrambe gratuite (nessun forward):
-
-        `region_init_drift` — quanto le regioni APPRESE si sono spostate
-            dalla griglia iniziale. Zero significa che il modello non ha
-            imparato dove guardare.
-
-        `region_adjust_norm` — norma dei pesi che generano l'aggiustamento
-            per-campione. Partono da ESATTAMENTE zero (inizializzazione
-            all'identita'), quindi qualunque valore > 0 dice che il ramo di
-            aggiustamento sta ricevendo gradiente e imparando.
+        `region_init_drift`  spostamento delle regioni apprese dalla griglia
+            iniziale: zero = il modello non ha imparato dove guardare.
+        `region_adjust_norm` norma dei pesi dell'aggiustamento per campione,
+            inizializzati a zero: > 0 = quel ramo sta ricevendo gradiente.
 
         Entrambe a zero dopo qualche epoca = il meccanismo e' morto.
         """
@@ -121,13 +107,19 @@ class SparseAudioTransformer(nn.Module):
 
     @torch.no_grad()
     def sampling_trace(self, spec: torch.Tensor) -> list[dict]:
-        """Regioni e token a ogni stadio — per riprodurre la Figura 2 del paper.
+        """Regioni e token a ogni stadio — per riprodurre la Figura 2.
 
-        Il paper mostra i punti campionati sovrapposti allo spettrogramma,
-        un colore per token, ai tre stadi: si vede il campionamento passare
-        da uniforme a concentrato sulle regioni informative. E' la verifica
-        qualitativa che il meccanismo faccia quello che dichiara, e la
-        diapositiva piu' convincente della presentazione.
+        Verifica qualitativa del meccanismo: si vede il campionamento
+        passare da uniforme a concentrato sulle regioni informative.
         """
         _, trace = self.extractor(self.frontend(spec), return_trace=True)
         return trace
+
+    @torch.no_grad()
+    def sampling_geometry(self, spec: torch.Tensor) -> list[dict]:
+        """Conteggi sulla geometria del campionamento, per ripetizione.
+
+        Riscontro quantitativo di cio' che la Figura 2 mostra a occhio.
+        Aggregabile su piu' batch: vedi `scripts/region_geometry.py`.
+        """
+        return geometry_from_trace(self.sampling_trace(spec))
