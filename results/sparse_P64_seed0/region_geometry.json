@@ -1,0 +1,48 @@
+{
+  "run": "sparse_P64_seed0",
+  "checkpoint": "best.pt",
+  "epoch": 43,
+  "split": "validation",
+  "num_tokens": 4,
+  "num_points": 64,
+  "repeats": 3,
+  "region_constraint": "none",
+  "region_mode": "learned",
+  "unit": 0.5,
+  "stages": [
+    {
+      "repeat": 1,
+      "inside_fraction": 0.9765625,
+      "size_mean": 0.7106662999053671,
+      "size_max": 1.175559639930725,
+      "clamped_fraction": 0.0,
+      "points": 2555136
+    },
+    {
+      "repeat": 2,
+      "inside_fraction": 0.5028984758541228,
+      "size_mean": 0.8668671907899423,
+      "size_max": 59.22856521606445,
+      "clamped_fraction": 0.001302474701933674,
+      "points": 2555136
+    },
+    {
+      "repeat": 3,
+      "inside_fraction": 0.0,
+      "size_mean": 0.5443969460363056,
+      "size_max": 54.7293701171875,
+      "clamped_fraction": 0.9980337641518886,
+      "points": 2555136
+    }
+  ],
+  "provenance": {
+    "python": "3.12.4",
+    "torch": "2.9.1+cu128",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "cuda": "12.8",
+    "commit": "9ab8e60908ab667603532d08deb2974fd5400e21",
+    "dirty": true,
+    "untracked": 29
+  }
+}
