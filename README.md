@@ -1,159 +1,447 @@
 # Audio Sparse-Transformer — riproduzione
 
-Progetto d'esame per **B031278 Deep Learning** (Fall 2025, prof. Paolo Frasconi),
+Progetto d'esame per B031278 Deep Learning (Fall 2025, prof. Paolo Frasconi),
 MSc in Artificial Intelligence, Università di Firenze.
 
-Riproduzione semplificata di:
+Riproduzione di:
 
 > H. Salami Kavaki, M. I. Mandel, *Audio Sparse-Transformer for Speech
 > Classification*, ICASSP 2025, pp. 1–5. DOI 10.1109/ICASSP49660.2025.10890475
 
-Il metodo è la trasposizione all'audio di **SparseFormer** (Gao et al.,
-arXiv:2304.03768); augmentation e parametri di training vengono da **EAT**
-(Gazneli et al., arXiv:2204.11479). Non esiste codice pubblico per Kavaki &
-Mandel: modello, training e misure sono reimplementati dalle formule del paper.
-Dataset: Google Speech Commands V2, 35 classi, split ufficiali speaker-disjoint.
+Non esiste codice pubblico per Kavaki & Mandel: modello, training e misure sono
+reimplementati dalle formule del paper. Il metodo è la trasposizione all'audio
+di SparseFormer (Gao et al., arXiv:2304.03768); augmentation e parametri di
+training vengono da EAT (Gazneli et al., arXiv:2204.11479). Dataset: Google
+Speech Commands V2, 35 classi, split ufficiali speaker-disjoint.
+
+L'obiettivo è riprodurre il metodo e l'architettura, non i numeri. I parametri
+tornano su nove configurazioni dichiarate; i costi e le accuratezze no, e le
+sezioni 4 e 6 dicono da cosa dipende.
 
 ---
 
-## Risultati
+## 1. Il metodo
 
-Modello EMA. Il test set è stato toccato **una volta sola per modello**, a
+Un transformer per audio riceve di solito una sequenza di frame temporali, e il
+costo dell'attenzione cresce con il quadrato della sua lunghezza. Kavaki &
+Mandel sostituiscono quella sequenza con N token latenti, con N molto minore del
+numero di frame.
+
+Ogni token `t ∈ R^d` è accoppiato a una regione `b = (x, y, w, h)` del piano
+tempo-frequenza. Token e regioni iniziali sono parametri appresi. Il modello
+ripete L_rep volte tre passi.
+
+**Aggiustamento della regione.** Il token produce un delta con uno strato
+lineare, e la regione si sposta e si ridimensiona con la parametrizzazione di
+Faster R-CNN:
+
+```
+tx, ty, tw, th = Linear(t)
+x' = x + tx·w        w' = w · exp(tw)
+y' = y + ty·h        h' = h · exp(th)
+```
+
+L'esponenziale garantisce dimensioni positive per costruzione e rende
+l'aggiornamento invariante di scala: la rete impara rapporti, non incrementi.
+
+**Campionamento.** Il token genera P offset relativi, normalizzati a tre
+deviazioni standard sull'asse dei punti, e i P punti si ottengono traslando il
+centro della regione:
+
+```
+{(Δxi, Δyi)}_P = Linear(LayerNorm(t))
+x̃i = x + 0.5·Δxi·w        ỹi = y + 0.5·Δyi·h
+```
+
+I valori nei punti vengono da un'interpolazione bilineare, che rende
+differenziabile la selezione: la derivata rispetto alle coordinate è una
+differenza finita fra celle adiacenti. È il motivo per cui si campiona
+sull'uscita di una convoluzione iniziale e non sullo spettrogramma grezzo, dove
+quel gradiente sarebbe troppo rumoroso (paper, §3.2).
+
+**Decoding.** Una rete `F` genera dal token due matrici di pesi, e i P campioni
+vengono mescolati prima sui canali e poi sullo spazio:
+
+```
+[Mc | Ms] = F(t)        Mc ∈ R^{C×C}   Ms ∈ R^{P×P}
+x1 = GELU(x0 · Mc)      x2 = GELU(Ms · x1)
+t' = t + Linear(x2)
+```
+
+I pesi sono funzione del token, quindi ogni token decide come mescolare i propri
+campioni invece di subire pesi buoni in media. Il paper è esplicito sul punto:
+«simply using a linear layer for this encoding is not effective».
+
+Gli N token finali entrano in uno stack di transformer-encoder, senza codifica
+posizionale perché i token sono un insieme e non una sequenza, e la
+classificazione avviene sulla loro media.
+
+Configurazione dichiarata (Tabella 1): N=4 token, P=36 campioni, d_token=64,
+d_encoder=128, L_rep=3, L_enc=8.
+
+---
+
+## 2. L'architettura
+
+I due modelli condividono tutto tranne come si arriva ai token, così il
+confronto è controllato.
+
+```
+spettrogramma log-mel   [B, 1, 64, 101]
+  early convolution     [B, 96, 16, 51]   conv 7×7 s2 → ReLU → maxpool → LayerNorm(C)
+      |
+      |--- sparso:  estrattore    [B, 4, 64]     4 token da 4×36 punti campionati
+      |             ponte lineare [B, 4, 128]
+      |
+      |--- denso:   flatten       [B, 51, 1536]  51 frame, ognuno coi suoi 96×16 valori
+      |             proiezione    [B, 51, 224]
+      |
+  8 transformer-encoder, nessuna codifica posizionale
+  media sui token + classificatore lineare      [B, 35]
+```
+
+L'encoder è reimplementato senza `nn.MultiheadAttention`. I blocchi sono
+pre-norm: il post-norm di Vaswani et al. richiede warmup del learning rate per
+non divergere, col pre-norm il ramo residuo resta pulito.
+
+Il costo di un blocco, per n elementi in dimensione d:
+
+| termine | costo | in n |
+|---|---|---|
+| proiezioni Q, K, V, O | 4 n d² | lineare |
+| punteggi Q Kᵀ | n² d | quadratico |
+| aggregazione A V | n² d | quadratico |
+| feed-forward (ratio r) | 2 r n d² | lineare |
+
+Il termine quadratico domina solo per n > (2+r)·d, cioè n > 768 con d=128 e r=4.
+Le nostre sequenze sono molto più corte, quindi passare da 51 frame a 4 token non
+fa risparmiare quanto suggerisce il rapporto (51/4)², e il guadagno va misurato
+invece che dedotto.
+
+---
+
+## 3. L'implementazione
+
+### Cosa il paper dichiara e cosa no
+
+Del modello sparso il paper dichiara la configurazione completa (Tabella 1),
+l'ottimizzatore, il learning rate, lo schedule, il weight decay, l'EMA, il batch
+e le due augmentation. Del modello denso dichiara soltanto parametri e FLOPs.
+Dello spettrogramma non dichiara nulla.
+
+Ogni scelta non dichiarata è marcata `[ASSUNZIONE]` in `configs/base.yaml` ed
+elencata nella sezione 7.
+
+### Deduzioni, non assunzioni
+
+Tre valori non sono stati scelti ma dedotti da vincoli del paper.
+
+`pool_stride = (2, 1)`. Il paper dice «max pooling» senza dare lo stride. Con
+(2,2) la sequenza scende a 26 frame e il costo del denso si ferma al 70 % di
+quello dichiarato; con (2,1) restano 51 frame.
+
+`channel_reading = c96`. Il §3.2 dice «96 dimensional feature» e, due righe dopo,
+«196 kernels»: i due numeri non possono valere insieme. Nel modello sparso la
+convoluzione iniziale vale il 31,6 % del costo totale, contro il 2,7 % nel
+denso: scartando il calcolo a valle, il front-end diventa un termine dominante.
+I FLOPs dello sparso discriminano quindi fra le due letture dodici volte meglio
+di quelli del denso, e con 196 kernel il costo dello sparso sbaglierebbe del
++73 %.
+
+Un solo strato convolutivo. Il §3.2 usa il plurale, ma due strati portano il
+costo del denso a +164 % contro il +11 % di uno solo, cioè fuori da qualunque
+lettura dei numeri dichiarati. La misura viene dalla fase di ricostruzione: il
+secondo strato è stato rimosso dal modello dopo averlo scartato, quindi la cifra
+non è rigenerabile da questo repository.
+
+### Dove ci siamo discostati dal paper
+
+`MAX_LOG_SCALE = 4.0` limita il delta logaritmico prima dell'esponenziale. Né il
+paper né SparseFormer lo prevedono: le equazioni non pongono vincoli sulle
+dimensioni delle regioni. Serve perché `exp()` in float32 va a infinito oltre
+~88, e un solo passo anomalo produrrebbe regioni infinite e NaN nel gradiente.
+
+Quanto morde, contato su tutto il validation set di ogni run:
+
+| run | rip. 1 | rip. 2 | rip. 3 | geometria delle regioni |
+|---|---|---|---|---|
+| `sparse_seed1` | 0 % | 0 % | 0 % | dentro il piano |
+| `sparse_grid_seed0` | 0 % | 0 % | 0 % | congelate sulla griglia |
+| `sparse_seed0` | 0 % | 46 % | 50 % | uscita dal piano |
+| `sparse_seed2` | 0 % | 26 % | 50 % | uscita dal piano |
+
+Il limite è inerte finché le regioni restano nel piano e interviene solo dove
+sono già esplose. Non dà forma a un modello sano: impedisce a un modello degenere
+di produrre NaN.
+
+L'ultimo `Linear` del decoder opera sul tensore appiattito P·C → d. Il paper non
+lo dice. La lettura è stata scelta col conteggio dei parametri fatto a mano prima
+di implementare: appiattito dava 2,85 M contro i 2,87 M dichiarati, ridotto sui
+punti 2,20 M.
+
+La loss è una BCE su target multi-hot, il ramo `bce` di EAT. Il paper non
+dichiara la loss, ma il mixing produce due etichette per campione, quindi la
+cross-entropy non è applicabile.
+
+### Due varianti nostre, spente per default
+
+`region_constraint = clip` riporta le regioni dentro `[0,1]²`. Il default è
+`none`, la lettura letterale del paper. `region_mode = grid` congela regioni e
+aggiustamento senza cambiare forma, parametri né FLOPs, e risponde alla domanda
+che il paper non pone: la saliency appresa serve, o basta una griglia fissa?
+
+### Determinismo
+
+Il backward di `grid_sample` non ha implementazione deterministica su CUDA:
+accumula con `atomicAdd`, quindi l'ordine delle somme in virgola mobile varia fra
+esecuzioni. In modalità stretta PyTorch solleva un errore, quindi il modello
+sparso gira con `warn_only`. Il livello ottenuto finisce in `summary.json`
+accanto ai risultati, così un run non bit-riproducibile non si spaccia per tale.
+
+---
+
+## 4. La ricostruzione delle quantità non dichiarate
+
+Il costo del modello sparso si separa in due termini indipendenti:
+
+```
+FLOPs(N) = front-end + pendenza × N
+```
+
+Il front-end dipende dallo spettrogramma, che il paper non dichiara. La pendenza
+è il costo di un token e dipende solo da quantità dichiarate: P, C, d_token,
+d_encoder, L_rep, L_enc. Se la lettura del metodo è corretta la pendenza deve
+combaciare, perché non c'è dentro nessuna nostra scelta.
+
+Portando `n_mels` da 32 a 128 il termine fisso passa da 6,6 a 29,6 MFLOP e la
+pendenza resta 8,44. Confrontata con quella implicita nella Tabella 3:
+
+| | pendenza (MFLOP per token) | rapporto |
+|---|---|---|
+| nostra | 8,44 | |
+| paper letto come FLOPs | 3,88 | 2,17× |
+| paper letto come MAC | 7,76 | **1,09×** |
+
+I numeri del paper sono MAC. La convenzione FLOPs adottata in origine era stata
+dedotta perché i conti tornavano sulla configurazione di default, un punto solo,
+e tornavano perché due errori si cancellavano: la loro convenzione dimezzata
+contro un loro front-end molto più grande del nostro.
+
+Fissata la convenzione, il termine fisso implicito nei loro numeri è 78 MFLOP
+contro i nostri 14,3. Cercando quale spettrogramma lo produce:
+
+| modello | params | dichiarati | costo | bersaglio | |
+|---|---|---|---|---|---|
+| sparso, 64 mel / hop 160 (nostro) | 2 822 711 | −1,6 % | 48,5 M | 109,2 M | −55,6 % |
+| **sparso, 160 mel / hop 80** | 2 822 711 | **−1,6 %** | 109,2 M | 109,2 M | **−0,0 %** |
+| denso `flatten`, stesso front-end | 5 713 891 | +19,0 % | 1296 M | 1290 M | +0,5 % |
+| denso `pool_freq`, stesso front-end | 4 875 235 | +1,6 % | 1126 M | 1290 M | −12,7 % |
+
+Il modello sparso chiude su entrambi i vincoli. I suoi parametri non dipendono
+dallo spettrogramma, quindi i parametri vincolano l'architettura e il costo
+vincola il front-end: due equazioni indipendenti in due incognite, soddisfatte a
+meno dell'1,6 % e dello 0,0 %.
+
+`160 mel / hop 80` non è l'unica soluzione. Il vincolo fissa il prodotto righe ×
+colonne, non i due valori separatamente: anche 128 mel / hop 64 e 196 mel / hop
+100 cadono entro l'1,5 %. Quello che si può affermare è che il front-end del
+paper elabora circa cinque volte le celle tempo-frequenza del nostro. Dopo lo
+stem la loro mappa è circa 40 × 101 celle, la nostra 16 × 51.
+
+Il modello denso resta ambiguo anche dopo la ricostruzione: `flatten` chiude sul
+costo e sbaglia i parametri del 19 %, `pool_freq` chiude sui parametri e sbaglia
+il costo del 13 %. Nessuna delle due letture li soddisfa entrambi.
+
+Rifare i conti: `python scripts/cost_ablation.py`.
+
+---
+
+## 5. Risultati
+
+Modello EMA. Il test set è stato toccato una volta sola per modello, a
 esperimenti chiusi; media ± deviazione standard su 3 seed dove indicato.
 
 | Modello | **Test** (3 seed) | Validation | Params | GFLOP |
 |---|---|---|---|---|
-| **Denso `flatten`** — baseline adottato | **97,03 % ± 0,20** | 96,97 ± 0,04 | 5 197 795 | 0,5604 |
-| **Sparso N=4** — configurazione del paper | **95,52 % ± 0,31** | 95,71 ± 0,37 | 2 822 711 | 0,0485 |
+| **Denso `flatten`**, baseline adottato | **97,03 % ± 0,20** | 96,97 ± 0,04 | 5 197 795 | 0,5604 |
+| **Sparso N=4**, configurazione del paper | **95,52 % ± 0,31** | 95,71 ± 0,37 | 2 822 711 | 0,0485 |
 | Sparso N=16 | — | 96,46 % | 2 823 527 | 0,1487 |
-| Sparso, regioni congelate su griglia — 3 seed | — | 94,94 % ± 0,22 | 2 822 711 | 0,0485 |
+| Sparso, regioni congelate su griglia, 3 seed | — | 94,94 % ± 0,22 | 2 822 711 | 0,0485 |
 | Sparso, `L_rep`=1 | — | 94,98 % | 2 010 591 | 0,0349 |
 | Sparso, regioni vincolate al piano | — | 95,21 % | 2 822 711 | 0,0485 |
-| Denso `pool_freq` — ricostruzione scartata | — | 94,09 % | 4 875 235 | 0,5275 |
+| Denso `pool_freq`, ricostruzione scartata | — | 94,09 % | 4 875 235 | 0,5275 |
 
-Tutti i 19 run sono in `results/summary_table.md`, la figura in
-`results/accuracy_vs_flops.png`; si rigenerano con `python scripts/plot_results.py`.
+Tutti i 22 run sono in `results/summary_table.md`, la figura in
+`results/accuracy_vs_flops.png`.
 
-Rispetto ai valori dichiarati (Tabella 2 del paper):
+Rispetto ai valori dichiarati (Tabella 2):
 
 | | Params | FLOPs | Accuracy |
 |---|---|---|---|
 | Sparse-transformer | 2,87 M → 2,82 M (−1,6 %) | 0,055 G → 0,0485 (−11,8 %) | 96,88 % → **95,52 %** |
 | Dense-transformer | 4,80 M → 5,20 M (+8,3 %) | 0,645 G → 0,5604 (−13,1 %) | 96,67 % → **97,03 %** |
 
-Params e costo tornano: l'architettura è quella giusta. **È l'ordine fra i due
-modelli che non si riproduce.**
+La Tabella 3 si verifica senza addestrare: nove configurazioni dichiarate, cinque
+lungo il numero di token N e quattro lungo il numero di campioni P, di cui il
+paper dà parametri e costo.
+
+| | entro il 3 % del dichiarato |
+|---|---|
+| parametri | 9 su 9 |
+| FLOPs | 1 su 9 |
+
+I due assi si controllano a vicenda: lungo N il paper dichiara i parametri
+costanti a 2,87 M, lungo P li fa più che raddoppiare (2,44 → 5,35 M) per via di
+`Ms ∈ R^{P×P}`. Riprodurre per caso entrambi gli andamenti è improbabile, ed è la
+verifica più forte che il progetto abbia della propria lettura del metodo.
 
 ---
 
-## Perché i nostri numeri differiscono
+## 6. Perché i nostri numeri differiscono
 
-Il paper dà il modello sparso **0,21 punti sopra** il proprio dense-transformer.
-Noi lo troviamo **1,52 punti sotto** (*t* = 7,2 su 3 seed): non uno scarto di
-taratura, un cambio di *segno*. Quattro fatti misurati lo spiegano.
+Il paper dà il modello sparso 0,21 punti sopra il proprio dense-transformer. Noi
+lo troviamo 1,52 punti sotto (*t* = 7,10 su 3+3 seed, p = 0,004): il segno del
+confronto si rovescia. Cinque fatti misurati lo spiegano.
 
-### 1. Il margine del paper è più piccolo del rumore che lo misura
+### 6.1 Il margine del paper è più piccolo del rumore che lo misura
 
-Il modello sparso campiona la mappa tempo-frequenza con `grid_sample`, la cui
-derivata su CUDA non ha implementazione deterministica: due run identici a meno
-del seed danno risultati diversi, e di parecchio.
+Il modello sparso campiona con `grid_sample`, la cui derivata su CUDA non è
+deterministica: due run identici a meno del seed danno risultati diversi.
 
-| Deviazione fra seed (validation) | |
+| deviazione fra seed (validation) | |
 |---|---|
-| Denso | 0,04 punti |
-| Sparso | **0,37 punti** — dieci volte tanto |
+| denso | 0,04 punti |
+| sparso | 0,37 punti, dieci volte tanto |
 
-Il margine di +0,21 riportato dal paper è misurato su **un solo seed**: vale
-0,6 deviazioni di quel rumore, cioè meno di quanto lo stesso identico
-esperimento si sposti da solo cambiando il seme casuale. Per questo qui ogni
-confronto centrale gira su tre seed.
+Il margine di +0,21 riportato dal paper è misurato su un solo seed: vale 0,6
+deviazioni di quel rumore. Per questo qui ogni confronto centrale gira su tre
+seed.
 
-### 2. Il segno dipende da quanto è forte il baseline denso
+### 6.2 Il segno dipende da quanto è forte il baseline denso
 
-Del dense-transformer il paper dichiara **solo** params e FLOPs, nessun
-iperparametro: il baseline va ricostruito. Il punto delicato è come si passa
-dalla mappa tempo-frequenza alla sequenza di token, e le due letture possibili
-sono ugualmente compatibili con i numeri dichiarati. Le abbiamo addestrate
-entrambe:
+Del denso il paper dichiara solo parametri e FLOPs, quindi il baseline va
+ricostruito. Resta da decidere come si passa dalla mappa tempo-frequenza alla
+sequenza di token, e le due letture possibili sono ugualmente compatibili con i
+numeri dichiarati. Le abbiamo addestrate entrambe:
 
-| Ricostruzione | Cosa fa | Validation | Lo sparso (95,71 %) risulta |
+| ricostruzione | cosa fa | validation | lo sparso (95,71 %) risulta |
 |---|---|---|---|
-| `pool_freq` | **media via** l'asse frequenza: 96 valori per token | 94,09 % | **sopra** di 1,62 punti |
-| `flatten` | **conserva** lo spettro: 96 × 16 = 1536 valori per token | 96,97 % | **sotto** di 1,26 punti |
+| `pool_freq` | media via l'asse frequenza: 96 valori per token | 94,09 % | sopra di 1,62 punti |
+| `flatten` | conserva lo spettro: 96 × 16 = 1536 valori per token | 96,97 % | sotto di 1,26 punti |
 
-Con `pool_freq` il denso butta via la frequenza prima di iniziare, e
-confrontarlo con un modello che campiona nel piano tempo-frequenza è sbilanciato
-in partenza. Abbiamo quindi adottato `flatten`, il baseline **più forte** — la
-scelta sfavorevole alla tesi che stiamo riproducendo. È la ragione principale
-per cui il nostro denso supera perfino quello degli autori (97,03 contro
-96,67 %), e con esso il modello sparso.
+Con `pool_freq` il denso butta via la frequenza prima di iniziare, e confrontarlo
+con un modello che campiona nel piano tempo-frequenza è sbilanciato in partenza.
+Abbiamo adottato `flatten`, il baseline più forte, cioè la scelta sfavorevole
+alla tesi che stiamo riproducendo.
 
-### 3. La prestazione viene dall'architettura, non dalla saliency
+### 6.3 Il campionamento degenera, e si vede
 
-L'idea difesa dal paper è che il modello impari *dove guardare*. Congelando le
-regioni su una griglia regolare fissa — a parità **esatta** di parametri e
-FLOPs, quindi un confronto controllato — il modello perde solo
-**0,76 ± 0,25 punti** (95,71 → 94,94 %), cioè metà del divario che lo separa dal
-denso. Il contributo del metodo non sta in *dove* guarda, ma nel guardare poco:
-4 token invece di 51.
+Niente, nel metodo, tiene le regioni dentro il piano: l'aggiustamento sposta il
+centro e moltiplica il lato per un esponenziale senza vincoli. I punti che
+finiscono fuori vengono serviti da `padding_mode="border"` e leggono il bordo
+della feature map. Continuano a produrre numeri e smettono di guardare il
+segnale, senza alcun sintomo nella loss.
 
-### 4. Il risparmio in FLOPs non diventa velocità
+Punti che restano dentro il piano, contati su tutto il validation set:
 
-Il paper non dichiara se i suoi numeri siano FLOPs o MAC, che differiscono di un
-fattore 2 esatto — quanto basta a invalidare il claim. La convenzione è stata
-dedotta dai numeri del paper stesso (tornano in FLOPs) e il contatore è stato
-scritto **prima** dei modelli, perché uno scritto dopo tende a confermare il
-risultato atteso. Su questo il paper si riproduce: **11,6× di FLOPs in meno**.
+| run | validation | rip. 1 | rip. 2 | rip. 3 |
+|---|---|---|---|---|
+| `sparse_seed0` | 95,57 % | 98,6 % | 49,9 % | 49,6 % |
+| `sparse_seed1` | 96,12 % | 99,3 % | 99,9 % | 97,7 % |
+| `sparse_seed2` | 95,43 % | 71,5 % | 49,9 % | 49,9 % |
 
-In tempo, però:
+Su due seed su tre metà del campionamento legge il bordo entro la seconda
+ripetizione, e il lato medio delle regioni arriva a 54 volte il piano. Il seed
+che non degenera è il migliore dei tre. Su tre run è una correlazione e non una
+spiegazione, ma l'ablation su P la rende molto più solida.
 
-| Modello | GFLOP | ms @ batch 1 | ms @ batch 64 |
+### 6.4 Sull'asse P la degenerazione è deterministica
+
+La metà bassa della Tabella 3 non si riproduce, e va nella direzione opposta a
+quella dichiarata. Quattro quantità si muovono insieme, in modo monotono:
+
+| P | validation | paper | loss di training | dentro il piano, rip. 3 | scale tagliate |
+|---|---|---|---|---|---|
+| 16 | 95,28 % | 96,61 % | 0,0765 | 98,9 % | 0 % |
+| 36 | 94,77 % | 96,88 % | 0,0814 | 49,7 % | 49 % |
+| 64 | 94,62 % | 96,98 % | 0,0857 | 0,0 % | 99,8 % |
+| 128 | 93,67 % | 96,95 % | 0,0946 | 0,0 % | 99,9 % |
+
+L'escursione è 1,61 punti contro 0,37 di deviazione fra seed, quindi non è
+rumore. Non è nemmeno sovra-adattamento: peggiora anche la loss di training, e un
+modello con più del doppio dei parametri fitta peggio i dati. Da P=64 in su la
+terza ripetizione dell'estrattore non campiona più il segnale.
+
+L'intera ablation del paper sullo stesso asse copre 0,37 punti, cioè una
+deviazione del nostro rumore, su un seed solo.
+
+A P=128 il modello sparso ha 5 323 823 parametri, più del denso adottato
+(5 197 795), e resta 3,4 punti sotto di esso.
+
+### 6.5 Il risparmio in FLOPs non diventa velocità
+
+| modello | GFLOP | ms @ batch 1 | ms @ batch 64 |
 |---|---|---|---|
-| Denso `flatten` | 0,5604 | 2,97 | 11,77 |
-| Sparso | 0,0485 | **4,79** | **6,48** |
-| rapporto | 0,087× | 1,61× più **lento** | 0,55× più veloce |
+| denso `flatten` | 0,5604 | 2,97 | 11,77 |
+| sparso | 0,0485 | 4,79 | 6,48 |
+| rapporto | 0,087× | 1,61× più lento | 0,55× più veloce |
 
 Un fattore 11,6 sui FLOPs vale 0,62× a batch 1 e 1,82× a batch 64. Il regime in
-cui il metodo *perde* è batch 1, cioè proprio il dispositivo edge che motiva il
+cui il metodo perde è batch 1, cioè proprio il dispositivo edge che motiva il
 lavoro: lì nessuna matrice satura la GPU, il tempo è tutto costo di lancio dei
-kernel, e il modello sparso ne lancia di più. A batch 64 le matrici del denso
-diventano grandi abbastanza da far pesare l'aritmetica, e l'ordine si rovescia.
+kernel, e il modello sparso ne lancia di più.
 
-> **La latenza dipende dallo stato della macchina, i FLOPs no.** Questi tempi
-> sono misurati con l'alimentatore collegato; a batteria, con la GPU ferma a una
-> frazione del clock di boost, salgono di ~3× e il vantaggio a batch 64
-> sparisce. Chi rigenera `results/benchmark.json` controlli prima `nvidia-smi`,
-> altrimenti confronta stati di clock e non modelli.
+> La latenza dipende dallo stato della macchina, i FLOPs no. Questi tempi sono
+> misurati con l'alimentatore collegato; a batteria, con la GPU a una frazione
+> del clock di boost, salgono di ~3× e il vantaggio a batch 64 sparisce. Chi
+> rigenera `results/benchmark.json` controlli prima `nvidia-smi`.
+
+### Cosa tiene insieme i cinque fatti
+
+Il front-end ricostruito nella sezione 4 offre una spiegazione unica per 6.1, 6.3
+e 6.4. Il metodo prende 4×36 punti dal piano tempo-frequenza, e quanto valgano
+dipende da quanto dettaglio c'è da prendere: la nostra mappa ne ha 816 celle, la
+loro circa 4040. Il gradiente che governa l'aggiustamento delle regioni è una
+differenza finita fra celle adiacenti, quindi su una mappa cinque volte più
+grossolana è cinque volte più rumoroso, ed è lo stesso gradiente che il paper
+definisce «very noisy» al §3.2.
+
+Questa è la spiegazione più plausibile che abbiamo, coerente con quattro
+osservazioni indipendenti. Non è verificata: servirebbe addestrare il modello
+sparso con `--set features.n_mels=160 --set features.hop_length=80` e controllare
+se la geometria resta dentro il piano. La ricostruzione dei costi della sezione 4
+è invece dimostrata, perché non dipende da alcun training.
 
 ---
 
-## Assunzioni dichiarate
+## 7. Assunzioni dichiarate
 
 Il paper non specifica quanto segue. Ogni voce è una scelta nostra, marcata
 `[ASSUNZIONE]` anche in `configs/base.yaml`.
 
 | Punto | Scelta | Impatto |
 |---|---|---|
-| **Parametri dello spettrogramma**, mai dichiarati: mel o lineare, `n_fft`, hop, bin | log-mel, 25 ms / 10 ms, 64 bin → 101 frame | **il più alto di tutti** |
-| **Iperparametri del denso**: il paper dà solo params e FLOPs | ricostruiti fra 432 combinazioni; adottato `flatten` (§2) | **decide il segno del confronto** |
-| **Convenzione FLOPs vs MAC** | FLOPs, dedotta dai numeri del paper | **alto sul claim principale** |
-| Contraddizione nel §3.2: «96 dimensional feature» ma «196 kernels» 7×7 | c96; il 196 è un refuso — con c196 il costo dello sparso sbaglierebbe del +73 % | medio |
-| Layer della early convolution | uno: il plurale del §3.2 è stato testato e scartato (2 conv → +164 % di FLOPs) | medio |
+| Parametri dello spettrogramma, mai dichiarati: mel o lineare, `n_fft`, hop, bin | log-mel, 25 ms / 10 ms, 64 bin → 101 frame | il più alto di tutti, vedi §4 |
+| Iperparametri del denso: il paper dà solo parametri e FLOPs | ricostruiti fra 432 combinazioni; adottato `flatten` (§6.2) | decide il segno del confronto |
+| Convenzione FLOPs contro MAC | FLOPs; la §4 mostra che i numeri del paper sono MAC | alto sul claim principale |
+| Contraddizione nel §3.2: «96 dimensional feature» ma «196 kernels» 7×7 | c96; con c196 il costo dello sparso sbaglierebbe del +73 % | medio |
+| Layer della early convolution | uno: il plurale del §3.2 è stato testato e scartato (2 conv → +164 % di FLOPs, misura non più rigenerabile) | medio |
 | Numero di epoche | 100; a 50 se ne perdono 0,80 (misurato) | medio |
 | Formula di *PhaseMix*, che EAT descrive in una riga | ampiezze mescolate, fasi interpolate sui vettori unitari | basso |
-| Codifica posizionale del denso, taciuta dal paper | assente, per simmetria con lo sparso | basso |
+| Codifica posizionale del denso, taciuta dal paper | assente, per simmetria con lo sparso; non testata | basso |
 
-`grid_sample` non è contata dal contatore di FLOPs: va aggiunta a mano con
-`grid_sample_flops()`. Vale lo 0,3 % del totale — irrilevante nel numero, ma è
-il meccanismo che il paper sta difendendo, e ometterlo sarebbe scorretto.
+`grid_sample` non è una moltiplicazione di matrici, quindi nessun contatore la
+vede: va aggiunta a mano con `grid_sample_flops()`. Sono 432 punti su 96 canali,
+0,292 MFLOP, lo 0,60 % del costo del modello sparso. Irrilevante nel numero, ma è
+il meccanismo che il paper sta difendendo.
 
 ---
 
-## Installazione
+## 8. Installazione
 
 Python 3.12 e una GPU NVIDIA. Su Blackwell (sm_120, es. RTX 5050) la build CUDA
-12.8 **non è opzionale**: le wheel di default arrivano a sm_90 e falliscono a
-runtime con `no kernel image is available for execution on the device`.
+12.8 non è opzionale: le wheel di default arrivano a sm_90 e falliscono a runtime
+con `no kernel image is available for execution on the device`.
 
 ```bash
 python -m venv .venv
@@ -168,27 +456,27 @@ python scripts/check_env.py            # deve dire "ambiente pronto"
 ```
 
 `requirements.txt` garantisce che l'installazione riesca; `requirements.lock.txt`
-fissa le versioni **esatte** dei run in `results/`.
+fissa le versioni esatte dei run in `results/`.
 
 ---
 
-## Riproduzione
+## 9. Riproduzione
 
-### 1. Dati
+### 9.1 Dati
 
 ```bash
 python scripts/prepare_data.py --root data/raw --cache data/cache
 ```
 
 Scarica Speech Commands V2 (~2,3 GB, non incluso nel repository) e costruisce una
-cache memory-mapped `int16`. Lo script **si ferma con errore** se gli split non
-danno esattamente 84 843 / 9 981 / 11 005 campioni: sono i conteggi del paper e
+cache memory-mapped `int16`. Lo script si ferma con errore se gli split non danno
+esattamente 84 843 / 9 981 / 11 005 campioni: sono i conteggi del paper e
 coincidono con `validation_list.txt` e `testing_list.txt`, che sono
 speaker-disjoint. Uno split casuale gonfia l'accuratezza di punti interi.
 
-### 2. Training
+### 9.2 Training
 
-Un'epoca costa ~80 s sulla RTX 5050 Laptop: ~2,2 ore per un run da 100 epoche.
+Un'epoca costa ~60 s sulla RTX 5050 Laptop: ~1,7 ore per un run da 100 epoche.
 
 ```bash
 # i due run del risultato principale, 3 seed ciascuno
@@ -199,8 +487,8 @@ python scripts/run_seeds.py --config configs/sparse.yaml        --seeds 0 1 2
 `run_seeds.py` salta i seed già completati e aggrega media e deviazione in
 `results/<prefix>_aggregate.json`.
 
-Le altre righe della tabella. `--set` **richiede** `--tag`: senza, il run
-scriverebbe nella cartella del run di base e lo sovrascriverebbe in silenzio.
+Le altre righe della tabella. `--set` richiede `--tag`: senza, il run scriverebbe
+nella cartella del run di base e lo sovrascriverebbe in silenzio.
 
 ```bash
 # denso pool_freq, nelle due letture dei canali
@@ -227,28 +515,50 @@ for n in 4 9 16 25 36; do
 done
 python -m src.train --config configs/sparse.yaml --seed 0 \
     --tag sparse_N16_ep100_seed0 --set model.num_tokens=16
+
+# ablation su P a 50 epoche; il punto P=36 e' il run sparse_N4_seed0
+for p in 16 64 128; do
+  python -m src.train --config configs/sparse.yaml --seed 0 --epochs 50 \
+      --tag sparse_P${p}_seed0 --set model.num_points=$p
+done
 ```
 
-Altre opzioni: `--epochs N`, `--resume` (riprende da `last.pt`),
-`--stop-after N` (ferma dopo N epoche lasciando lo schedule configurato per il
-totale, per spezzare un run lungo su più sessioni), `--no-deterministic`.
+Altre opzioni: `--epochs N`, `--resume` (riprende da `last.pt`), `--stop-after N`
+(ferma dopo N epoche lasciando lo schedule configurato per il totale, per
+spezzare un run lungo su più sessioni), `--no-deterministic`.
 
 Ogni run scrive in `results/<tag>/` le config archiviate, `metrics.csv` per
 epoca, `best.pt` e `last.pt`, `summary.json`, `validation_report.json` e i log
-TensorBoard. Nel repository sono versionati **solo** i file di testo.
+TensorBoard. Nel repository sono versionati solo i file di testo.
 
-### 3. Valutazione sul test set
+### 9.3 Verifica dell'archivio
+
+```bash
+python scripts/verify_runs.py
+```
+
+Non riaddestra nulla: ricostruisce ogni modello dalla configurazione archiviata e
+controlla che parametri e FLOPs coincidano con quelli registrati, che
+`summary.json` coincida con `metrics.csv`, che gli aggregati tornino dai singoli
+seed e che nessuna valutazione di test sia stata forzata. È il modo di stabilire
+che i risultati in `results/` vengono da questo codice.
+
+Segnala anche i run prodotti con l'albero git modificato. Il controllo sul
+modello passa per tutti e ventidue, quindi quelle modifiche non riguardavano la
+definizione dei modelli, ma resta un limite dichiarato.
+
+### 9.4 Valutazione sul test set
 
 ```bash
 python scripts/evaluate.py --run dense_flatten_seed0
 ```
 
-Il test set si tocca **una volta sola**: lo script scrive `TEST_EVALUATED.json`
-nella cartella del run e si rifiuta di ripartire, salvo `--force`, che però
-registra l'accaduto. Il checkpoint si seleziona sul validation set durante il
-training, e si valuta sempre il modello **EMA**.
+Il test set si tocca una volta sola: lo script scrive `TEST_EVALUATED.json` nella
+cartella del run e si rifiuta di ripartire, salvo `--force`, che però registra
+l'accaduto. Il checkpoint si seleziona sul validation set durante il training, e
+si valuta sempre il modello EMA.
 
-### 4. Figure
+### 9.5 Figure e misure
 
 ```bash
 python scripts/plot_results.py                       # accuracy_vs_flops.png + summary_table.md
@@ -256,9 +566,17 @@ python scripts/benchmark_models.py                   # benchmark.json: costo e l
 python scripts/plot_sampling.py --run sparse_seed0   # sampling_trace.png
 ```
 
+Due misure che non richiedono training, ma solo di costruire il modello o di
+rileggere un run archiviato:
+
+```bash
+python scripts/cost_ablation.py                        # cost_ablation.md: la §4
+python scripts/region_geometry.py --run sparse_seed0   # region_geometry.json: la §6.3
+```
+
 ---
 
-## Mappa dei run archiviati
+## 10. Mappa dei run archiviati
 
 Ogni cartella sotto `results/` è una riga di `results/summary_table.md`; i nomi
 sono quelli di esecuzione e non vengono cambiati a posteriori, mentre
@@ -266,35 +584,44 @@ sono quelli di esecuzione e non vengono cambiati a posteriori, mentre
 
 | Cartella | Configurazione | Epoche |
 |---|---|---|
-| `dense_flatten_seed{0,1,2}` | denso `flatten`, c96 — **baseline adottato** | 100 |
-| `sparse_seed{0,1,2}` | sparso N=4 P=36 — **configurazione del paper** | 100 |
+| `dense_flatten_seed{0,1,2}` | denso `flatten`, c96, baseline adottato | 100 |
+| `sparse_seed{0,1,2}` | sparso N=4 P=36, configurazione del paper | 100 |
 | `dense_c96_seed0` / `dense_seed0` | denso `pool_freq`, c96 / c196_proj96 | 100 |
 | `sparse_grid_seed{0,1,2}` | sparso, regioni congelate sulla griglia | 100 |
 | `sparse_rep1_seed0` / `sparse_clip_seed0` | `L_rep`=1 / regioni vincolate al piano | 100 |
 | `sparse_N16_ep100_seed0` | sparso N=16 | 100 |
 | `sparse_N{4,9,16,25,36}_seed0` | ablation su N | 50 |
+| `sparse_P{16,64,128}_seed0` | ablation su P | 50 |
 
 Hanno un `test_report.json` solo `dense_flatten_seed{0,1,2}` e
-`sparse_seed{0,1,2}`: gli unici sei run per cui il test set è stato toccato.
+`sparse_seed{0,1,2}`: gli unici sei run per cui il test set è stato toccato. I run
+sparsi con un checkpoint in locale hanno anche un `region_geometry.json`.
 
 ---
 
-## Struttura e test
+## 11. Struttura e test
 
 ```
 configs/    un YAML per esperimento; base.yaml e' ereditato
 src/        data/ (split, cache, log-mel, augmentation), models/ (early conv,
             encoder, denso, estrattore sparso), train.py, flops.py, utils.py,
-            metrics.py, tracking.py
-scripts/    check_env, prepare_data, evaluate, run_seeds, benchmark_models,
-            plot_results, plot_sampling
-tests/      54 test in ~50 s, girano SENZA il dataset scaricato
+            metrics.py, tracking.py, paper.py (i numeri dichiarati dal paper)
+scripts/    check_env, prepare_data, evaluate, run_seeds, verify_runs,
+            benchmark_models, plot_results, plot_sampling, cost_ablation,
+            region_geometry
+tests/      50 test in pochi secondi, girano SENZA il dataset scaricato
 results/    metriche, configurazioni e report di ogni run
 ```
 
-I test coprono forme, invarianti delle augmentation, equivalenza dell'encoder
-con `nn.MultiheadAttention`, contatore di FLOPs, EMA, riproducibilità dei seed,
-geometria delle regioni e raggruppamento dei run:
+Ogni test difende una decisione o custodisce un numero riportato; nessuno
+verifica che PyTorch funzioni. Coprono le invarianti delle due augmentation,
+l'equivalenza dell'encoder con `nn.MultiheadAttention`, la convenzione del
+contatore di FLOPs, l'EMA, la geometria delle regioni nei suoi tre regimi
+(apprese, congelate, vincolate), il raggruppamento dei run e le guardie sugli
+override da riga di comando. Quattro sono guardie di regressione sui numeri di
+questo README: il costo del denso adottato, il budget dichiarato dello sparso, i
+parametri contro tutte e nove le configurazioni della Tabella 3, e l'indipendenza
+della pendenza per token dalle assunzioni sullo spettrogramma.
 
 ```bash
 pytest -q
@@ -302,12 +629,15 @@ pytest -q
 
 ---
 
-## Codice di terze parti e dati
+## 12. Codice di terze parti e dati
 
 Nessun codice copiato. Il repository ufficiale di EAT
-(`github.com/Alibaba-MIIL/AudioClassfication`) è stato **consultato** solo per
-sciogliere ambiguità su augmentation e parametri dell'ottimizzatore; i punti in
-cui ha deciso una scelta sono annotati nel codice e nei config.
+(`github.com/Alibaba-MIIL/AudioClassfication`) è stato consultato solo per
+sciogliere ambiguità su augmentation e parametri dell'ottimizzatore. Il codice
+ufficiale di SparseFormer (`github.com/showlab/sparseformer`) è stato consultato
+per la sequenza della early convolution e per la formula della normalizzazione a
+tre deviazioni standard, che il paper nomina senza scriverla. I punti in cui una
+delle due fonti ha deciso una scelta sono annotati nel codice e nei config.
 
 Dati non inclusi. Google Speech Commands V2:
 `http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz`

@@ -22,7 +22,7 @@ model:
   channel_reading: c96         # "96 dimensional feature". Il "196 kernels"
                                # della sez. 3.2 e' un refuso: lo dimostrano i
                                # FLOPs del modello SPARSO, dove la early conv
-                               # e' il 65% del costo (contro l'11% nel denso)
+                               # e' il 31,6% del costo (contro il 2,7% nel denso)
                                # e c196_proj96 sbaglia del +73%.
   pool_stride: [2, 1]          # DEDOTTO: solo sull'asse frequenza. Con (2,2)
                                # la sequenza scende a 26 frame e il costo si

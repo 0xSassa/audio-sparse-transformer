@@ -101,7 +101,9 @@ class EarlyConv(nn.Module):
             nn.ReLU(inplace=True),
         ]
         # UN SOLO strato convolutivo: il plurale del paper e' stato testato e
-        # confutato, due strati portano i FLOPs a +164% invece che a +11%.
+        # confutato: due strati portano i FLOPs a +164% invece che a +11%.
+        # Misura della fase di ricostruzione; il secondo strato e' stato poi
+        # rimosso dal modello, quindi la cifra non si rigenera da qui.
         layers.append(nn.MaxPool2d(3, stride=pool_stride, padding=1))
 
         # seconda lettura dell'ambiguita': 196 kernel, poi proiezione a 96

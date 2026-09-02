@@ -15,8 +15,8 @@
 #
 # I FLOPs di questo modello sono anche cio' che ha sciolto la
 # contraddizione della sez. 3.2 del paper ("96 dimensional feature" ma
-# "196 kernels"): qui la early convolution vale il 65 % del costo totale,
-# contro l'11 % nel denso, perche' scartando il calcolo a valle il
+# "196 kernels"): qui la early convolution vale il 31,6 % del costo totale,
+# contro il 2,7 % nel denso, perche' scartando il calcolo a valle il
 # front-end diventa il termine dominante. Con c196_proj96 il costo
 # sbaglierebbe del +73 %; con c96 resta a -11,8 %.
 #
