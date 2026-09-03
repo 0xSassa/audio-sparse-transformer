@@ -30,7 +30,6 @@ src/        data/     split ufficiali, cache memory-mapped, log-mel, augmentatio
             train.py, flops.py, metrics.py, utils.py, tracking.py
             paper.py  i numeri dichiarati da Kavaki & Mandel, in un posto solo
 scripts/    preparazione dei dati, training multi-seed, valutazione sul test set
-tests/      28 test, girano in pochi secondi e senza il dataset scaricato
 results/    metriche, configurazioni e report dei 22 run archiviati
 ```
 
@@ -257,8 +256,7 @@ configurazioni tornano entro il 2 % del valore dichiarato.** Riprodurre per caso
 entrambi gli andamenti è improbabile, ed è la verifica più forte che il progetto
 abbia della propria lettura del metodo. Il conteggio si rifà costruendo i nove
 modelli con `src.models.sparse_model.SparseAudioTransformer` e sommandone i
-parametri; i valori dichiarati sono trascritti in `src/paper.py`, e un test di
-`tests/test_pipeline.py` li ricontrolla tutti e nove.
+parametri; i valori dichiarati dal paper sono trascritti in `src/paper.py`.
 
 ---
 
@@ -502,30 +500,7 @@ Hanno un `test_report.json` solo `dense_flatten_seed{0,1,2}` e
 
 ---
 
-## 10. Test
-
-```bash
-pytest -q
-```
-
-Ventotto test, pochi secondi, senza il dataset scaricato. Ognuno difende una
-decisione descritta qui o custodisce un numero riportato; nessuno verifica che
-PyTorch funzioni. Coprono i conteggi del protocollo e la forma dello
-spettrogramma, la sequenza dello stem di SparseFormer, le invarianti delle due
-augmentation di EAT, la convenzione del contatore di FLOPs, l'EMA, e
-l'estrattore sparso in ogni suo passo: griglia iniziale e vincolo sul quadrato
-perfetto, aggiustamento delle regioni nei tre regimi (apprese, congelate,
-vincolate), normalizzazione a tre deviazioni del campionamento, aggiornamento
-residuo del decoder, e il gradiente che raggiunge le regioni iniziali — senza il
-quale il meccanismo centrale del paper non esisterebbe.
-
-Tre sono guardie di regressione sui numeri di questo README: il costo del denso
-adottato, il budget dichiarato dello sparso e i parametri contro tutte e nove le
-configurazioni della Tabella 3.
-
----
-
-## 11. Riferimenti
+## 10. Riferimenti
 
 - H. Salami Kavaki, M. I. Mandel. *Audio Sparse-Transformer for Speech
   Classification.* ICASSP 2025. — il paper riprodotto

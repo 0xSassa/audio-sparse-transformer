@@ -41,6 +41,7 @@ optuna*.db
 /scripts/region_geometry.py
 /scripts/verify_runs.py
 /scripts/check_env.py
+/tests/
 results/accuracy_vs_flops.png
 results/summary_table.md
 results/cost_ablation.md

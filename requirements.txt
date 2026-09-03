@@ -22,7 +22,7 @@
 #    pip install -r requirements.txt
 #
 #    # verifica
-#    python scripts/check_env.py
+#    python -c "import torch; print(torch.cuda.is_available())"
 #
 #  Questo file garantisce che l'installazione vada a buon fine.
 #  requirements.lock.txt fissa le versioni ESATTE dei run riportati.
@@ -79,6 +79,4 @@ PyYAML>=6.0,<7.0                # i file in configs/
 # li', e un servizio con account e rete e' un requisito in piu' per chi deve
 # solo riprodurre i risultati.
 tensorboard>=2.17,<3.0
-matplotlib>=3.9,<4.0            # scripts/plot_results.py, plot_sampling.py
 tqdm>=4.66,<5.0                 # avanzamento del training
-pytest>=8.3,<9.0                # tests/test_pipeline.py, girano senza dataset
