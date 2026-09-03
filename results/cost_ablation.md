@@ -39,6 +39,16 @@ La parte fissa e' il front-end convolutivo e dipende dalle nostre assunzioni sul
 
 Cambiando n_mels di un fattore 4 la parte fissa si sposta e la pendenza resta dov'e': e' fissata solo da quantita' che il paper dichiara.
 
+## Il front-end si recupera dai loro numeri?
+
+No. Tenendo l'hop a 10 ms, che e' la convenzione della letteratura su Speech Commands (AST usa 25/10 ms, KWT 30/10 ms) e che su un secondo di audio da' circa 100 frame, il bersaglio di 109.2 MFLOP non si raggiunge a nessun numero di bin:
+
+| bin mel, hop 10 ms | 40 | 64 | 80 | 96 | 128 |
+|---|---|---|---|---|---|
+| scarto dal costo dichiarato | -61 % | -56 % | -52 % | -49 % | -42 % |
+
+Per chiudere servirebbe un hop di 4-5 ms, che nessun lavoro su questo dataset usa. Il modello denso non entra nel conto: `dim` e `depth` non sono dichiarati dal paper, li abbiamo ricostruiti noi.
+
 ## Il costo di `grid_sample`, che nessun contatore vede
 
 Il campionamento bilineare non e' una matmul, quindi non compare in nessuna delle tabelle sopra. Nella configurazione adottata sono 432 punti su 96 canali, cioe' 0.292 MFLOP: lo 0.60 % del costo totale del modello sparso. Irrilevante nel numero, ma e' il meccanismo che il paper difende, e ometterlo senza mostrarne il conto sarebbe scorretto.

@@ -5,9 +5,9 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
     "cuda": "12.8",
-    "commit": "9ab8e60908ab667603532d08deb2974fd5400e21",
+    "commit": "b55e779e921bde2da6b2ceb0bcaf9aa26221c066",
     "dirty": true,
-    "untracked": 13
+    "untracked": 0
   },
   "config": "configs/sparse.yaml",
   "tokens": [
@@ -95,6 +95,36 @@
       "flops_err": 72.30331562762092
     }
   ],
+  "front_end_standard_hop": {
+    "target_mac_flops": 109220000.0,
+    "sweep": [
+      {
+        "n_mels": 40,
+        "flops": 42754048.0,
+        "err": -60.85511078557041
+      },
+      {
+        "n_mels": 64,
+        "flops": 48511744.0,
+        "err": -55.58346090459623
+      },
+      {
+        "n_mels": 80,
+        "flops": 52350208.0,
+        "err": -52.06902765061344
+      },
+      {
+        "n_mels": 96,
+        "flops": 56188672.0,
+        "err": -48.554594396630655
+      },
+      {
+        "n_mels": 128,
+        "flops": 63865600.0,
+        "err": -41.52572788866508
+      }
+    ]
+  },
   "grid_sample": {
     "points": 432,
     "flops": 292032.0,

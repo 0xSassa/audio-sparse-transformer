@@ -109,6 +109,11 @@ def main() -> int:
                     help="valori con cui rifare la sweep su N, per mostrare "
                          "che la pendenza per token non dipende da questa "
                          "assunzione")
+    ap.add_argument("--mels-at-standard-hop", type=int, nargs="+",
+                    default=[40, 64, 80, 96, 128],
+                    help="bin mel da provare tenendo l'hop a 10 ms, che e' la "
+                         "convenzione della letteratura su Speech Commands "
+                         "(AST 25/10 ms, KWT 30/10 ms)")
     ap.add_argument("--out", type=str, default="results/cost_ablation.md")
     ap.add_argument("--json", type=str, default="results/cost_ablation.json")
     args = ap.parse_args()
@@ -140,6 +145,19 @@ def main() -> int:
     gs_points = m["num_tokens"] * m["num_points"] * m["repeats"]
     gs = grid_sample_flops(gs_points, 96)
     default_flops = tokens[0]["flops"]
+
+    # Il front-end si recupera dai numeri del paper? Si tiene l'hop a 10 ms,
+    # che e' la convenzione universale su questo dataset, e si fa variare il
+    # solo numero di bin mel. Bersaglio: il costo dichiarato letto come MAC,
+    # cioe' 2x quello della Tabella 3, perche' la pendenza dice che i loro
+    # numeri sono MAC.
+    target_mac = 2.0 * TOKENS[0][2] * 1e9
+    standard_hop = []
+    for n_mels in args.mels_at_standard_hop:
+        probe = {**cfg, "features": {**cfg["features"], "n_mels": n_mels}}
+        _params, flops = measure(probe, "num_tokens", cfg["model"]["num_tokens"])
+        standard_hop.append({"n_mels": n_mels, "flops": flops,
+                             "err": 100 * (flops - target_mac) / target_mac})
 
     md = [
         "# Costo dichiarato contro costo misurato",
@@ -178,6 +196,23 @@ def main() -> int:
                "e la pendenza resta dov'e': e' fissata solo da quantita' che il "
                "paper dichiara.", ""]
     md += [
+        "## Il front-end si recupera dai loro numeri?",
+        "",
+        "No. Tenendo l'hop a 10 ms, che e' la convenzione della letteratura su "
+        "Speech Commands (AST usa 25/10 ms, KWT 30/10 ms) e che su un secondo "
+        f"di audio da' circa 100 frame, il bersaglio di "
+        f"{target_mac / 1e6:.1f} MFLOP non si raggiunge a nessun numero di bin:",
+        "",
+        "| bin mel, hop 10 ms | " + " | ".join(
+            str(r["n_mels"]) for r in standard_hop) + " |",
+        "|---" * (len(standard_hop) + 1) + "|",
+        "| scarto dal costo dichiarato | " + " | ".join(
+            f"{r['err']:+.0f} %" for r in standard_hop) + " |",
+        "",
+        "Per chiudere servirebbe un hop di 4-5 ms, che nessun lavoro su questo "
+        "dataset usa. Il modello denso non entra nel conto: `dim` e `depth` "
+        "non sono dichiarati dal paper, li abbiamo ricostruiti noi.",
+        "",
         "## Il costo di `grid_sample`, che nessun contatore vede",
         "",
         "Il campionamento bilineare non e' una matmul, quindi non compare in "
@@ -196,6 +231,8 @@ def main() -> int:
         "config": args.config,
         "tokens": tokens,
         "points": points,
+        "front_end_standard_hop": {"target_mac_flops": target_mac,
+                                   "sweep": standard_hop},
         "grid_sample": {"points": gs_points, "flops": gs,
                         "share_of_sparse": gs / default_flops},
         "slope": {"ours": ours[0], "paper": theirs[0],

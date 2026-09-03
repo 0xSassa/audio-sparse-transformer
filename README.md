@@ -223,19 +223,27 @@ accanto ai risultati, così un run non bit-riproducibile non si spaccia per tale
 
 ## 4. La ricostruzione delle quantità non dichiarate
 
-Il costo del modello sparso si separa in due termini indipendenti:
+Per calcolare il costo del modello sparso servono due quantità che il paper non
+dichiara: la convenzione di conteggio e i parametri dello spettrogramma. La
+prima si recupera dai suoi stessi numeri. La seconda no, ed è un risultato anche
+quello.
+
+### La convenzione: sono MAC
+
+Il costo si separa in due termini indipendenti:
 
 ```
 FLOPs(N) = front-end + pendenza × N
 ```
 
-Il front-end dipende dallo spettrogramma, che il paper non dichiara. La pendenza
-è il costo di un token e dipende solo da quantità dichiarate: P, C, d_token,
-d_encoder, L_rep, L_enc. Se la lettura del metodo è corretta la pendenza deve
-combaciare, perché non c'è dentro nessuna nostra scelta.
+Il front-end dipende dallo spettrogramma. La pendenza è il costo di un token e
+dipende solo da quantità che il paper dichiara: P, C, d_token, d_encoder, L_rep,
+L_enc. Non contiene nessuna nostra scelta, quindi se la lettura del metodo è
+corretta deve combaciare.
 
-Portando `n_mels` da 32 a 128 il termine fisso passa da 6,6 a 29,6 MFLOP e la
-pendenza resta 8,44. Confrontata con quella implicita nella Tabella 3:
+Misurata in sei combinazioni — `n_mels` da 32 a 128, entrambe le letture dei
+canali — vale 8,44 MFLOP per token in tutte e sei. Confrontata con quella
+implicita nella Tabella 3:
 
 | | pendenza (MFLOP per token) | rapporto |
 |---|---|---|
@@ -244,34 +252,42 @@ pendenza resta 8,44. Confrontata con quella implicita nella Tabella 3:
 | paper letto come MAC | 7,76 | **1,09×** |
 
 I numeri del paper sono MAC. La convenzione FLOPs adottata in origine era stata
-dedotta perché i conti tornavano sulla configurazione di default, un punto solo,
-e tornavano perché due errori si cancellavano: la loro convenzione dimezzata
-contro un loro front-end molto più grande del nostro.
+dedotta perché i conti tornavano sulla configurazione di default, cioè su un
+punto solo.
 
-Fissata la convenzione, il termine fisso implicito nei loro numeri è 78 MFLOP
-contro i nostri 14,3. Cercando quale spettrogramma lo produce:
+Il residuo del 9 % non è preoccupante: due contatori standard sullo stesso
+modello divergono già dell'1-5 %. In `results/benchmark.json`, prodotto quando
+il repository aveva anche fvcore, il rapporto fra i due contatori vale 1,99 sul
+denso e 1,95 sullo sparso, non 2 esatto.
 
-| modello | params | dichiarati | costo | bersaglio | |
+### Il front-end: non si recupera
+
+Fissata la convenzione, il termine fisso implicito nei numeri del paper è
+78 MFLOP contro i nostri 14,3: un front-end che lo produca dovrebbe elaborare
+circa cinque volte le celle tempo-frequenza del nostro.
+
+Un front-end così non sta nelle convenzioni della letteratura. AST calcola «a
+25 ms Hamming window every 10 ms», KWT usa «Time window length 30 ms, Time
+window stride 10 ms»: su questo dataset l'hop di 10 ms è universale, e su un
+secondo di audio dà circa 100 frame. Tenendo l'hop lì e facendo variare i soli
+bin mel, il costo dichiarato non si raggiunge mai:
+
+| bin mel, hop 10 ms | 40 | 64 | 80 | 96 | 128 |
 |---|---|---|---|---|---|
-| sparso, 64 mel / hop 160 (nostro) | 2 822 711 | −1,6 % | 48,5 M | 109,2 M | −55,6 % |
-| **sparso, 160 mel / hop 80** | 2 822 711 | **−1,6 %** | 109,2 M | 109,2 M | **−0,0 %** |
-| denso `flatten`, stesso front-end | 5 713 891 | +19,0 % | 1296 M | 1290 M | +0,5 % |
-| denso `pool_freq`, stesso front-end | 4 875 235 | +1,6 % | 1126 M | 1290 M | −12,7 % |
+| scarto dal costo dichiarato | −61 % | −56 % | −52 % | −49 % | −42 % |
 
-Il modello sparso chiude su entrambi i vincoli. I suoi parametri non dipendono
-dallo spettrogramma, quindi i parametri vincolano l'architettura e il costo
-vincola il front-end: due equazioni indipendenti in due incognite, soddisfatte a
-meno dell'1,6 % e dello 0,0 %.
+Per chiudere servirebbe un hop di 4-5 ms, che nessun lavoro su Speech Commands
+usa. Recuperare il front-end richiederebbe quindi di assumere che il paper sia
+fuori convenzione, e sarebbe un'assunzione travestita da deduzione.
 
-`160 mel / hop 80` non è l'unica soluzione. Il vincolo fissa il prodotto righe ×
-colonne, non i due valori separatamente: anche 128 mel / hop 64 e 196 mel / hop
-100 cadono entro l'1,5 %. Quello che si può affermare è che il front-end del
-paper elabora circa cinque volte le celle tempo-frequenza del nostro. Dopo lo
-stem la loro mappa è circa 40 × 101 celle, la nostra 16 × 51.
+Il modello denso non entra in questo conto, ed è deliberato: `dim` e `depth` del
+denso non sono dichiarati, li abbiamo ricostruiti noi, e usarli per risolvere lo
+spettrogramma significherebbe dedurre una quantità del paper da un modello
+nostro.
 
-Il modello denso resta ambiguo anche dopo la ricostruzione: `flatten` chiude sul
-costo e sbaglia i parametri del 19 %, `pool_freq` chiude sui parametri e sbaglia
-il costo del 13 %. Nessuna delle due letture li soddisfa entrambi.
+Resta che nemmeno con la convenzione corretta il costo dichiarato del modello
+sparso si riproduce da un front-end plausibile. Si somma al §5, dove la loro
+tabella dei costi è già incoerente con la loro tabella dei parametri.
 
 Rifare i conti: `python scripts/cost_ablation.py`.
 
@@ -417,21 +433,27 @@ kernel, e il modello sparso ne lancia di più.
 > del clock di boost, salgono di ~3× e il vantaggio a batch 64 sparisce. Chi
 > rigenera `results/benchmark.json` controlli prima `nvidia-smi`.
 
-### Cosa tiene insieme i cinque fatti
+### Un'ipotesi sul meccanismo, non verificata
 
-Il front-end ricostruito nella sezione 4 offre una spiegazione unica per 6.1, 6.3
-e 6.4. Il metodo prende 4×36 punti dal piano tempo-frequenza, e quanto valgano
-dipende da quanto dettaglio c'è da prendere: la nostra mappa ne ha 816 celle, la
-loro circa 4040. Il gradiente che governa l'aggiustamento delle regioni è una
-differenza finita fra celle adiacenti, quindi su una mappa cinque volte più
-grossolana è cinque volte più rumoroso, ed è lo stesso gradiente che il paper
-definisce «very noisy» al §3.2.
+I cinque fatti restano cinque, e non abbiamo una causa unica dimostrata. La
+candidata è che il campionamento degeneri perché il gradiente sulle coordinate è
+troppo rumoroso: quel gradiente è una differenza finita fra celle adiacenti
+della feature map, ed è lo stesso che il paper definisce «very noisy» al §3.2,
+motivandoci l'esistenza della convoluzione iniziale.
 
-Questa è la spiegazione più plausibile che abbiamo, coerente con quattro
-osservazioni indipendenti. Non è verificata: servirebbe addestrare il modello
-sparso con `--set features.n_mels=160 --set features.hop_length=80` e controllare
-se la geometria resta dentro il piano. La ricostruzione dei costi della sezione 4
-è invece dimostrata, perché non dipende da alcun training.
+Non abbiamo modo di verificarla. La ricostruzione del §4 mostra che il front-end
+del paper non si recupera, quindi non possiamo confrontare la nostra risoluzione
+con la loro. E un argomento sulla sola risoluzione sarebbe comunque debole: KWT
+raggiunge 97,7 % su questo stesso task con 40 × 98 celle, meno delle nostre
+64 × 101. Se sopravvive, l'argomento riguarda il gradiente sulle coordinate, che
+è specifico del campionamento e che nessuno degli altri modelli usa perché
+nessuno campiona.
+
+L'esperimento che la deciderebbe: addestrare il modello sparso su una mappa più
+fine, per esempio `--set features.n_mels=160 --set features.hop_length=80`, e
+guardare se la geometria resta dentro il piano. Non direbbe quale front-end
+abbiano usato loro, ma direbbe se è la risoluzione a governare il collasso. Non
+è stato fatto.
 
 ---
 
