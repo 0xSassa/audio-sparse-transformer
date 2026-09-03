@@ -13,12 +13,16 @@
 # una riga di codice, sommando i componenti a mano. E' la verifica piu'
 # forte che la lettura del metodo sia corretta.
 #
-# I FLOPs di questo modello sono anche cio' che ha sciolto la
-# contraddizione della sez. 3.2 del paper ("96 dimensional feature" ma
-# "196 kernels"): qui la early convolution vale il 31,6 % del costo totale,
-# contro il 2,7 % nel denso, perche' scartando il calcolo a valle il
-# front-end diventa il termine dominante. Con c196_proj96 il costo
-# sbaglierebbe del +73 %; con c96 resta a -11,8 %.
+# La contraddizione della sez. 3.2 del paper ("96 dimensional feature" ma
+# "196 kernels") si scioglie su SparseFormer, non sui nostri FLOPs. Il suo
+# paragrafo "Model configurations" dice: "ResNet-like early convolutional
+# layers (a 7x7 stride-2 convolution, a ReLU, and a 3x3 stride-2 max
+# pooling) to extract initial 96-d image features". Novantasei canali, uno
+# strato solo, la sequenza che implementiamo. Il 196 e' probabilmente
+# contaminazione dai 196 patch di ViT, numero che SparseFormer stesso cita.
+# La lettura alternativa c196_proj96 resta implementata: soddisfa entrambe
+# le frasi del paper al prezzo di uno strato 1x1 mai nominato, e costa
+# 0,58 punti sul denso.
 #
 # NIENTE CODIFICA POSIZIONALE, ed e' dichiarato: i token latenti non hanno
 # un ordine intrinseco, sono un insieme e non una sequenza. Nel denso la

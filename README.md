@@ -134,25 +134,46 @@ elencata nella sezione 7.
 
 ### Deduzioni, non assunzioni
 
-Tre valori non sono stati scelti ma dedotti da vincoli del paper.
+Quattro valori non sono stati scelti a intuito: due si leggono nell'ancestor del
+metodo, due si deducono da vincoli numerici del paper.
 
-`pool_stride = (2, 1)`. Il paper dice «max pooling» senza dare lo stride. Con
-(2,2) la sequenza scende a 26 frame e il costo del denso si ferma al 70 % di
-quello dichiarato; con (2,1) restano 51 frame.
+`channel_reading = c96`, con un solo strato convolutivo. Il §3.2 di Kavaki &
+Mandel dice «96 dimensional feature» e, due righe dopo, «196 kernels»: i due
+numeri non possono valere insieme. La contraddizione si scioglie su
+SparseFormer, di cui questo metodo è la trasposizione all'audio, che nella
+sezione *Model configurations* scrive:
 
-`channel_reading = c96`. Il §3.2 dice «96 dimensional feature» e, due righe dopo,
-«196 kernels»: i due numeri non possono valere insieme. Nel modello sparso la
-convoluzione iniziale vale il 31,6 % del costo totale, contro il 2,7 % nel
-denso: scartando il calcolo a valle, il front-end diventa un termine dominante.
-I FLOPs dello sparso discriminano quindi fra le due letture dodici volte meglio
-di quelli del denso, e con 196 kernel il costo dello sparso sbaglierebbe del
-+73 %.
+> «We use ResNet-like early convolutional layers (a 7×7 stride-2 convolution, a
+> ReLU, and a 3×3 stride-2 max pooling) to extract initial 96-d image features.»
 
-Un solo strato convolutivo. Il §3.2 usa il plurale, ma due strati portano il
-costo del denso a +164 % contro il +11 % di uno solo, cioè fuori da qualunque
-lettura dei numeri dichiarati. La misura viene dalla fase di ricostruzione: il
-secondo strato è stato rimosso dal modello dopo averlo scartato, quindi la cifra
-non è rigenerabile da questo repository.
+Novantasei canali, uno strato solo, e la sequenza esatta implementata qui. Il
+«96 dimensional feature» di Kavaki & Mandel cita quella frase. Il 196 è
+plausibilmente contaminazione dai 196 patch in cui ViT divide un'immagine,
+numero che SparseFormer richiama nella propria introduzione. Indipendentemente,
+due strati convolutivi porterebbero il costo del denso a +164 % contro il +11 %
+di uno solo, fuori da qualunque lettura dei numeri dichiarati.
+
+La lettura alternativa, 196 kernel seguiti da una proiezione 1×1 a 96, resta
+implementata come `channel_reading: c196_proj96` ed è una buona alternativa:
+soddisfa entrambe le frasi del §3.2 al prezzo di uno strato che il paper non
+nomina, e sui parametri dichiarati va anche leggermente meglio (−0,8 % sullo
+sparso contro −1,6 %). Costa 0,58 punti sul denso: 94,67 % contro 94,09 %, run
+`dense_seed0` e `dense_c96_seed0`.
+
+Pesi non condivisi fra le ripetizioni. SparseFormer condivide i pesi del proprio
+estrattore fra le ripetizioni, e la sua figura 2 lo dichiara. Qui non sono
+condivisi, e a imporlo è il budget del paper riprodotto: con pesi condivisi il
+modello avrebbe 2 010 591 parametri contro i 2,87 M dichiarati, cioè −30 %;
+senza condivisione 2 822 711, cioè −1,6 %. Solo la seconda lettura sta dentro i
+numeri.
+
+`pool_stride = (2, 1)`. Il paper dice «max pooling» senza dare lo stride, e
+SparseFormer usa 3×3 stride 2 su entrambi gli assi. Su un'immagine dimezzare
+entrambi gli assi è naturale; su una mappa tempo-frequenza dimezzare anche il
+tempo porta la sequenza del denso a 26 frame e il suo costo al 45 % di quello
+dichiarato, contro l'87 % che si ottiene con (2,1). È l'unico punto in cui ci si
+discosta dall'ancestor, ed è dedotto da un vincolo sul modello denso, i cui
+iperparametri abbiamo ricostruito noi: è quindi la più fragile delle quattro.
 
 ### Dove ci siamo discostati dal paper
 

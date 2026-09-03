@@ -20,13 +20,17 @@ model:
 
   # --- front-end convolutivo ------------------------------------------
   channel_reading: c96         # "96 dimensional feature". Il "196 kernels"
-                               # della sez. 3.2 e' un refuso: lo dimostrano i
-                               # FLOPs del modello SPARSO, dove la early conv
-                               # e' il 31,6% del costo (contro il 2,7% nel denso)
-                               # e c196_proj96 sbaglia del +73%.
+                               # della sez. 3.2 e' un refuso: SparseFormer,
+                               # l'ancestor del metodo, usa 96 canali e un
+                               # solo strato 7x7 stride 2. c196_proj96 resta
+                               # implementata come lettura alternativa e vale
+                               # 0,58 punti in piu' qui (94,67 vs 94,09).
   pool_stride: [2, 1]          # DEDOTTO: solo sull'asse frequenza. Con (2,2)
                                # la sequenza scende a 26 frame e il costo si
-                               # ferma al 70 % di quello dichiarato
+                               # ferma al 45 % di quello dichiarato, contro
+                               # l'87 % con (2,1). SparseFormer usa pero'
+                               # stride 2 su ENTRAMBI gli assi: qui ci si
+                               # discosta, ed e' la deduzione piu' fragile.
 
   # --- dalla feature map alla sequenza --------------------------------
   seq_mode: pool_freq          # [ASSUNZIONE] la scelta meno sicura di tutte:

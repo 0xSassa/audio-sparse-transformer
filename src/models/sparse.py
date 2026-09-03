@@ -299,8 +299,11 @@ def geometry_from_trace(trace: list[dict]) -> list[dict]:
 class SparseFeatureExtractor(nn.Module):
     """L_rep ripetizioni di {aggiusta regione, campiona, decodifica}.
 
-    I moduli NON sono condivisi fra ripetizioni: lo conferma il budget di
-    parametri, che con moduli condivisi sarebbe molto piu' basso.
+    I moduli NON sono condivisi fra ripetizioni, e qui ci si discosta da
+    SparseFormer, che invece li condivide ("lightweight, repeated & weight
+    sharing", sua fig. 2). A imporlo e' il budget di Kavaki & Mandel: con
+    pesi condivisi il modello avrebbe 2.010.591 parametri contro i 2,87 M
+    dichiarati, cioe' -30 %; senza condivisione 2.822.711, cioe' -1,6 %.
     """
 
     def __init__(self, num_tokens: int = 4, num_points: int = 36,
