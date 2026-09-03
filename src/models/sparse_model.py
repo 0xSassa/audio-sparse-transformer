@@ -119,7 +119,7 @@ class SparseAudioTransformer(nn.Module):
     def sampling_geometry(self, spec: torch.Tensor) -> list[dict]:
         """Conteggi sulla geometria del campionamento, per ripetizione.
 
-        Riscontro quantitativo di cio' che la Figura 2 mostra a occhio.
-        Aggregabile su piu' batch: vedi `scripts/region_geometry.py`.
+        Riscontro quantitativo di cio' che la Figura 2 del paper mostra a
+        occhio. I conteggi sono grezzi, quindi aggregabili su piu' batch.
         """
         return geometry_from_trace(self.sampling_trace(spec))

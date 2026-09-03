@@ -29,8 +29,7 @@ src/        data/     split ufficiali, cache memory-mapped, log-mel, augmentatio
             models/   early convolution, encoder, modello denso, estrattore sparso
             train.py, flops.py, metrics.py, utils.py, tracking.py
             paper.py  i numeri dichiarati da Kavaki & Mandel, in un posto solo
-scripts/    preparazione dati, training multi-seed, valutazione, verifica
-            dell'archivio, analisi dei costi, geometria del campionamento
+scripts/    preparazione dei dati, training multi-seed, valutazione sul test set
 tests/      28 test, girano in pochi secondi e senza il dataset scaricato
 results/    metriche, configurazioni e report dei 22 run archiviati
 ```
@@ -256,9 +255,10 @@ lungo N il paper dichiara i parametri costanti a 2,87 M, lungo P li fa più che
 raddoppiare (2,44 → 5,35 M) per via di `Ms ∈ R^{P×P}`. **Tutte e nove le
 configurazioni tornano entro il 2 % del valore dichiarato.** Riprodurre per caso
 entrambi gli andamenti è improbabile, ed è la verifica più forte che il progetto
-abbia della propria lettura del metodo.
-
-Rifare il conto: `python scripts/cost_ablation.py`.
+abbia della propria lettura del metodo. Il conteggio si rifà costruendo i nove
+modelli con `src.models.sparse_model.SparseAudioTransformer` e sommandone i
+parametri; i valori dichiarati sono trascritti in `src/paper.py`, e un test di
+`tests/test_pipeline.py` li ricontrolla tutti e nove.
 
 ---
 
@@ -384,11 +384,12 @@ pip install torch==2.9.1+cu128 torchaudio==2.9.1 \
     --index-url https://download.pytorch.org/whl/cu128     # passo 1: stack CUDA
 pip install -r requirements.txt                            # passo 2: il resto
 
-python scripts/check_env.py            # deve dire "ambiente pronto"
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
-`requirements.txt` garantisce che l'installazione riesca; `requirements.lock.txt`
-fissa le versioni esatte dei run in `results/`.
+L'ultimo comando deve stampare `True` e il nome della GPU: se stampa `False`, la
+build CUDA è quella sbagliata. `requirements.txt` garantisce che l'installazione
+riesca; `requirements.lock.txt` fissa le versioni esatte dei run in `results/`.
 
 ---
 
@@ -476,28 +477,6 @@ Il test set si tocca una volta sola: lo script scrive `TEST_EVALUATED.json` nell
 cartella del run e si rifiuta di ripartire, salvo `--force`, che però registra
 l'accaduto. Il checkpoint si seleziona sul validation set durante il training, e
 si valuta sempre il modello EMA.
-
-### 8.4 Verifica dell'archivio
-
-```bash
-python scripts/verify_runs.py
-```
-
-Non riaddestra nulla: ricostruisce ogni modello dalla configurazione archiviata e
-controlla che parametri e FLOPs coincidano con quelli registrati, che
-`summary.json` coincida con `metrics.csv`, che gli aggregati tornino dai singoli
-seed e che nessuna valutazione di test sia stata forzata. È il modo di stabilire
-che i risultati in `results/` vengono da questo codice.
-
-### 8.5 Misure senza training
-
-Due misure che non richiedono di addestrare nulla, ma solo di costruire il
-modello o di rileggere un run archiviato:
-
-```bash
-python scripts/cost_ablation.py                        # cost_ablation.md: parametri e costi
-python scripts/region_geometry.py --run sparse_seed0   # region_geometry.json: dove campiona
-```
 
 ---
 

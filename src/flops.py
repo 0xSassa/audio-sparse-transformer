@@ -10,8 +10,8 @@ Tre avvertenze, ognuna capace da sola di invalidare il confronto:
    allo stesso modo.
 2. `grid_sample` non e' contata da nessuno strumento — e' gather e
    interpolazione, senza matmul — e va aggiunta a mano con
-   `grid_sample_flops()`. Lo fa `scripts/cost_ablation.py`, che ne riporta
-   la quota: 0.60 % del modello sparso.
+   `grid_sample_flops()`. Nella configurazione adottata vale lo 0.60 % del
+   costo del modello sparso.
 3. Si misura su UN input da 1 secondo, in inferenza, con batch 1. Il
    training costa circa 3x, ma non e' quello che si riporta ne' qui ne' nel
    paper.

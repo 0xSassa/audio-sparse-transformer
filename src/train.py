@@ -108,8 +108,8 @@ def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
     if kind not in MODELS:
         raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
 
-    # tiene ricaricabili i checkpoint archiviati, da cui `evaluate.py` e
-    # `region_geometry.py` ricostruiscono il modello
+    # tiene ricaricabili i checkpoint archiviati, da cui `evaluate.py`
+    # ricostruisce il modello
     for obsoleta in OBSOLETE_MODEL_KEYS:
         m.pop(obsoleta, None)
 

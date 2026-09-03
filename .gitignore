@@ -29,15 +29,24 @@ runs/
 wandb/
 optuna*.db
 
-# Figure e script che le producono: il materiale grafico va nella
-# presentazione, non nella consegna. La consegna e' codice piu' istruzioni di
-# riproduzione, e una figura che nessuno script versionato rigenera sarebbe un
-# artefatto orfano. I file restano sul disco.
+# Si consegna SOLO cio' che serve a riprodurre: preparazione dei dati,
+# training, valutazione sul test set. Restano fuori gli strumenti di
+# verifica e quelli che producono figure, tabelle e diagnostiche — il loro
+# output e' gia' stato prodotto e vive nella presentazione. Insieme agli
+# script escono le loro uscite: un artefatto che nessuno script versionato
+# rigenera sarebbe orfano. Tutti questi file restano sul disco.
 /scripts/plot_results.py
 /scripts/plot_sampling.py
+/scripts/cost_ablation.py
+/scripts/region_geometry.py
+/scripts/verify_runs.py
+/scripts/check_env.py
 results/accuracy_vs_flops.png
 results/summary_table.md
+results/cost_ablation.md
+results/cost_ablation.json
 results/**/sampling_trace.png
+results/**/region_geometry.json
 
 # PDF dei paper: non ridistribuibili. Documenti di lavoro personali
 # (manuale, diario, analisi dei paper e i loro sorgenti in docs/): restano

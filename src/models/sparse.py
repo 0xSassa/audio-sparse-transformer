@@ -112,8 +112,7 @@ class RegionAdjust(nn.Module):
     # Il valore 4 lascia a una regione di moltiplicare il proprio lato per
     # e^4 ~ 55 a ogni ripetizione: molto oltre qualunque regione che stia
     # ancora dentro il piano, e molto sotto la soglia di overflow. Ne' il
-    # paper ne' SparseFormer prevedono questo limite; quanto morda su un run
-    # archiviato lo riporta `scripts/region_geometry.py`.
+    # paper ne' SparseFormer prevedono questo limite.
     MAX_LOG_SCALE = 4.0
 
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor,

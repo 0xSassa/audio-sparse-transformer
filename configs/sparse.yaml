@@ -11,7 +11,7 @@
 #
 # I parametri tornano su tutte e nove le configurazioni della Tabella 3,
 # entro il 2 %: e' la verifica piu' forte che la lettura del metodo sia
-# corretta (`scripts/cost_ablation.py`).
+# corretta. I valori dichiarati stanno in `src/paper.py`.
 #
 # La contraddizione della sez. 3.2 del paper ("96 dimensional feature" ma
 # "196 kernels") si scioglie su SparseFormer. Il suo paragrafo "Model

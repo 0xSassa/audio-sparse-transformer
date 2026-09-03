@@ -511,8 +511,7 @@ def test_geometry_counts_the_points_outside_the_plane():
     Con `to_delta` inizializzato a zero le regioni restano sulla griglia e il
     lato medio vale `unit`. I punti dentro il piano non sono il 100% ma il
     ~99.7%: la normalizzazione a tre sigma lascia fuori la coda, e le regioni
-    della griglia toccano il bordo. E' il caso di riferimento contro cui
-    `scripts/region_geometry.py` legge i modelli addestrati.
+    della griglia toccano il bordo.
     """
     from src.models.sparse import geometry_from_trace
     from src.models.sparse_model import SparseAudioTransformer
