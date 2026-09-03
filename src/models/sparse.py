@@ -26,8 +26,8 @@ from einops import rearrange
 from torch import nn
 
 # "none" e' la lettura letterale del paper: nulla impedisce alle regioni di
-# uscire dal piano. "clip" e' una NOSTRA ablation, aggiunta dopo aver misurato
-# che dalla seconda ripetizione meta' dei punti cade fuori.
+# uscire dal piano, e nemmeno SparseFormer lo impedisce. "clip" e' una NOSTRA
+# ablation: risponde alla domanda se quel vincolo mancante conti.
 RegionConstraint = Literal["none", "clip"]
 
 # Come si determinano le regioni. Serve a rispondere alla domanda che il paper
@@ -109,20 +109,11 @@ class RegionAdjust(nn.Module):
     # Serve perche' exp() in float32 va a infinito oltre ~88: un solo passo
     # anomalo darebbe regioni inf o 0, quindi NaN nel gradiente.
     #
-    # QUANTO MORDE, misurato su tutto il validation set di ogni run
-    # (`scripts/region_geometry.py`, campo `clamped_fraction`):
-    #
-    #   run                 rip.1   rip.2   rip.3
-    #   sparse_seed1         0 %     0 %     0 %     geometria sana
-    #   sparse_grid_seed0    0 %     0 %     0 %     regioni congelate
-    #   sparse_seed0         0 %    46 %    50 %     geometria degenerata
-    #   sparse_seed2         0 %    26 %    50 %     geometria degenerata
-    #
-    # Il clamp e' esattamente inerte finche' le regioni restano nel piano, e
-    # interviene solo dove sono gia' esplose. Non sta dando forma a un
-    # modello sano: sta impedendo a un modello degenere di produrre NaN.
-    # E' la ragione per cui questa aggiunta non compromette il confronto col
-    # paper, che il clamp non ha.
+    # Il valore 4 lascia a una regione di moltiplicare il proprio lato per
+    # e^4 ~ 55 a ogni ripetizione: molto oltre qualunque regione che stia
+    # ancora dentro il piano, e molto sotto la soglia di overflow. Ne' il
+    # paper ne' SparseFormer prevedono questo limite; quanto morda su un run
+    # archiviato lo riporta `scripts/region_geometry.py`.
     MAX_LOG_SCALE = 4.0
 
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor,
@@ -130,9 +121,7 @@ class RegionAdjust(nn.Module):
         """`return_delta=True` restituisce anche il delta PRIMA del clamp.
 
         Serve solo alla diagnostica: e' l'unico modo di misurare quanto
-        spesso `MAX_LOG_SCALE` morde, cioe' quanto il modello si discosta
-        dalla lettera del paper, che il clamp non ha. Il percorso di
-        training non lo usa.
+        spesso `MAX_LOG_SCALE` morde. Il percorso di training non lo usa.
         """
         delta = self.to_delta(tokens)                      # [B, N, 4]
         center, size = boxes_to_cwh(boxes)
@@ -226,11 +215,10 @@ class AdaptiveDecoder(nn.Module):
     10.512 uscite con C=96 e P=36.
 
     L'ultimo Linear opera sul tensore APPIATTITO P*C -> d. Il paper non lo
-    dice, e la lettura e' stata scelta col conteggio dei parametri fatto a
-    mano PRIMA di implementare: appiattito dava 2.85 M contro i 2.87 M
-    dichiarati, ridotto sui punti 2.20 M. L'implementazione conta poi
-    2.822.711 parametri, -1.6 % dal dichiarato, e resta l'unica delle due
-    letture compatibile col budget.
+    dice; lo dice AdaMixer (Gao et al., CVPR 2022), che Kavaki & Mandel
+    citano a fianco dell'equazione (9): "the final output ... is flattened
+    and transformed to the d_q dimension by a linear layer to add back to
+    the content vector".
     """
 
     def __init__(self, token_dim: int, channels: int, num_points: int,

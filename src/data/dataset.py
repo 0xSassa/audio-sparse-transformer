@@ -65,8 +65,7 @@ class EpochShuffleSampler(Sampler[int]):
     Sostituisce `shuffle=True`, il cui seed viene estratto dal generatore
     globale: con `persistent_workers` un run ripreso consuma un'estrazione in
     piu' di uno continuo e l'ordine dei dati diverge, anche ripristinando
-    tutti gli stati RNG (misurato: 0.32 punti dopo due epoche). Stesso schema
-    di `set_epoch` in `DistributedSampler`.
+    tutti gli stati RNG. Stesso schema di `set_epoch` in `DistributedSampler`.
     """
 
     def __init__(self, num_samples: int, seed: int) -> None:

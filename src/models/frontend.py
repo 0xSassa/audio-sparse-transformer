@@ -10,9 +10,9 @@ Sequenza come nel codice ufficiale di SparseFormer
     conv 7x7 stride 2 pad 3 (bias=True) -> ReLU -> maxpool 3x3 -> LayerNorm(C)
 
 Ambiguita' del paper: "96 dimensional feature" contro "196 kernels".
-`channel_reading` espone le due letture rimaste; la scelta si e' fatta sul
-conteggio dei parametri (4.80 M dichiarati per il denso).
-Dettagli: docs/note_implementative.md.
+`channel_reading` espone le due letture; si adotta c96, che e' la lettura di
+SparseFormer: "a 7x7 stride-2 convolution, a ReLU, and a 3x3 stride-2 max
+pooling to extract initial 96-d image features".
 """
 
 from __future__ import annotations
@@ -84,8 +84,13 @@ class EarlyConv(nn.Module):
         (2, 2) dimezza entrambi gli assi -> 101 frame diventano 26.
         (2, 1) dimezza solo la frequenza  -> restano 51 frame.
 
-        Il paper dice solo "max pooling", senza stride: (2, 1) e' DEDOTTO
-        dai FLOPs dichiarati, con (2, 2) il costo si ferma al 70%.
+        Il paper dice solo "max pooling", senza stride. SparseFormer usa
+        stride 2 su entrambi gli assi, che su un'immagine e' naturale perche'
+        le due dimensioni sono omogenee. Una mappa tempo-frequenza non lo e':
+        il tempo e' l'asse lungo cui il modello denso costruisce la propria
+        sequenza, e su clip di un secondo dimezzarlo lascerebbe 26 frame,
+        cioe' un passo di 40 ms. Il pooling agisce quindi sulla sola
+        frequenza.
         """
         super().__init__()
         self.channel_reading = channel_reading
@@ -100,10 +105,9 @@ class EarlyConv(nn.Module):
                       bias=True),
             nn.ReLU(inplace=True),
         ]
-        # UN SOLO strato convolutivo: il plurale del paper e' stato testato e
-        # confutato: due strati portano i FLOPs a +164% invece che a +11%.
-        # Misura della fase di ricostruzione; il secondo strato e' stato poi
-        # rimosso dal modello, quindi la cifra non si rigenera da qui.
+        # UN SOLO strato convolutivo, come SparseFormer: il plurale del
+        # paper ("convolutional layers") descrive la sequenza conv+ReLU+pool,
+        # non piu' convoluzioni.
         layers.append(nn.MaxPool2d(3, stride=pool_stride, padding=1))
 
         # seconda lettura dell'ambiguita': 196 kernel, poi proiezione a 96

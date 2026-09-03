@@ -13,8 +13,6 @@ Due cose che non sono quello che sembrano:
   e la miscela e' rinormalizzata in energia.
 - `phasemix` preserva l'ampiezza di un campione e prende solo la fase
   dell'altro: l'ampiezza non si mescola affatto.
-
-Dettagli e misure: docs/note_implementative.md.
 """
 
 from __future__ import annotations
@@ -110,8 +108,8 @@ def phasemix(
     Le fasi sono interpolate sugli ANGOLI, come fa EAT, discontinuita' a
     +/-pi compresa. L'ampiezza resta preservata sulla matrice STFT ma non
     sul segnale ricostruito: la iSTFT proietta sul sottospazio delle STFT
-    consistenti e cambia anche i moduli (~34% di errore relativo medio). E'
-    una proprieta' del metodo, non un difetto dell'implementazione.
+    consistenti e cambia anche i moduli. E' una proprieta' del metodo, non
+    un difetto dell'implementazione.
 
     `lam` si puo' forzare per rendere deterministici i test.
     """

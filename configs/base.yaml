@@ -6,10 +6,9 @@
 # nel README e discussa all'orale.
 
 seed: 0
-deterministic: true             # +10% sul tempo, ma i run diventano
-                                # bit-identici e il resume esattamente
-                                # trasparente. Misurato: senza, due run
-                                # identici differiscono di 0,02 punti.
+deterministic: true             # costa un po' di tempo per epoca, ma i run
+                                # diventano bit-identici e il resume
+                                # esattamente trasparente.
 
 data:
   cache_dir: data/cache
@@ -19,17 +18,19 @@ data:
   num_workers: 4
 
 features:                       # [ASSUNZIONE] il paper non dichiara nulla di
-  type: log_mel                 #   questo blocco. Misurato: la scelta di n_mels
-  n_fft: 400                    #   e' quasi piatta (0.8 punti su un fattore 4).
-  hop_length: 160               #   400/160 @16 kHz = finestra 25 ms, hop 10 ms
-  n_mels: 64                    #   -> 101 frame per clip da 1 s; F=16 dopo lo stem
+  type: log_mel                 #   questo blocco. Finestra e hop sono la
+  n_fft: 400                    #   convenzione della letteratura su questo
+  hop_length: 160               #   dataset (AST: 25 ms / 10 ms; KWT: 30/10):
+  n_mels: 64                    #   400/160 @16 kHz = 25 ms / 10 ms -> 101 frame
+                                #   per clip da 1 s, F=16 dopo lo stem. I 64 bin
+                                #   stanno fra i 40 di KWT e i 128 di AST.
   f_min: 20.0
   f_max: 7600.0
   top_db: 80.0
-                                # Niente normalizzazione per-campione: era una
-                                # nostra aggiunta, la sonda lineare la boccia
-                                # (-0.5 punti) e ne' il paper ne' gli ancestor
-                                # la usano. Rimossa dal codice, non spenta.
+                                # Niente normalizzazione per-campione: ne' il
+                                # paper ne' gli ancestor la usano, e il livello
+                                # assoluto porta segnale. Rimossa dal codice,
+                                # non spenta.
 
 # La normalizzazione dello stem non e' un'opzione: e' LayerNorm sui canali
 # DOPO il pooling, come nel codice di SparseFormer. Le varianti batchnorm e

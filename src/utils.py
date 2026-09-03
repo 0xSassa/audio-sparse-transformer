@@ -156,10 +156,8 @@ def seed_epoch(base_seed: int, epoch: int) -> None:
 
     Rende il flusso casuale di un'epoca indipendente da quante estrazioni
     sono state fatte prima: un run ripreso ne consuma una in piu' per il
-    `base_seed` dei worker, sfasando la scelta delle augmentation (misurato:
-    0.01 punti di divergenza dopo due epoche, con l'ordine dei dati gia'
-    reso indipendente dal resume). Rende anche riproducibile una singola
-    epoca senza rieseguire le precedenti.
+    `base_seed` dei worker, sfasando la scelta delle augmentation. Rende anche
+    riproducibile una singola epoca senza rieseguire le precedenti.
     """
     torch.manual_seed(base_seed * 1_000_003 + epoch)   # copre anche CUDA
     np.random.seed((base_seed * 1_000_003 + epoch) % (2**32))

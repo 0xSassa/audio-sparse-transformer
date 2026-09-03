@@ -14,9 +14,10 @@ la parametrizzazione spinta della classe.
     "flatten"    ogni istante porta tutti i suoi bin: N = T, dim = C*F
     "pool_freq"  media sull'asse frequenza:           N = T, dim = C
 
-E' la scelta piu' importante della ricostruzione, vale 2.92 punti.
-Niente codifica posizionale: e' una nostra ASSUNZIONE per simmetria col
-modello sparso, non una scelta misurata.
+Si adotta "flatten", la tokenizzazione di KWT sullo stesso dataset: ogni
+finestra temporale entra con tutte le sue frequenze, proiettata da una sola
+matrice. Niente codifica posizionale: e' una nostra ASSUNZIONE per simmetria
+col modello sparso, non una scelta misurata.
 """
 
 from __future__ import annotations

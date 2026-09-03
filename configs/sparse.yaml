@@ -9,20 +9,18 @@
 #   parametri  2.822.711   dichiarati 2,87 M   ->  -1,6 %
 #   costo      0,0485 GFLOP dichiarati 0,055   ->  -11,8 %
 #
-# Il conteggio dei parametri era stato PREDETTO a -0,8 % prima di scrivere
-# una riga di codice, sommando i componenti a mano. E' la verifica piu'
-# forte che la lettura del metodo sia corretta.
+# I parametri tornano su tutte e nove le configurazioni della Tabella 3,
+# entro il 2 %: e' la verifica piu' forte che la lettura del metodo sia
+# corretta (`scripts/cost_ablation.py`).
 #
 # La contraddizione della sez. 3.2 del paper ("96 dimensional feature" ma
-# "196 kernels") si scioglie su SparseFormer, non sui nostri FLOPs. Il suo
-# paragrafo "Model configurations" dice: "ResNet-like early convolutional
-# layers (a 7x7 stride-2 convolution, a ReLU, and a 3x3 stride-2 max
-# pooling) to extract initial 96-d image features". Novantasei canali, uno
-# strato solo, la sequenza che implementiamo. Il 196 e' probabilmente
-# contaminazione dai 196 patch di ViT, numero che SparseFormer stesso cita.
-# La lettura alternativa c196_proj96 resta implementata: soddisfa entrambe
-# le frasi del paper al prezzo di uno strato 1x1 mai nominato, e costa
-# 0,58 punti sul denso.
+# "196 kernels") si scioglie su SparseFormer. Il suo paragrafo "Model
+# configurations" dice: "ResNet-like early convolutional layers (a 7x7
+# stride-2 convolution, a ReLU, and a 3x3 stride-2 max pooling) to extract
+# initial 96-d image features". Novantasei canali, uno strato solo, la
+# sequenza che implementiamo. La lettura alternativa c196_proj96 resta
+# implementata: soddisfa entrambe le frasi del paper al prezzo di uno strato
+# 1x1 mai nominato.
 #
 # NIENTE CODIFICA POSIZIONALE, ed e' dichiarato: i token latenti non hanno
 # un ordine intrinseco, sono un insieme e non una sequenza. Nel denso la
@@ -63,21 +61,15 @@ model:
                                #   dal piano. E' cio' che fanno il paper e
                                #   SparseFormer, ed e' il default.
                                # "clip": regione riportata dentro [0,1]^2.
-                               # Misurato sul run di riferimento: con "none",
-                               # dalla 2a ripetizione META' dei punti campionati
-                               # cade fuori dal piano e legge il bordo. Con
-                               # L_rep=1 il 100% resta dentro: la degenerazione
-                               # e' cumulativa. Questa variante serve a decidere
-                               # se l'1,31 che ci separa dal paper sia un
-                               # difetto nostro o un limite del metodo.
+                               # La variante esiste per misurare quanto conti
+                               # quel vincolo, che il metodo non ha; il
+                               # risultato e' nella tabella del README.
 
   # --- transformer di classificazione
   dim: 128                     # d_encoder; un ponte lineare 64 -> 128
   depth: 8                     # L_enc
-  num_heads: 4                 # [ASSUNZIONE] non dichiarato. 128/4 = 32,
-                               # la dim/testa convenzionale. Misurato sul
-                               # denso: params e FLOPs non cambiano col
-                               # numero di teste, quindi e' scelta libera
+  num_heads: 4                 # [ASSUNZIONE] non dichiarato. 128/4 = 32
+                               # dimensioni per testa
   ffn_ratio: 4
   dropout: 0.0
   # nessun pos_encoding: assente per costruzione nel modello sparso

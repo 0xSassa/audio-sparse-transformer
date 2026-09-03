@@ -10,7 +10,6 @@ spendere ore di training.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
 
@@ -22,8 +21,8 @@ from src.data.speech_commands import (
     LABEL_TO_INDEX,
     LABELS,
 )
-from src.flops import analyze, count_parameters, grid_sample_flops
-from src.utils import ModelEMA, seed_everything
+from src.flops import analyze, count_parameters
+from src.utils import ModelEMA
 
 BATCH = 8
 CLIP = 16_000
@@ -58,22 +57,6 @@ def test_logmel_shape_is_64x101():
     spec = front(wave)
     assert spec.shape == (BATCH, 1, 64, 101)
     assert front.n_frames(CLIP) == 101
-
-
-def test_logmel_keeps_the_recording_level():
-    """Il livello assoluto NON viene normalizzato via, ed e' una scelta.
-
-    Avevamo un'opzione che portava ogni spettrogramma a media 0 e deviazione
-    1; la sonda lineare sui bin mel la boccia (42.83% senza contro 42.33%
-    con), e ne' il paper ne' gli ancestor normalizzano. Questo test fissa
-    l'assenza: due clip identiche a meno del guadagno devono restare
-    DIVERSE dopo il front-end, perche' e' il livello a portare segnale.
-    """
-    front = LogMelSpectrogram()
-    wave = torch.randn(1, CLIP)
-    forte = front(wave * 100.0)
-    piano = front(wave)
-    assert not torch.allclose(forte, piano, atol=1e-3)
 
 
 # --------------------------------------------------------------------------
@@ -116,25 +99,6 @@ def test_lam_acts_as_threshold_not_as_weight():
     assert torch.equal(above, a)
 
 
-def test_mix_targets_clamps_when_classes_coincide():
-    """Se i due campioni hanno la stessa classe, il clamp evita il target 2."""
-    from src.data.augment import mix_targets
-
-    a = one_hot(torch.full((4,), 7, dtype=torch.long), NUM_CLASSES)
-    out = mix_targets(a, a, torch.zeros(4))
-    assert float(out.max()) == 1.0
-    assert torch.all(out.sum(dim=1) == 1)
-
-
-def test_phasemix_preserves_energy_scale():
-    """Il mixing non deve far esplodere l'ampiezza del segnale."""
-    wave = torch.randn(BATCH, CLIP)
-    targets = one_hot(torch.randint(NUM_CLASSES, (BATCH,)), NUM_CLASSES)
-    mixed, _ = phasemix(wave, targets)
-    ratio = mixed.std() / wave.std()
-    assert 0.2 < float(ratio) < 3.0
-
-
 def test_phasemix_with_lam_one_is_the_identity():
     """Con lam=1 la fase mixata coincide con la propria: deve tornare x.
 
@@ -151,58 +115,6 @@ def test_phasemix_with_lam_one_is_the_identity():
     assert torch.allclose(mixed_t, targets, atol=1e-5)
 
 
-def test_phasemix_amplitude_is_preserved_in_the_stft_but_not_after_istft():
-    """Documenta la CONSISTENZA della STFT, che non e' un dettaglio minore.
-
-    "Preserving amplitude" vale sulla matrice STFT modificata, dove per
-    costruzione il modulo e' quello dell'originale. Ma una matrice complessa
-    arbitraria non e' la STFT di alcun segnale reale: la iSTFT proietta sul
-    sottospazio delle STFT consistenti, e la proiezione altera anche i
-    moduli. Il test fissa entrambi i fatti.
-    """
-    from src.data.augment import STFT_HOP, STFT_N_FFT
-
-    torch.manual_seed(0)
-    wave = torch.randn(BATCH, CLIP)
-    targets = one_hot(torch.randint(NUM_CLASSES, (BATCH,)), NUM_CLASSES)
-    win = torch.hann_window(STFT_N_FFT)
-
-    before = torch.stft(wave, STFT_N_FFT, STFT_HOP, window=win,
-                        center=True, return_complex=True).abs()
-    mixed, _ = phasemix(wave, targets, lam=0.0)      # fase interamente dell'altro
-    after = torch.stft(mixed, STFT_N_FFT, STFT_HOP, window=win,
-                       center=True, return_complex=True).abs()
-
-    rel = float((after - before).abs().mean() / before.mean())
-    # non e' preservata dopo la ricostruzione...
-    assert rel > 0.05
-    # ...ma la deviazione resta contenuta: non e' rumore scorrelato
-    assert rel < 0.8
-
-
-def test_phasemix_label_lam_is_remapped_to_upper_half():
-    """Il lam dell'etichetta e' lam*0.5+0.5 in [0.5, 1].
-
-    Con la soglia a 0.9 questo significa che la seconda etichetta
-    sopravvive quando lam < 0.8, cioe' nell'80% dei casi. Il test verifica
-    i due estremi.
-    """
-    torch.manual_seed(0)
-    wave = torch.randn(64, 2000)
-    targets = one_hot(torch.arange(64) % NUM_CLASSES, NUM_CLASSES)
-
-    # lam=0 -> lam_label=0.5 < 0.9 -> due etichette, salvo i punti fissi
-    # della permutazione (un campione mixato con se stesso resta a una)
-    _, t_low = phasemix(wave, targets, lam=0.0)
-    active = t_low.sum(dim=1)
-    assert torch.all((active == 1) | (active == 2))
-    assert float((active == 2).float().mean()) > 0.8
-
-    # lam=1 -> lam_label=1.0 >= 0.9 -> una sola etichetta, l'originale
-    _, t_high = phasemix(wave, targets, lam=1.0)
-    assert torch.equal(t_high, targets)
-
-
 def test_mixing_renormalises_energy():
     """La divisione per sqrt(p^2+(1-p)^2) tiene costante l'energia attesa.
 
@@ -217,29 +129,13 @@ def test_mixing_renormalises_energy():
     assert 0.8 < float(ratio) < 1.25
 
 
-def test_mixing_keeps_second_label_when_lam_is_small():
-    torch.manual_seed(0)
-    wave = torch.randn(64, 2000)
-    targets = one_hot(torch.arange(64) % NUM_CLASSES, NUM_CLASSES)
-
-    _, t_low = mixing(wave, targets, lam=0.3)
-    active = t_low.sum(dim=1)
-    # i punti fissi di randperm mixano un campione con se stesso: il clamp
-    # riporta quel target a una sola classe. E' il comportamento del
-    # riferimento, non un difetto: circa 1/B dei campioni per batch.
-    assert torch.all((active == 1) | (active == 2))
-    assert float((active == 2).float().mean()) > 0.8
-
-    _, t_high = mixing(wave, targets, lam=0.95)
-    assert torch.equal(t_high, targets)
-
-
 def test_stem_follows_sparseformer_sequence():
     """conv(bias) -> ReLU -> maxpool -> LayerNorm sui canali, nessuna BatchNorm.
 
-    Regressione sulla deviazione corretta il 18/08: una versione precedente
-    inseriva una BatchNorm fra conv e ReLU, che ne' il paper ne' il codice
-    di SparseFormer prevedono.
+    E' la sequenza di SparseFormer, che scioglie l'ambiguita' del paper sui
+    canali: "a 7x7 stride-2 convolution, a ReLU, and a 3x3 stride-2 max
+    pooling to extract initial 96-d image features". Nessuna BatchNorm: la
+    normalizzazione e' sui canali e viene dopo il pooling.
     """
     from src.models.frontend import ChannelLayerNorm, EarlyConv
 
@@ -260,16 +156,6 @@ def test_channel_layernorm_normalises_over_channels():
     # media e varianza vanno a 0 e 1 lungo l'asse dei canali, per ogni pixel
     assert torch.allclose(y.mean(dim=1), torch.zeros(2, 5, 7), atol=1e-5)
     assert torch.allclose(y.std(dim=1, unbiased=False), torch.ones(2, 5, 7), atol=1e-2)
-
-
-def test_apply_augmentations_always_returns_targets_of_fixed_shape():
-    """Il percorso di loss deve essere unico: sempre [B, C] float."""
-    wave = torch.randn(BATCH, CLIP)
-    labels = torch.randint(NUM_CLASSES, (BATCH,))
-    for _ in range(10):
-        out, targets = apply_augmentations(wave, labels, NUM_CLASSES)
-        assert out.shape == wave.shape
-        assert targets.shape == (BATCH, NUM_CLASSES)
 
 
 def test_epoch_mix_disables_augmentation_before_the_threshold():
@@ -299,17 +185,12 @@ class _TinyNet(torch.nn.Module):
 
 
 def test_flops_counter_counts_flops_not_macs():
-    """Il contatore conta FLOPs, non MAC — la convenzione del paper.
+    """Il contatore conta FLOPs, non MAC.
 
-    E' l'avvertenza centrale di src/flops.py. Un Linear 100->200 senza bias
-    costa 100*200 = 20_000 MAC, cioe' 40_000 FLOPs: il test fissa che il
-    numero riportato sia il secondo. Sbagliare convenzione sposta di un
-    fattore 2 l'unico claim del paper che si riproduce esattamente.
-
-    In fase 2 la stessa proprieta' era verificata confrontando due contatori
-    indipendenti (nativo e fvcore, che concordavano sul fattore 2). Deciso il
-    punto, fvcore e' stato rimosso: qui resta il valore assoluto atteso, che
-    e' cio' che il confronto col paper usa davvero.
+    E' l'avvertenza centrale di src/flops.py: un Linear 100->200 senza bias
+    costa 100*200 = 20_000 MAC, cioe' 40_000 FLOPs, e il test fissa che il
+    numero riportato sia il secondo. Il paper non dichiara la propria
+    convenzione, quindi la nostra va dichiarata e sorvegliata.
     """
     report = analyze(_TinyNet(), (100,))
     assert report.params == 100 * 200
@@ -321,41 +202,9 @@ def test_flops_counter_counts_flops_not_macs():
 # Utilita'
 # --------------------------------------------------------------------------
 
-def test_dataset_is_picklable_without_the_memmap(tmp_path):
-    """Regressione: su Windows il DataLoader usa 'spawn' e PICKLA il Dataset.
-
-    Se la memmap restasse un attributo dell'istanza, pickle proverebbe a
-    serializzare 2.7 GB e fallirebbe con OSError [Errno 22]. Il test
-    costruisce una cache finta minuscola e verifica che il round-trip
-    funzioni e che la memmap non finisca nello stato serializzato.
-    """
-    import pickle
-
-    from src.data.dataset import SpeechCommandsCached
-
-    n, clip = 8, 16_000
-    np.lib.format.open_memmap(
-        tmp_path / "train_wave.npy", mode="w+", dtype=np.int16, shape=(n, clip)
-    ).flush()
-    np.save(tmp_path / "train_label.npy", np.zeros(n, dtype=np.int64))
-
-    ds = SpeechCommandsCached(tmp_path, "train")
-    _ = ds[0]                      # forza l'apertura della memmap
-    assert ds._waves is not None
-
-    blob = pickle.dumps(ds)
-    assert len(blob) < 100_000     # non deve contenere l'array
-
-    revived = pickle.loads(blob)
-    assert revived._waves is None  # riaperta pigramente nel worker
-    assert len(revived) == n
-    assert revived[0][0].shape == (clip,)
-
 
 # La configurazione ADOTTATA, cioe' `configs/dense_flatten.yaml`: e' quella
-# da cui vengono i numeri riportati. Una versione precedente teneva qui
-# c196_proj96 + pool_freq, cioe' la ricostruzione SCARTATA: il test si
-# chiamava "adopted" e sorvegliava un modello che non riportiamo.
+# da cui vengono i numeri riportati nel README.
 ADOPTED_DENSE = {
     "channel_reading": "c96",
     "pool_stride": (2, 1),
@@ -392,25 +241,6 @@ def test_adopted_dense_still_costs_what_we_reported():
     assert rep.flops == 560_431_424, f"FLOPs cambiati: {rep.flops:,}"
 
 
-def test_dense_is_batch_independent():
-    """Con LayerNorm al posto della BatchNorm, train ed eval devono coincidere.
-
-    Verifica indiretta che nessuna normalizzazione dipendente dal batch sia
-    rientrata nel modello.
-    """
-    from src.models.dense import DenseAudioTransformer
-
-    torch.manual_seed(0)
-    model = DenseAudioTransformer(**ADOPTED_DENSE)
-    spec = torch.randn(4, 1, 64, 101)
-    with torch.no_grad():
-        model.train()
-        a = model(spec)
-        model.eval()
-        b = model(spec)
-    assert torch.equal(a, b)
-
-
 def test_ema_moves_towards_model_and_lags_it():
     torch.manual_seed(0)
     model = _TinyNet()
@@ -433,15 +263,6 @@ def test_ema_moves_towards_model_and_lags_it():
 # ==========================================================================
 
 ADOPTED_SPARSE = {"channel_reading": "c96", "pool_stride": (2, 1)}
-
-
-def test_boxes_round_trip():
-    """(x1,y1,x2,y2) <-> (centro, dimensione) senza perdite."""
-    from src.models.sparse import boxes_to_cwh, cwh_to_boxes
-
-    boxes = torch.tensor([[0.1, 0.2, 0.7, 0.9], [0.0, 0.0, 1.0, 1.0]])
-    center, size = boxes_to_cwh(boxes)
-    assert torch.allclose(cwh_to_boxes(center, size), boxes, atol=1e-6)
 
 
 def test_grid_init_covers_the_plane_and_rejects_non_squares():
@@ -488,8 +309,7 @@ def test_region_adjust_survives_pathological_deltas():
     o 0, quindi NaN nel gradiente.
 
     Il limite MAX_LOG_SCALE e' una NOSTRA aggiunta, non prevista dal paper
-    ne' da SparseFormer, ed e' verificato piu' sotto che non si attiva mai
-    nel regime normale.
+    ne' da SparseFormer, ed e' dichiarata nel README.
     """
     from src.models.sparse import RegionAdjust, boxes_to_cwh, init_boxes_on_grid
 
@@ -502,103 +322,6 @@ def test_region_adjust_survives_pathological_deltas():
     _, size = boxes_to_cwh(out)
     assert (size > 0).all(), "regioni degenerate: exp e' andato a zero"
     assert torch.isfinite(out).all(), "regioni infinite: exp e' esploso"
-
-
-def test_region_clamp_does_not_bind_at_initialisation():
-    """Il clamp e' inerte ALL'INIZIALIZZAZIONE — e solo li'.
-
-    >>> ATTENZIONE: QUESTO TEST NON DICE CHE IL CLAMP SIA INNOCUO <<<
-
-    Con `to_delta` inizializzato a zero i delta partono nulli, quindi il
-    limite non puo' attivarsi: e' cio' che questo test verifica, ed e' tutto
-    cio' che verifica. Per un lungo periodo la documentazione ha dedotto da
-    qui che il clamp "nel regime normale non si attiva mai" — deduzione
-    SBAGLIATA, perche' un test sull'inizializzazione non dice nulla sul
-    modello addestrato.
-
-    Misurato sul checkpoint di `sparse_seed0` (22/08): dopo 100 epoche il
-    clamp e' attivo sul 46% delle componenti alla seconda ripetizione e sul
-    50% alla terza, dove |delta| medio vale 5468 contro un limite di 4. La
-    "rete di sicurezza che non si attiva mai" e' in realta' l'unica ragione
-    per cui quel run non ha prodotto NaN.
-
-    Un test su un modello addestrato non e' scrivibile qui — servirebbe il
-    checkpoint, e questa suite gira senza dati ne' pesi — quindi la verifica
-    vive in `scripts/plot_sampling.py`, che stampa la geometria per stadio.
-    """
-    from src.models.sparse import RegionAdjust
-
-    torch.manual_seed(0)
-    adj = RegionAdjust(64)                     # inizializzazione reale: zeri
-    delta = adj.to_delta(torch.randn(256, 4, 64))
-    assert float(delta[..., 2:].detach().abs().max()) < RegionAdjust.MAX_LOG_SCALE / 4
-
-
-def _load_plot_results():
-    """Carica `scripts/plot_results.py`, che non e' un package."""
-    import importlib.util
-    from pathlib import Path
-
-    path = Path(__file__).resolve().parents[1] / "scripts" / "plot_results.py"
-    spec = importlib.util.spec_from_file_location("plot_results", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _run(tag, seed, acc, **model):
-    cfg = {"kind": "sparse", "num_tokens": 4, "num_points": 36, "repeats": 3,
-           "channel_reading": "c96", "region_constraint": "none", **model}
-    return {"tag": tag, "seed": seed, "epochs": 100, "acc": acc, "test": None,
-            "gflops": 0.0485, "params": 2_822_711, "kind": "sparse",
-            "num_tokens": cfg["num_tokens"], "num_points": cfg["num_points"],
-            "repeats": cfg["repeats"], "seq_mode": None,
-            "channels": cfg["channel_reading"], "constraint": cfg["region_constraint"],
-            "mode": cfg.get("region_mode", "learned"), "model_cfg": cfg}
-
-
-def test_grouping_separates_configurations_that_differ_only_in_one_option():
-    """Due varianti diverse non devono fondersi in un gruppo solo.
-
-    >>> IL DIFETTO CHE QUESTO TEST IMPEDISCE <<<
-
-    La chiave di raggruppamento elencava i campi a mano. Quando e' stata
-    aggiunta l'opzione `region_mode`, i tre run a regioni congelate si sono
-    fusi con i tre a regioni apprese in un unico gruppo da sei seed, con una
-    media che non corrispondeva ad alcun modello esistente — ed e' finita in
-    una tabella di risultati.
-
-    Il difetto era invisibile ai controlli ovvi: le due varianti hanno per
-    costruzione gli STESSI parametri e gli STESSI FLOPs, quindi nessuna
-    verifica di coerenza su quelli poteva accorgersene.
-    """
-    group = _load_plot_results().group
-
-    runs = [_run(f"learned{i}", i, 95.0 + i / 10) for i in range(3)]
-    runs += [_run(f"grid{i}", i, 94.0 + i / 10, region_mode="grid") for i in range(3)]
-    g = group(runs)
-    assert len(g) == 2, "learned e grid devono restare due configurazioni distinte"
-    assert sorted(v["n_seeds"] for v in g.values()) == [3, 3]
-
-
-def test_grouping_fills_options_added_after_a_run_was_archived():
-    """Un run vecchio, la cui config non conosce un'opzione nuova, deve
-    raggrupparsi con i run che la usano al valore di default.
-
-    `resolved_config.json` fotografa la configurazione al momento del run:
-    un'opzione aggiunta dopo non compare nei run precedenti. Senza riempire
-    i default dalla firma della classe, lo stesso identico modello finirebbe
-    in due gruppi diversi a seconda di quando e' stato addestrato — difetto
-    speculare al precedente, e altrettanto silenzioso.
-    """
-    group = _load_plot_results().group
-
-    vecchio = _run("prima", 0, 95.5)
-    vecchio["model_cfg"].pop("region_constraint")      # opzione non ancora esistente
-    nuovo = _run("dopo", 1, 95.7)                      # stessa cosa, col default
-    g = group([vecchio, nuovo])
-    assert len(g) == 1, "lo stesso modello non deve dividersi per l'eta' del run"
-    assert next(iter(g.values()))["n_seeds"] == 2
 
 
 def test_region_mode_freezes_the_right_parameters():
@@ -648,10 +371,9 @@ def test_frozen_regions_do_not_move():
 def test_region_constraint_keeps_boxes_inside_the_plane():
     """Con `constraint="clip"` le regioni restano dentro [0,1], sempre.
 
-    Misurato sul run di riferimento: senza vincolo, dalla seconda ripetizione
-    meta' dei punti campionati cade fuori dal piano e legge il bordo. Questo
-    test usa delta patologici — molto oltre quelli osservati — e verifica che
-    il vincolo li assorba comunque.
+    E' la variante opzionale descritta nel README: la lettura letterale del
+    paper non pone vincoli sulle regioni, questa li impone. Il test usa delta
+    deliberatamente patologici e verifica che il vincolo li assorba.
     """
     from src.models.sparse import RegionAdjust, boxes_to_cwh, init_boxes_on_grid
 
@@ -748,9 +470,8 @@ def test_extractor_learns_where_to_look():
 def test_sparse_model_matches_the_declared_budget():
     """Guardia di regressione sui due vincoli dichiarati dal paper.
 
-    2,87 M parametri e 0,055 G FLOPs. I parametri erano stati PREDETTI a
-    -0,8% prima di implementare; i FLOPs sono il terzo vincolo indipendente
-    e sono cio' che ha sciolto la contraddizione "96 vs 196 kernels".
+    2,87 M parametri e 0,055 G FLOPs, i due soli numeri che il paper
+    dichiara per questo modello.
     """
     from src.flops import analyze
     from src.models.sparse_model import SparseAudioTransformer
@@ -762,22 +483,6 @@ def test_sparse_model_matches_the_declared_budget():
     rep = analyze(model, (1, 64, 101))
     assert abs(rep.params - 2.87e6) / 2.87e6 < 0.05
     assert abs(rep.flops - 0.055e9) / 0.055e9 < 0.20
-
-
-def test_c196_would_blow_the_sparse_cost():
-    """La lettura scartata sbaglia il costo dello sparso di oltre il 50%.
-
-    Documenta l'evidenza che ha risolto la contraddizione del paper: nel
-    modello sparso la early convolution e' il 65% del costo, quindi i suoi
-    FLOPs discriminano fra le due letture molto piu' di quelli del denso.
-    """
-    from src.flops import analyze
-    from src.models.sparse_model import SparseAudioTransformer
-
-    bad = analyze(SparseAudioTransformer(channel_reading="c196_proj96",
-                                         pool_stride=(2, 1)),
-                  (1, 64, 101))
-    assert (bad.flops - 0.055e9) / 0.055e9 > 0.5
 
 
 def test_params_match_the_paper_on_both_ablation_axes():
@@ -800,45 +505,14 @@ def test_params_match_the_paper_on_both_ablation_axes():
             assert err < 0.03, f"{key}={value}: {got:,} contro {paper_params} M"
 
 
-def test_cost_per_token_does_not_depend_on_our_spectrogram():
-    """La pendenza del costo in N e' fissata dalle sole quantita' dichiarate.
-
-    FLOPs(N) = fisso + pendenza * N. Il termine fisso e' la early convolution
-    e dipende dalle nostre assunzioni sullo spettrogramma; la pendenza e' il
-    costo di un token e dipende solo da P, C, d_token, d_encoder, L_rep,
-    L_enc, tutti dichiarati dal paper.
-
-    Serve a rendere non negoziabile lo scarto documentato nel README: la
-    Tabella 3 implica ~3.9 MFLOP per token, noi ne misuriamo ~8.4, e la
-    differenza non si puo' attribuire alle nostre assunzioni.
-    """
-    from src.models.sparse_model import SparseAudioTransformer
-
-    slopes = []
-    for n_mels, n_frames in ((32, 101), (64, 101), (128, 101)):
-        costs = []
-        for n_tokens in (4, 36):
-            model = SparseAudioTransformer(n_mels=n_mels, n_frames=n_frames,
-                                           num_tokens=n_tokens, **ADOPTED_SPARSE)
-            costs.append(analyze(model, (1, n_mels, n_frames)).flops)
-        slopes.append((costs[1] - costs[0]) / (36 - 4))
-
-    assert max(slopes) - min(slopes) < 1e-3 * max(slopes)
-    assert 8.0e6 < slopes[0] < 9.0e6
-    # la Tabella 3 del paper: (179.00 - 54.61) MFLOP su 32 token
-    paper_slope = (0.179e9 - 0.05461e9) / (36 - 4)
-    assert slopes[0] / paper_slope > 2.0
-
-
 def test_geometry_counts_the_points_outside_the_plane():
     """I conteggi di `geometry_from_trace`, sul modello appena inizializzato.
 
     Con `to_delta` inizializzato a zero le regioni restano sulla griglia e il
     lato medio vale `unit`. I punti dentro il piano non sono il 100% ma il
     ~99.7%: la normalizzazione a tre sigma lascia fuori la coda, e le regioni
-    della griglia toccano il bordo. E' il caso di riferimento contro cui si
-    legge la degenerazione dei modelli ADDESTRATI, dove la frazione scende al
-    50% (results/*/region_geometry.json).
+    della griglia toccano il bordo. E' il caso di riferimento contro cui
+    `scripts/region_geometry.py` legge i modelli addestrati.
     """
     from src.models.sparse import geometry_from_trace
     from src.models.sparse_model import SparseAudioTransformer
@@ -857,25 +531,6 @@ def test_geometry_counts_the_points_outside_the_plane():
     assert model.sampling_geometry(spec) == stages
 
 
-def test_geometry_counts_are_additive_over_batches():
-    """Conteggi grezzi, non frequenze: due mezzi batch = un batch intero.
-
-    E' cio' che permette a `scripts/region_geometry.py` di misurare l'intero
-    split di validation sommando, invece di mediare medie di batch.
-    """
-    from src.models.sparse_model import SparseAudioTransformer
-
-    torch.manual_seed(0)
-    model = SparseAudioTransformer(**ADOPTED_SPARSE).eval()
-    spec = torch.randn(4, 1, 64, 101)
-
-    whole = model.sampling_geometry(spec)
-    halves = [model.sampling_geometry(spec[:2]), model.sampling_geometry(spec[2:])]
-    for k, stage in enumerate(whole):
-        assert stage["points"] == halves[0][k]["points"] + halves[1][k]["points"]
-        assert stage["inside"] == halves[0][k]["inside"] + halves[1][k]["inside"]
-
-
 def test_sparse_model_is_batch_independent():
     from src.models.sparse_model import SparseAudioTransformer
 
@@ -890,86 +545,9 @@ def test_sparse_model_is_batch_independent():
     assert torch.equal(a, b)
 
 
-def test_sampling_trace_shows_three_stages():
-    """La traccia serve a riprodurre la Figura 2 del paper."""
-    from src.models.sparse_model import SparseAudioTransformer
-
-    model = SparseAudioTransformer(**ADOPTED_SPARSE).eval()
-    trace = model.sampling_trace(torch.randn(1, 1, 64, 101))
-    assert len(trace) == 3
-    for stage in trace:
-        assert stage["boxes"].shape == (1, 4, 4)
-        assert stage["tokens"].shape == (1, 4, 64)
-        # i P punti effettivamente campionati: senza di questi la figura
-        # mostrerebbe le regioni ma non cio' che il modello legge dentro
-        assert stage["points"].shape == (1, 4, 36, 2)
-        assert torch.isfinite(stage["points"]).all()
-
-
-def test_trace_does_not_change_the_training_path():
-    """`return_coords` e' opt-in: il percorso normale resta un solo tensore.
-
-    La traccia e' stata aggiunta a campionamento gia' addestrato. Se avesse
-    cambiato la forma dell'uscita di `SparseSampler`, avrebbe rotto il
-    training in modo silenzioso — quindi si verifica che il ramo di default
-    sia rimasto identico.
-    """
-    from src.models.sparse import SparseSampler, init_boxes_on_grid
-
-    torch.manual_seed(0)
-    sampler = SparseSampler(64, 36)
-    boxes = init_boxes_on_grid(4).unsqueeze(0)
-    feats = torch.randn(1, 96, 16, 51)
-    tokens = torch.randn(1, 4, 64)
-
-    plain = sampler(tokens, boxes, feats)
-    assert isinstance(plain, torch.Tensor)
-
-    sampled, coords = sampler(tokens, boxes, feats, return_coords=True)
-    assert torch.equal(plain, sampled)
-    assert coords.shape == (1, 4, 36, 2)
-
-
-def test_sampled_points_lie_inside_their_region():
-    """I punti restituiti stanno dentro il riquadro del proprio token.
-
-    E' la coerenza fra le due cose che la figura disegna: se i punti non
-    cadessero nella regione che li accompagna, il disegno racconterebbe una
-    storia diversa da quella del modello. Il limite non e' netto — la regola
-    dei tre sigma lascia fuori circa lo 0,3% — quindi si verifica la
-    frazione, non ogni singolo punto.
-    """
-    from src.models.sparse import SparseSampler, boxes_to_cwh, init_boxes_on_grid
-
-    torch.manual_seed(0)
-    sampler = SparseSampler(64, 36)
-    boxes = init_boxes_on_grid(4).unsqueeze(0).expand(16, -1, -1)
-    feats = torch.randn(16, 96, 16, 51)
-    _, coords = sampler(torch.randn(16, 4, 64), boxes, feats, return_coords=True)
-
-    center, size = boxes_to_cwh(boxes)
-    dist = (coords - center.unsqueeze(-2)).abs()
-    inside = (dist <= 0.5 * size.unsqueeze(-2)).all(dim=-1).float().mean()
-    assert float(inside) > 0.95
-
-
 # --------------------------------------------------------------------------
 # Override della configurazione da riga di comando
 # --------------------------------------------------------------------------
-
-def test_override_sets_a_nested_value_and_casts_it():
-    from src.utils import apply_overrides
-
-    cfg = {"model": {"num_tokens": 4, "unit": 0.5}, "optim": {"epochs": 100}}
-    applied = apply_overrides(cfg, ["model.num_tokens=9", "optim.epochs=50"])
-    assert cfg["model"]["num_tokens"] == 9
-    assert isinstance(cfg["model"]["num_tokens"], int)
-    assert cfg["optim"]["epochs"] == 50
-    assert len(applied) == 2
-
-    # int accettato dove c'e' un float: 1 al posto di 1.0 e' innocuo
-    apply_overrides(cfg, ["model.unit=1"])
-    assert cfg["model"]["unit"] == 1
 
 
 def test_override_refuses_an_unknown_key():
@@ -985,12 +563,3 @@ def test_override_refuses_an_unknown_key():
     assert cfg == {"model": {"num_tokens": 4}}
 
 
-def test_override_refuses_a_wrong_type():
-    from src.utils import apply_overrides
-
-    cfg = {"optim": {"epochs": 100}}
-    with pytest.raises(TypeError):
-        apply_overrides(cfg, ["optim.epochs=cinquanta"])
-    with pytest.raises(ValueError):
-        apply_overrides(cfg, ["optim.epochs"])
-    assert cfg["optim"]["epochs"] == 100

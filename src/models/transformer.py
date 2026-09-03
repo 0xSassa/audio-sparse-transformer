@@ -105,15 +105,9 @@ class EncoderBlock(nn.Module):
 class TransformerEncoder(nn.Module):
     """Stack di blocchi pre-norm, con LayerNorm finale.
 
-    A queste dimensioni la GPU e' limitata dal lancio dei kernel, non dal
-    calcolo: a parita' di parametri conviene la larghezza, perche' allargare
-    d aumenta il lavoro per kernel mentre aggiungere layer aumenta il numero
-    di lanci. Misurato durante la ricostruzione del denso (d=128 x 24 layer
-    contro d=224 x 8, quasi 2x di tempo per epoca a parita' di parametri);
-    e' un confronto di quella fase, i cui run non sono archiviati, e non va
-    citato come risultato del progetto. I run archiviati usano tutti
-    d=224 x 8 sul denso e d=128 x 8 sullo sparso, quest'ultimo DICHIARATO
-    dal paper.
+    I run archiviati usano d=224 x 8 sul denso e d=128 x 8 sullo sparso,
+    quest'ultimo DICHIARATO dal paper. Per il denso la larghezza e'
+    ricostruita dai due soli numeri che il paper ne dichiara (README, sez. 6).
     """
 
     def __init__(self, dim: int, depth: int, num_heads: int, ratio: int = 4,

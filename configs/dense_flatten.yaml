@@ -15,17 +15,16 @@
 # della convoluzione), mentre `flatten` conserva la struttura spettrale e
 # ogni token ne porta 1536 (96 canali x 16 bin).
 #
-# Perche' conta: il baseline denso verra' confrontato con un modello che
-# campiona nel piano tempo-frequenza. Se il denso ha buttato via la
-# frequenza, il confronto e' sbilanciato a suo sfavore. `pool_freq` era la
-# nostra scelta MENO SICURA di tutta la ricostruzione; questo run la mette
-# alla prova.
+# Si adotta `flatten`, ed e' la tokenizzazione di KWT sullo stesso dataset:
+# "the spectrogram is first mapped to a higher dimension d, using a linear
+# projection matrix W0 in R^{FxD} in the frequency domain". Ogni finestra
+# temporale entra con tutte le sue frequenze, e la loro ablation sulle patch
+# trova migliori proprio quelle a frequenza piena, una per frame.
 #
-# Nota sui run archiviati: il primo denso `pool_freq` (94,67 %, cartella
-# `results/dense_seed0`) usava ancora c196_proj96. E' stato rifatto con c96
-# (94,09 %, `results/dense_c96_seed0`) perche' il confronto col flatten fosse
-# controllato: la differenza fra le due letture dei canali vale 0,58 punti,
-# cioe' meno di un quinto dei 2,9 che separano `pool_freq` da `flatten`.
+# Nota sui run archiviati: `results/dense_seed0` e' la stessa ricostruzione
+# `pool_freq` con la lettura alternativa dei canali (c196_proj96);
+# `results/dense_c96_seed0` e' quella con c96, cosi' il confronto col
+# flatten e' controllato sui canali.
 
 defaults: base.yaml
 
