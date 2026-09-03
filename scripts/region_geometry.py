@@ -2,8 +2,7 @@
 
     python scripts/region_geometry.py --run sparse_seed0
 
-La Figura 2 del paper (`scripts/plot_sampling.py`) mostra quattro esempi. Qui
-si conta la stessa cosa sull'intero split di validation, e il risultato
+Si contano i punti campionati sull'intero split di validation, e il risultato
 finisce in `results/<run>/region_geometry.json`, che e' versionato: la
 misura diventa citabile senza rieseguire nulla.
 

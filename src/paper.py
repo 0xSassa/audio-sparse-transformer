@@ -1,9 +1,7 @@
 """Numeri DICHIARATI da Kavaki & Mandel, ICASSP 2025 — trascritti dal PDF.
 
-Unica fonte per i valori del paper. Stavano dentro `scripts/plot_results.py`,
-dove nessun altro poteva leggerli senza importare uno script; da qui li usano
-il grafico, l'analisi dei costi e i test di regressione, e una trascrizione
-sbagliata si corregge in un posto solo.
+Unica fonte per i valori del paper: da qui li leggono l'analisi dei costi e i
+test di regressione, e una trascrizione sbagliata si corregge in un posto solo.
 
 Le tuple sono sempre (valore dell'asse, parametri in M, GFLOP, accuratezza %).
 L'accuratezza del paper e' su TEST, la nostra su validation: il confronto

@@ -1,7 +1,7 @@
 """Tracciamento degli esperimenti: CSV e TensorBoard.
 
 Il CSV nella cartella del run e' la fonte di verita' da cui
-`scripts/plot_results.py` ricostruisce ogni figura; TensorBoard serve solo
+`metrics.csv` porta la curva per epoca; TensorBoard serve solo
 a guardare il run mentre gira.
 """
 

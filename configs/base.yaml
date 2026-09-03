@@ -77,7 +77,7 @@ log:
   dir: results
   tensorboard: true
   # Il tracciamento vive in due posti e basta: `metrics.csv` nella cartella del
-  # run — la fonte da cui plot_results.py ricostruisce ogni figura — e i log
-  # TensorBoard. Weights & Biases era la terza destinazione ed e' stato
+  # run, che porta la curva per epoca, e i log TensorBoard. Weights & Biases
+  # era la terza destinazione ed e' stato
   # rimosso: il confronto fra run che lo giustificava lo fa gia' il CSV, e un
   # servizio con account e rete e' un requisito in piu' per chi riproduce.

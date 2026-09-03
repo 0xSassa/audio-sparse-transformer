@@ -30,7 +30,7 @@ src/        data/     split ufficiali, cache memory-mapped, log-mel, augmentatio
             train.py, flops.py, metrics.py, utils.py, tracking.py
             paper.py  i numeri dichiarati da Kavaki & Mandel, in un posto solo
 scripts/    preparazione dati, training multi-seed, valutazione, verifica
-            dell'archivio, figure, analisi dei costi, geometria del campionamento
+            dell'archivio, analisi dei costi, geometria del campionamento
 tests/      28 test, girano in pochi secondi e senza il dataset scaricato
 results/    metriche, configurazioni e report dei 22 run archiviati
 ```
@@ -218,10 +218,9 @@ riproduce; la metà bassa, lungo il numero di campioni per token, no. Gli otto
 punti delle due ablation sono a 50 epoche, per renderli confrontabili fra loro;
 le cinque righe successive sono a 100 epoche.
 
-La colonna «Paper» va letta con due cautele, le stesse che
-`results/accuracy_vs_flops.png` stampa dentro la figura: i numeri del paper sono
-su test e i nostri su validation, e i nostri sono a metà del budget di epoche.
-Fra le nostre configurazioni il confronto è invece alla pari.
+La colonna «Paper» va letta con due cautele: i numeri del paper sono su test e
+i nostri su validation, e i nostri sono a metà del budget di epoche. Fra le
+nostre configurazioni il confronto è invece alla pari.
 
 | Configurazione | Validation | Paper | Params | GFLOP |
 |---|---|---|---|---|
@@ -246,8 +245,8 @@ davvero; `region_constraint=clip` riporta le regioni dentro `[0,1]²`;
 `repeats=1` toglie l'iterazione. Il confronto resta controllato in tutti e tre i
 casi.
 
-Tutti i 22 run sono in `results/summary_table.md`, la figura in
-`results/accuracy_vs_flops.png`.
+I 22 run sono elencati nella sezione 9; di ciascuno, `results/<tag>/summary.json`
+porta accuratezza, parametri e FLOPs, e `metrics.csv` la curva per epoca.
 
 ### Il conteggio dei parametri, verificato senza addestrare
 
@@ -490,15 +489,10 @@ controlla che parametri e FLOPs coincidano con quelli registrati, che
 seed e che nessuna valutazione di test sia stata forzata. È il modo di stabilire
 che i risultati in `results/` vengono da questo codice.
 
-### 8.5 Figure e misure
+### 8.5 Misure senza training
 
-```bash
-python scripts/plot_results.py                       # accuracy_vs_flops.png + summary_table.md
-python scripts/plot_sampling.py --run sparse_seed0   # sampling_trace.png, la Figura 2 del paper
-```
-
-Due misure che non richiedono training, ma solo di costruire il modello o di
-rileggere un run archiviato:
+Due misure che non richiedono di addestrare nulla, ma solo di costruire il
+modello o di rileggere un run archiviato:
 
 ```bash
 python scripts/cost_ablation.py                        # cost_ablation.md: parametri e costi
@@ -509,9 +503,9 @@ python scripts/region_geometry.py --run sparse_seed0   # region_geometry.json: d
 
 ## 9. Mappa dei run archiviati
 
-Ogni cartella sotto `results/` è una riga di `results/summary_table.md`; i nomi
-sono quelli di esecuzione e non vengono cambiati a posteriori, mentre
-`resolved_config.json` riporta la configurazione realmente usata.
+I nomi delle cartelle sono quelli di esecuzione e non vengono cambiati a
+posteriori, mentre `resolved_config.json` riporta la configurazione realmente
+usata.
 
 | Cartella | Configurazione | Epoche |
 |---|---|---|

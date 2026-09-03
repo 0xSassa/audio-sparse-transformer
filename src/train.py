@@ -70,11 +70,9 @@ def build_frontend(cfg: dict[str, Any]) -> LogMelSpectrogram:
 MODELS = {"dense": DenseAudioTransformer, "sparse": SparseAudioTransformer}
 
 # Chiavi che i checkpoint e i `resolved_config.json` ARCHIVIATI portano
-# ancora ma che il codice non conosce piu'. Servono in DUE posti — da cui
-# l'elenco a livello di modulo: `build_model` le scarta per ricaricare i pesi
-# vecchi, `scripts/plot_results.py` per non spaccare un gruppo di seed a
-# seconda che il run sia anteriore o posteriore alla rimozione. Il valore
-# archiviato coincide con l'unico comportamento rimasto.
+# ancora ma che il codice non conosce piu': `build_model` le scarta per poter
+# ricaricare i pesi vecchi. Il valore archiviato coincide con l'unico
+# comportamento rimasto.
 OBSOLETE_MODEL_KEYS = ("stem", "norm", "pos_encoding", "num_conv_layers")
 
 
@@ -111,7 +109,7 @@ def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
         raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
 
     # tiene ricaricabili i checkpoint archiviati, da cui `evaluate.py` e
-    # `plot_sampling.py` ricostruiscono il modello
+    # `region_geometry.py` ricostruiscono il modello
     for obsoleta in OBSOLETE_MODEL_KEYS:
         m.pop(obsoleta, None)
 

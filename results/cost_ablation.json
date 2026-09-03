@@ -5,7 +5,7 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
     "cuda": "12.8",
-    "commit": "b55e779e921bde2da6b2ceb0bcaf9aa26221c066",
+    "commit": "2aa0b6bf950a2a48458d73da03321652cc73c4fe",
     "dirty": true,
     "untracked": 0
   },
