@@ -1,82 +1,32 @@
-# =============================================================================
-#  Progetto d'esame - B031278 Deep Learning (UNIFI, Fall 2025)
-#  Audio Sparse-Transformer (Kavaki & Mandel, ICASSP 2025)
-#  su Google Speech Commands V2
+# Progetto d'esame B031278 Deep Learning (UNIFI, Fall 2025).
+# Risultati prodotti su Windows 11, Python 3.12.4, RTX 5050 Laptop
+# (Blackwell, sm_120, 8 GB).
 #
-#  Ambiente in cui sono stati prodotti i risultati:
-#      Windows 11 - Python 3.12.4
-#      NVIDIA GeForce RTX 5050 Laptop (Blackwell, sm_120, 8 GB)
-# =============================================================================
+# Installazione in due passi, l'ordine conta:
 #
-#  INSTALLAZIONE IN DUE PASSI - l'ordine conta.
+#   pip install torch==2.9.1+cu128 torchaudio==2.9.1 \
+#       --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements.txt
 #
-#    python -m venv .venv
-#    .venv\Scripts\activate
-#    python -m pip install -U pip setuptools wheel
-#
-#    # passo 1: stack CUDA dall'indice PyTorch (NON da PyPI)
-#    pip install torch==2.9.1+cu128 torchaudio==2.9.1 \
-#        --index-url https://download.pytorch.org/whl/cu128
-#
-#    # passo 2: tutto il resto da PyPI (torch risulta gia' soddisfatto)
-#    pip install -r requirements.txt
-#
-#    # verifica
-#    python -c "import torch; print(torch.cuda.is_available())"
-#
-#  Questo file garantisce che l'installazione vada a buon fine.
-#  requirements.lock.txt fissa le versioni ESATTE dei run riportati.
-#
-#  L'elenco contiene solo cio' che il codice importa davvero: se un pacchetto
-#  non compare qui, nessun file di questo repository lo usa.
-# =============================================================================
+# requirements.lock.txt fissa le versioni esatte dei run archiviati.
 
-
-# ---------------------------------------------------------------------------
-# Core deep learning - build CUDA 12.8, OBBLIGATORIA per sm_120
-# ---------------------------------------------------------------------------
-# Le wheel di default (cu126 e precedenti) sono compilate fino a sm_90 e
-# falliscono a runtime con "no kernel image is available for execution on
-# the device": sembra un driver rotto, non lo e'. Vedi passo 1 qui sopra.
-#
-# torchaudio e' pinnato SENZA suffisso locale di proposito: cosi' pip accetta
-# indifferentemente la variante +cpu o +cu128. Il suffisso +cpu non e' un
-# problema, le trasformate sono op PyTorch e girano su tensori CUDA.
+# Le wheel di default sono compilate fino a sm_90 e su Blackwell falliscono a
+# runtime con "no kernel image is available for execution on the device".
+# torchaudio e' pinnato senza suffisso locale di proposito, cosi' pip accetta
+# sia la variante +cpu sia la +cu128.
 torch==2.9.1+cu128
 torchaudio==2.9.1
 
-# ---------------------------------------------------------------------------
-# I/O audio - NECESSARIO
-# ---------------------------------------------------------------------------
 # torchaudio 2.9+ ha dismesso l'I/O interno: senza un backend non si caricano
-# i .wav di Speech Commands. soundfile (libsndfile) e' sufficiente per i wav.
+# i .wav di Speech Commands.
 soundfile>=0.12.1,<1.0
 
-# ---------------------------------------------------------------------------
-# Modello e dati
-# ---------------------------------------------------------------------------
 numpy>=2.1,<3.0
-# einops: Rogozhnikov 2022 e' LETTURA RICHIESTA del corso (lezione 21/11).
-# Usarlo per il reshape del multi-head attention e' coerente col programma.
-einops>=0.8,<1.0
+einops>=0.8,<1.0                # reshape del multi-head attention
 PyYAML>=6.0,<7.0                # i file in configs/
-
-# ---------------------------------------------------------------------------
-# Costo computazionale
-# ---------------------------------------------------------------------------
-# Nessuna dipendenza: il contatore e' torch.utils.flop_counter.FlopCounterMode,
-# NATIVO in torch. In fase 2 girava in parallelo anche fvcore, come secondo
-# contatore indipendente, per decidere se il paper riportasse FLOPs o MAC:
-# deciso il punto (FLOPs), non discriminava piu' nulla ed e' stato tolto
-# insieme alla sua dipendenza.
-
-# ---------------------------------------------------------------------------
-# Tracking, figure, test
-# ---------------------------------------------------------------------------
-# Il CSV per epoca lo scrive src/tracking.py senza dipendenze; TensorBoard
-# serve solo a guardare le curve mentre il run gira. Weights & Biases era la
-# terza destinazione ed e' stato rimosso: nessun numero riportato veniva da
-# li', e un servizio con account e rete e' un requisito in piu' per chi deve
-# solo riprodurre i risultati.
-tensorboard>=2.17,<3.0
+tensorboard>=2.17,<3.0          # curve durante il run; il CSV per epoca lo
+                                # scrive src/tracking.py senza dipendenze
 tqdm>=4.66,<5.0                 # avanzamento del training
+
+# Il contatore di FLOPs non ha dipendenze: e' torch.utils.flop_counter,
+# nativo in torch.

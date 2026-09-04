@@ -17,44 +17,56 @@ Obiettivo: riprodurre il metodo, non i suoi numeri. I due modelli sono addestrat
 da zero su 3 seed, l'ablation è rifatta su entrambi gli assi, e le sezioni 3 e 4
 elencano ogni scelta che il paper non dichiara.
 
+## Verifica in un comando
+
+```bash
+python scripts/verify.py
+```
+
+Costruisce i modelli dai config, controlla che i parametri delle nove
+configurazioni della Tabella 3 stiano entro il 2 % dei valori dichiarati e
+ricalcola i numeri di questo README dai run archiviati. Venti secondi, senza
+dataset e senza GPU; esce con 1 se qualcosa non torna. Riaddestrare da zero è
+un'altra cosa, ed è la sezione 6.
+
 ---
 
 ## 1. Contenuto
 
+Il codice sta in `src/`, un YAML per esperimento in `configs/`, i tre script di
+esecuzione più quello di verifica in `scripts/`. Dati e pesi non sono inclusi; i
+file di testo in `results/` bastano a ricostruire ogni numero di questo
+documento.
+
 ```
-configs/   un YAML per esperimento; base.yaml è ereditato dagli altri
+configs/   base.yaml è ereditato dagli altri tre
 src/       data/    split ufficiali, cache memory-mapped, log-mel, augmentation
            models/  early convolution, encoder, denso, estrattore sparso
            train.py, flops.py, metrics.py, utils.py, tracking.py
-scripts/   prepare_data.py, run_seeds.py, evaluate.py
+scripts/   verify.py, prepare_data.py, run_seeds.py, evaluate.py
 results/   config, metriche per epoca e report dei 22 run archiviati
 ```
 
-Dati e pesi non sono inclusi. I file di testo in `results/` bastano a ricostruire
-ogni numero di questo documento.
-
 ---
 
-## 2. Il metodo e la sua implementazione
+## 2. Il metodo
 
-N token latenti al posto della sequenza di frame, con N molto minore del numero
-di frame. Ogni token `t ∈ R^d` è accoppiato a una regione `b = (x, y, w, h)` del
-piano tempo-frequenza; token e regioni iniziali sono parametri appresi, le
-regioni su una griglia `√N × √N` di lato pari a metà del piano. N deve quindi
-essere un quadrato perfetto, vincolo ereditato da SparseFormer, e l'ablation del
-paper usa N ∈ {4, 9, 16, 25, 36}. Il modello ripete `L_rep` volte tre passi:
+Il transformer riceve N token latenti invece dei frame, con N molto minore del
+numero di frame. Ogni token `t ∈ R^d` è accoppiato a una regione `b = (x,y,w,h)`
+del piano tempo-frequenza; token e regioni iniziali sono parametri appresi, le
+regioni su una griglia `√N × √N`, da cui il vincolo che N sia un quadrato
+perfetto e l'ablation su N ∈ {4, 9, 16, 25, 36}. Il modello ripete `L_rep` volte
+tre passi:
 
 ```
-# 1. aggiustamento della regione, con la parametrizzazione dei detector alla
-#    Faster R-CNN: exp() dà lati positivi per costruzione e rende l'update
-#    invariante di scala, cioè la rete impara rapporti e non incrementi
+# 1. aggiustamento della regione (parametrizzazione alla Faster R-CNN: exp() dà
+#    lati positivi per costruzione e rende l'update invariante di scala)
 tx, ty, tw, th = Linear(t)
 x' = x + tx·w        w' = w · exp(tw)
 y' = y + ty·h        h' = h · exp(th)
 
 # 2. campionamento: P offset relativi, standardizzati sull'asse dei punti e
-#    divisi per tre deviazioni (SparseFormer), traslati sul centro della
-#    regione; i valori si leggono per interpolazione bilineare
+#    divisi per tre deviazioni (SparseFormer), letti per interpolazione bilineare
 {(Δxi, Δyi)}_P = Linear(LayerNorm(t))
 x̃i = x + 0.5·Δxi·w        ỹi = y + 0.5·Δyi·h
 
@@ -64,16 +76,14 @@ x̃i = x + 0.5·Δxi·w        ỹi = y + 0.5·Δyi·h
 x1 = GELU(x0 · Mc)      x2 = GELU(Ms · x1)      t' = t + Linear(x2)
 ```
 
-L'interpolazione bilineare rende differenziabile la selezione: la derivata
-rispetto alle coordinate è una differenza finita fra celle adiacenti, e sullo
-spettrogramma grezzo sarebbe troppo rumorosa. Per questo si campiona sull'uscita
-della convoluzione iniziale (§3.2, che cita SparseFormer e Xiao et al.). I pesi
-del decoding sono generati dal token e non fissi: «simply using a linear layer
-for this encoding is not effective». Gli N token finali entrano in uno stack di
-transformer-encoder, senza codifica posizionale perché sono un insieme e non una
-sequenza, e si classifica sulla loro media.
+L'interpolazione bilineare rende differenziabile la selezione, con derivata una
+differenza finita fra celle adiacenti: per questo si campiona sull'uscita della
+convoluzione iniziale e non sullo spettrogramma grezzo (§3.2). I pesi del
+decoding sono generati dal token e non fissi: «simply using a linear layer for
+this encoding is not effective».
 
-### Architettura
+I due modelli condividono tutto tranne come si arriva ai token, così il confronto
+è controllato.
 
 ```
 log-mel                [B, 1, 64, 101]
@@ -86,31 +96,23 @@ early convolution      [B, 96, 16, 51]   conv 7×7 s2 → ReLU → maxpool → L
 media sui token + classificatore lineare  [B, 35]
 ```
 
-I due modelli condividono tutto tranne come si arriva ai token, così il confronto
-è controllato. L'encoder è scritto senza `nn.MultiheadAttention`, con blocchi
-pre-norm come in ViT e SparseFormer. Il termine quadratico in n (2n²d) supera
-quello lineare (4nd² + 2rnd²) solo per n > (2+r)·d, cioè n > 768 con d=128 e r=4:
-qui le sequenze sono molto più corte, quindi passare da 51 frame a 4 token non
-risparmia quanto suggerisce (51/4)², e il guadagno si misura con `src/flops.py`.
-
-### Implementato alla lettera
-
-Il paper dichiara la configurazione del modello sparso (Tab. 1: N=4, P=36,
-d_token=64, d_encoder=128, L_rep=3, L_enc=8) e il training: AdamW β=(0,9, 0,99),
-lr 3·10⁻⁴, one-cycle, weight decay 10⁻⁵, EMA 0,995, batch 64, augmentation
-*mixing* e *phasemix*. Le due augmentation vengono da EAT, che pubblica
-*phasemix* come Algoritmo 2, rimappaggio `λy = 0,5·λ + 0,5` incluso. Nessuna riga
-di codice è copiata dai repository di EAT e SparseFormer, consultati solo per
-sciogliere ambiguità.
+Del modello sparso il paper dichiara la configurazione completa (Tab. 1: N=4,
+P=36, d_token=64, d_encoder=128, L_rep=3, L_enc=8) e il training: AdamW
+β=(0,9, 0,99), lr 3·10⁻⁴, one-cycle, weight decay 10⁻⁵, EMA 0,995, batch 64,
+augmentation *mixing* e *phasemix* di EAT. Nessuna riga di codice è copiata dai
+repository di EAT e SparseFormer, consultati per sciogliere ambiguità.
 
 ---
 
 ## 3. Scelte dedotte dalla letteratura
 
+Sette punti che il paper non dichiara. Nessuno è deciso a occhio: per ognuno
+decide una fonte che il paper stesso cita, o la letteratura su questo dataset.
+
 | Punto non dichiarato | Scelta | Fonte |
 |---|---|---|
 | Canali della early convolution: il §3.2 dice «96 dimensional feature» e due righe dopo «196 kernels» | 96 canali, un solo strato: conv 7×7 s2, ReLU, max pool, LayerNorm sui canali | SparseFormer, *Model configurations*: «ResNet-like early convolutional layers (a 7×7 stride-2 convolution, a ReLU, and a 3×3 stride-2 max pooling) to extract initial 96-d image features». L'altra lettura, 196 kernel più una proiezione 1×1, resta in `channel_reading: c196_proj96` |
-| Su cosa opera l'ultimo `Linear` del decoding | sul tensore appiattito, P·C → d | AdaMixer, citato a fianco dell'eq. (9): «The final output … is flattened and transformed to the d_q dimension by a linear layer to add back to the content vector» |
+| Su cosa opera l'ultimo `Linear` del decoding | sul tensore appiattito, P·C → d | AdaMixer, che il paper cita a fianco dell'eq. (9): «The final output … is flattened and transformed to the d_q dimension by a linear layer to add back to the content vector» |
 | Pesi dell'estrattore condivisi fra le `L_rep` ripetizioni | non condivisi | SparseFormer li condivide e lo dichiara; il budget del paper riprodotto no. Condivisi: 2 010 591 parametri contro i 2,87 M dichiarati (−30 %). Non condivisi: 2 822 711 (−1,6 %) |
 | Front-end tempo-frequenza | log-mel, finestra 25 ms, hop 10 ms, 101 frame per clip da 1 s | AST: «128-dimensional log Mel filterbank features computed with a 25 ms Hamming window every 10 ms»; KWT: «Time window length 30 ms, Time window stride 10 ms» |
 | Tokenizzazione del baseline denso, di cui il paper dà solo parametri e FLOPs | `flatten`: un token per frame con tutte le sue frequenze, 96 × 16 = 1536 valori | KWT, sullo stesso dataset: «the spectrogram is first mapped to a higher dimension d, using a linear projection matrix W₀ ∈ R^{F×d} in the frequency domain», e la sua ablation sulle patch preferisce quelle a frequenza piena. L'alternativa, che media via la frequenza, resta in `configs/dense.yaml` |
@@ -121,26 +123,17 @@ sciogliere ambiguità.
 
 ## 4. Assunzioni nostre
 
-Ogni voce è marcata `[ASSUNZIONE]` anche in `configs/base.yaml`.
+Sei punti che nessuna fonte fissa. Sono marcati `[ASSUNZIONE]` anche in
+`configs/base.yaml`.
 
 | Punto | Scelta |
 |---|---|
 | Bin mel dello spettrogramma | 64, fra i 40 di KWT e i 128 di AST; danno F=16 dopo lo stem |
-| Stride del max pooling | `(2, 1)`, solo sull'asse frequenza |
+| Stride del max pooling | `(2, 1)`, solo sull'asse frequenza: dimezzare anche il tempo lascerebbe 26 frame, cioè un passo di 40 ms. SparseFormer dimezza entrambi gli assi, che su un'immagine sono omogenei |
 | Teste dell'attenzione | 4 nello sparso e 7 nel denso, cioè 32 dimensioni per testa in entrambi |
 | Numero di epoche | 100 |
 | Codifica posizionale del denso | assente, per simmetria con lo sparso |
-| Limite sul delta logaritmico prima dell'esponenziale | `MAX_LOG_SCALE = 4,0` |
-
-SparseFormer dimezza entrambi gli assi nel pooling, che su un'immagine sono
-omogenei. Qui il tempo è l'asse lungo cui il modello denso costruisce la
-sequenza, e su clip di un secondo dimezzarlo lascerebbe 26 frame, cioè un passo
-di 40 ms: il pooling agisce solo sulla frequenza.
-
-Il limite sul delta logaritmico evita che un passo anomalo mandi `exp()` in
-overflow (in float32 esplode oltre ~88), con regioni infinite e NaN nel
-gradiente. Né il paper né SparseFormer lo prevedono, e non è inerte: dalla seconda
-ripetizione taglia i fattori di scala oltre e⁴ ≈ 55.
+| Limite sul delta logaritmico prima dell'esponenziale | `MAX_LOG_SCALE = 4,0`, perché `exp()` in float32 esplode oltre ~88. Non è inerte: dalla seconda ripetizione taglia i fattori di scala oltre e⁴ ≈ 55, ed è la deviazione dal paper che pesa di più |
 
 ---
 
@@ -160,7 +153,11 @@ con 4,80 M e 0,645 G per il denso: lo sparso 0,21 punti sopra il proprio
 baseline. Qui sta un punto e mezzo sotto, e il nostro baseline usa la
 tokenizzazione di KWT, più forte di quella che il paper lascia intravedere.
 
-### Ablation
+I parametri tornano entro il 2 % su tutte e nove le configurazioni dichiarate:
+lungo N il paper li dà costanti, lungo P li fa più che raddoppiare per via di
+`Ms ∈ R^{P×P}`, e i due andamenti si riproducono entrambi. I costi no, perché il
+paper non dichiara né la convenzione di conteggio (FLOPs o MAC) né lo
+spettrogramma, da cui dipende il termine fisso.
 
 La metà alta della Tabella 3, l'accuratezza che cresce col numero di token, si
 riproduce; la metà bassa lungo P no. Gli otto punti sono a 50 epoche e a un solo
@@ -178,16 +175,9 @@ budget pieno.
 | P=64 | 94,62 | 96,98 | 3 492 527 | 3,53 M | 0,0664 |
 | P=128 | 93,67 | 96,95 | 5 323 823 | 5,35 M | 0,1233 |
 
-I parametri tornano entro il 2 % su tutte e nove le configurazioni dichiarate
-(N=4 e P=36 sono lo stesso punto): lungo N il paper li dà costanti, lungo P li fa
-più che raddoppiare per via di `Ms ∈ R^{P×P}`, e i due andamenti si riproducono
-entrambi. Il conto si rifà costruendo i nove modelli con
-`src.models.sparse_model.SparseAudioTransformer`, senza addestrare nulla.
-
-I costi no: il paper non dichiara né la convenzione di conteggio (FLOPs o MAC) né
-lo spettrogramma, da cui dipende il termine fisso.
-
-### Varianti che il paper non prevede, spente per default
+Cinque varianti che il paper non prevede, spente per default. Congelare le
+regioni non cambia forma, parametri né FLOPs, e misura quanto vale la saliency
+appresa.
 
 | Variante | Cartella | Val % |
 |---|---|---|
@@ -197,18 +187,14 @@ lo spettrogramma, da cui dipende il termine fisso.
 | Regioni vincolate al piano (`region_constraint=clip`) | `sparse_clip_seed0` | 95,21 |
 | Denso `pool_freq`, ricostruzione scartata (c96 / c196_proj96) | `dense_c96_seed0` / `dense_seed0` | 94,09 / 94,67 |
 
-Congelare le regioni non cambia forma, parametri né FLOPs, e misura quanto vale
-la saliency appresa. Le altre cartelle sono `dense_flatten_seed{0,1,2}` e
-`sparse_seed{0,1,2}` (i due run principali, 100 epoche, gli unici sei con
-`test_report.json`), `sparse_N{4,9,16,25,36}_seed0` e `sparse_P{16,64,128}_seed0`
-(ablation, 50 epoche). La configurazione realmente usata sta in
-`resolved_config.json`.
+Le altre cartelle sono `dense_flatten_seed{0,1,2}` e `sparse_seed{0,1,2}` (i due
+run principali, 100 epoche, gli unici sei con `test_report.json`),
+`sparse_N{4,9,16,25,36}_seed0` e `sparse_P{16,64,128}_seed0` (ablation, 50
+epoche). La configurazione realmente usata sta in `resolved_config.json`.
 
 ---
 
 ## 6. Riproduzione
-
-### Installazione
 
 Python 3.12 e una GPU NVIDIA. Su Blackwell (sm_120, es. RTX 5050) serve la build
 CUDA 12.8: le wheel di default arrivano a sm_90 e falliscono a runtime con
@@ -222,27 +208,19 @@ python -m pip install -U pip setuptools wheel
 pip install torch==2.9.1+cu128 torchaudio==2.9.1 \
     --index-url https://download.pytorch.org/whl/cu128     # 1: stack CUDA
 pip install -r requirements.txt                            # 2: il resto
-
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
-L'ultimo comando deve stampare `True` e il nome della GPU. `requirements.lock.txt`
-fissa le versioni esatte dei run archiviati in `results/`.
-
-### Dati
+`requirements.lock.txt` fissa le versioni esatte dei run archiviati.
 
 ```bash
 python scripts/prepare_data.py --root data/raw --cache data/cache
 ```
 
 Scarica Speech Commands V2 (~2,3 GB, non incluso) e costruisce una cache
-memory-mapped `int16`. Lo script si ferma se gli split non danno esattamente
+memory-mapped `int16`. Si ferma se gli split non danno esattamente
 84 843 / 9 981 / 11 005 campioni: sono i conteggi del paper e vengono da
 `validation_list.txt` e `testing_list.txt`, che Warden costruisce con un hash
-dell'id del parlante. Uno split casuale non sarebbe speaker-disjoint e
-misurerebbe anche quanto il modello riconosce le voci invece delle parole.
-
-### Training
+dell'id del parlante. Uno split casuale non sarebbe speaker-disjoint.
 
 Un'epoca costa ~60 s sulla RTX 5050 Laptop, cioè ~1,7 ore per un run da 100
 epoche.
@@ -303,15 +281,13 @@ I run sono deterministici per default, tranne lo sparso: il backward di
 deterministica, quindi gira con `warn_only` e non è bit-riproducibile. Il livello
 ottenuto finisce in `summary.json`.
 
-### Valutazione sul test set
-
 ```bash
 python scripts/evaluate.py --run dense_flatten_seed0
 ```
 
-Lo script scrive `TEST_EVALUATED.json` nella cartella del run e poi si rifiuta di
-ripartire, salvo `--force`, che resta registrato nel file. Si valuta sempre il
-modello EMA, sul checkpoint selezionato in validation.
+Il test set si tocca una volta sola: lo script scrive `TEST_EVALUATED.json` nella
+cartella del run e poi si rifiuta di ripartire, salvo `--force`, che resta
+registrato. Si valuta sempre il modello EMA.
 
 ---
 
