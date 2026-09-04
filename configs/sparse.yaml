@@ -9,9 +9,9 @@
 #   parametri  2.822.711   dichiarati 2,87 M   ->  -1,6 %
 #   costo      0,0485 GFLOP dichiarati 0,055   ->  -11,8 %
 #
-# I parametri tornano su tutte e nove le configurazioni della Tabella 3,
-# entro il 2 %: e' la verifica piu' forte che la lettura del metodo sia
-# corretta. I valori dichiarati stanno in `src/paper.py`.
+# I parametri tornano entro il 2 % su tutte e nove le configurazioni
+# dichiarate nella Tabella 3: e' la verifica piu' forte che la lettura
+# del metodo sia corretta.
 #
 # La contraddizione della sez. 3.2 del paper ("96 dimensional feature" ma
 # "196 kernels") si scioglie su SparseFormer. Il suo paragrafo "Model

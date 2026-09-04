@@ -42,6 +42,10 @@ optuna*.db
 /scripts/verify_runs.py
 /scripts/check_env.py
 /tests/
+# I numeri dichiarati dal paper, trascritti: li leggevano solo gli
+# script di verifica e i test. Senza di loro e' codice senza consumatori,
+# e i valori che servono a leggere le tabelle stanno nel README.
+/src/paper.py
 results/accuracy_vs_flops.png
 results/summary_table.md
 results/cost_ablation.md
@@ -57,6 +61,7 @@ results/**/region_geometry.json
 *.pdf
 /docs/
 /scripts/build_docs.ps1
+report_valutazione_critica.md
 
 # Materiale di riferimento, non artefatti del progetto: restano sul disco
 # ma fuori dal repository. La pagina del corso e' reperibile online e il
