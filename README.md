@@ -13,7 +13,7 @@ Il paper non ha codice pubblico, quindi modello, training e misure sono
 reimplementati dalle sue formule; dove tace decidono le fonti che cita
 (SparseFormer, AdaMixer, EAT) e la letteratura sullo stesso dataset (KWT, AST).
 
-Obiettivo: riprodurre il metodo, non i suoi numeri. I due modelli sono addestrati
+Obiettivo: riprodurre il metodo. I due modelli sono addestrati
 da zero su 3 seed, l'ablation è rifatta su entrambi gli assi, e le sezioni 3 e 4
 elencano ogni scelta che il paper non dichiara.
 
