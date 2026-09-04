@@ -1,6 +1,6 @@
 # Audio Sparse-Transformer — riproduzione
 
-Progetto d'esame per B031278 Deep Learning (Fall 2025), MSc in Artificial
+Progetto d'esame per B031278 Deep Learning, MSc in Artificial
 Intelligence, Università di Firenze.
 
 Riproduzione di:
@@ -21,9 +21,9 @@ ogni scelta che il paper non dichiara.
 
 ## 1. Contenuto
 
-Il codice sta in `src/`, un YAML per esperimento in `configs/`, i tre script di
-esecuzione in `scripts/`. Dati e pesi non sono inclusi; i file di testo in
-`results/` bastano a ricostruire ogni numero di questo documento.
+Il codice si trova in `src/`, un YAML per esperimento in `configs/`, i tre
+script di esecuzione in `scripts/`. Dati e pesi non sono inclusi; i file di testo
+in `results/` bastano a ricostruire ogni numero di questo documento.
 
 ```
 configs/   base.yaml è ereditato dagli altri tre
@@ -65,7 +65,7 @@ x1 = GELU(x0 · Mc)      x2 = GELU(Ms · x1)      t' = t + Linear(x2)
 
 L'interpolazione bilineare rende differenziabile la selezione, con derivata una
 differenza finita fra celle adiacenti: per questo si campiona sull'uscita della
-convoluzione iniziale e non sullo spettrogramma grezzo (§3.2). I pesi del
+convoluzione iniziale e non sullo spettrogramma grezzo. I pesi del
 decoding sono generati dal token e non fissi: «simply using a linear layer for
 this encoding is not effective».
 
@@ -108,7 +108,7 @@ decide una fonte che il paper stesso cita, o la letteratura su questo dataset.
 
 ---
 
-## 4. Assunzioni nostre
+## 4. Assunzioni
 
 Sei punti che nessuna fonte fissa. Sono marcati `[ASSUNZIONE]` anche in
 `configs/base.yaml`.
