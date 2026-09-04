@@ -352,7 +352,10 @@ oltre ~88, e un solo passo anomalo produrrebbe regioni infinite e NaN nel
 gradiente. Il valore 4 lascia a una regione di moltiplicare il proprio lato per
 e⁴ ≈ 55 a ogni ripetizione — molto oltre qualunque regione che stia ancora nel
 piano, e molto sotto la soglia di overflow. Né il paper né SparseFormer lo
-prevedono, ed è inerte finché le regioni restano dentro il piano.
+prevedono, e non è inerte: sulla prima ripetizione non interviene mai, mentre
+dalla seconda in poi taglia i fattori di scala che il modello chiede oltre e⁴.
+Il modello addestrato è quindi la lettura letterale del metodo più questo
+limite, ed è la deviazione dal paper che pesa di più fra quelle dichiarate qui.
 
 ### Dove i numeri del paper non si ritrovano
 
