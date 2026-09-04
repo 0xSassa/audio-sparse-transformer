@@ -45,7 +45,13 @@ runs/
 !/scripts/run_seeds.py
 !/scripts/evaluate.py
 /tests/
-/src/paper.py
+/src/*.py
+!/src/__init__.py
+!/src/flops.py
+!/src/metrics.py
+!/src/tracking.py
+!/src/train.py
+!/src/utils.py
 
 # Documenti di lavoro e materiale di riferimento: la consegna prevede
 # codice piu' istruzioni di riproduzione, quindi README.md e' l'unico
