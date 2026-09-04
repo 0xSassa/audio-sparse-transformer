@@ -11,9 +11,9 @@ from typing import Any
 import numpy as np
 import torch
 
-# Operazioni senza implementazione deterministica su CUDA che il progetto usa
-# davvero: il backward di `grid_sample` accumula con atomicAdd, quindi
-# l'ordine delle somme in virgola mobile varia fra esecuzioni.
+# Operazioni senza implementazione deterministica su CUDA che il progetto usa:
+# il backward di `grid_sample` accumula con atomicAdd, quindi l'ordine delle
+# somme in virgola mobile varia fra esecuzioni.
 NONDETERMINISTIC_OPS = {"sparse": ("grid_sampler_2d_backward_cuda",)}
 
 
@@ -21,12 +21,10 @@ def seed_everything(seed: int, *, deterministic: bool = False,
                     warn_only: bool = False) -> str:
     """Fissa i seed. Ritorna il livello di determinismo ottenuto.
 
-    Il modello sparso NON PUO' essere addestrato in determinismo stretto su
-    GPU: `grid_sampler_2d_backward_cuda` non ha implementazione
-    deterministica e PyTorch solleva un errore. `warn_only=True` e' la
-    risposta giusta e non una rinuncia — tutto cio' che puo' restare
-    deterministico lo resta — ma il livello va registrato accanto ai
-    risultati, cosi' un run non bit-riproducibile non si spaccia per tale.
+    Il modello sparso non puo' girare in determinismo stretto su GPU, perche'
+    `grid_sampler_2d_backward_cuda` non ha implementazione deterministica e
+    PyTorch solleva un errore. Con `warn_only=True` resta deterministico tutto
+    il resto, ma il livello va registrato accanto ai risultati.
     """
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
@@ -78,14 +76,10 @@ def apply_overrides(cfg: dict[str, Any], assignments: list[str]) -> list[str]:
 
         apply_overrides(cfg, ["model.num_tokens=9", "optim.epochs=50"])
 
-    Evita gli 8 file YAML quasi identici delle due ablation del paper; i
-    valori effettivi finiscono comunque in `resolved_config.json`.
-
-    Due guardie deliberate: la chiave deve gia' esistere (un refuso come
-    `num_token` creerebbe una chiave che nessuno legge, e il run girerebbe
-    sul default fingendo di essere un'ablation) e il tipo deve combaciare.
-    Il valore si interpreta col parser YAML. Ritorna gli assegnamenti
-    applicati, per stamparli.
+    Evita gli 8 YAML quasi identici delle due ablation. Due guardie: la chiave
+    deve gia' esistere, altrimenti un refuso come `num_token` farebbe girare il
+    run sul default fingendo di essere un'ablation, e il tipo deve combaciare.
+    Ritorna gli assegnamenti applicati, per stamparli.
     """
     import yaml
 
@@ -131,10 +125,8 @@ def param_groups(model: torch.nn.Module, weight_decay: float,
                  skip_1d: bool = True) -> list[dict[str, Any]]:
     """Gruppi di parametri per il weight decay.
 
-    Criterio del `add_weight_decay` di EAT: i parametri 1-D sono esclusi dal
-    decay. Cattura in un colpo bias e parametri di normalizzazione, su cui
-    il decay non controllerebbe la complessita' del modello ma solo la sua
-    parametrizzazione interna.
+    Criterio del `add_weight_decay` di EAT: i parametri 1-D restano esclusi,
+    cioe' bias e parametri di normalizzazione.
     """
     if not skip_1d:
         return [{"params": [p for p in model.parameters() if p.requires_grad],
@@ -154,10 +146,9 @@ def param_groups(model: torch.nn.Module, weight_decay: float,
 def seed_epoch(base_seed: int, epoch: int) -> None:
     """Riporta i generatori a uno stato funzione pura di (seed, epoca).
 
-    Rende il flusso casuale di un'epoca indipendente da quante estrazioni
-    sono state fatte prima: un run ripreso ne consuma una in piu' per il
-    `base_seed` dei worker, sfasando la scelta delle augmentation. Rende anche
-    riproducibile una singola epoca senza rieseguire le precedenti.
+    Rende il flusso casuale di un'epoca indipendente da quante estrazioni sono
+    state fatte prima: un run ripreso ne consuma una in piu' per il `base_seed`
+    dei worker, sfasando la scelta delle augmentation.
     """
     torch.manual_seed(base_seed * 1_000_003 + epoch)   # copre anche CUDA
     np.random.seed((base_seed * 1_000_003 + epoch) % (2**32))
@@ -167,7 +158,6 @@ def seed_epoch(base_seed: int, epoch: int) -> None:
 def provenance() -> dict[str, Any]:
     """Da quale stato del codice e su quale macchina viene un risultato.
 
-    E' cio' che rende un risultato verificabile invece che solo registrato.
     `dirty` segnala modifiche non committate: quel risultato non e'
     riproducibile dal solo commit.
     """
@@ -189,11 +179,9 @@ def provenance() -> dict[str, Any]:
             ["git", "rev-parse", "HEAD"], cwd=root, text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
-        # `dirty` conta SOLO i file tracciati: sono gli unici che cambiano il
-        # codice eseguito. Contare anche i non tracciati marcava sporco ogni
-        # run per un qualsiasi file di appunti nella radice, e un flag di
-        # riproducibilita' con falsi positivi e' peggio che non averlo. I non
-        # tracciati si contano a parte, per non nascondere informazione.
+        # `dirty` conta solo i file tracciati, gli unici che cambiano il codice
+        # eseguito: contare anche i non tracciati marcava sporco ogni run per un
+        # file di appunti nella radice. I non tracciati si contano a parte.
         info["dirty"] = bool(subprocess.check_output(
             ["git", "status", "--porcelain", "--untracked-files=no"],
             cwd=root, text=True, stderr=subprocess.DEVNULL,
@@ -209,11 +197,10 @@ def provenance() -> dict[str, Any]:
 
 
 def rng_state() -> dict[str, Any]:
-    """Stato di TUTTI i generatori, per un resume davvero identico.
+    """Stato di tutti i generatori, per un resume identico.
 
-    Senza, riprendere da un checkpoint riparte con generatori
-    reinizializzati: il run resta valido ma non e' piu' confrontabile bit a
-    bit con uno mai interrotto.
+    Senza, riprendere da un checkpoint riparte con generatori reinizializzati:
+    il run resta valido ma non e' piu' confrontabile bit a bit.
     """
     state = {
         "python": random.getstate(),
@@ -240,8 +227,8 @@ def load_rng_state(state: dict[str, Any] | None) -> None:
 def grad_global_norm(model: torch.nn.Module) -> float:
     """Norma L2 globale del gradiente, senza modificarlo.
 
-    Con soglia infinita `clip_grad_norm_` misura e non taglia. Diagnostica:
-    una norma che esplode o collassa si vede molto prima che sulla loss.
+    Con soglia infinita `clip_grad_norm_` misura e non taglia: una norma che
+    esplode o collassa si vede prima che sulla loss.
     """
     return float(
         torch.nn.utils.clip_grad_norm_(model.parameters(), float("inf"))
@@ -251,8 +238,8 @@ def grad_global_norm(model: torch.nn.Module) -> float:
 class ModelEMA:
     """Media mobile esponenziale dei pesi (Tarvainen & Valpola 2017).
 
-    Decay 0.995 come in entrambi i paper. E' il modello EMA quello che si
-    valuta: dimenticarlo costa qualche decimo di punto.
+    Decay 0,995 come in entrambi i paper. E' il modello EMA quello che si
+    valuta.
     """
 
     def __init__(self, model: torch.nn.Module, decay: float = 0.995) -> None:

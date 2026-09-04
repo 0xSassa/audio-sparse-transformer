@@ -2,13 +2,10 @@
 
     python scripts/run_seeds.py --config configs/dense.yaml --seeds 0 1 2
 
-Serve perche' il rumore da seed non e' trascurabile e non e' lo stesso nei
-due modelli: 0.04 punti sul denso, 0.37 sullo sparso, dieci volte tanto,
-perche' il backward di `grid_sample` non e' deterministico su CUDA. Diverse
-delle differenze che il paper discute sono di quell'ordine, e sono riportate
-su un solo seed.
-
-Salta i seed gia' completati, cosi' si puo' interrompere e riprendere.
+Il rumore da seed non e' lo stesso nei due modelli: 0,04 punti sul denso, 0,37
+sullo sparso, dove il backward di `grid_sample` non e' deterministico su CUDA.
+Diverse delle differenze che il paper discute sono di quell'ordine, riportate su
+un solo seed. Salta i seed gia' completati, quindi si puo' interrompere.
 """
 
 from __future__ import annotations

@@ -1,18 +1,13 @@
 """Augmentation di label-mixing, a livello di batch e su GPU.
 
 Le due tecniche dichiarate dal paper, entrambe di EAT (Gazneli et al. 2022).
-Le implementazioni seguono il codice ufficiale di EAT
-(github.com/Alibaba-MIIL/AudioClassfication -> datasets/batch_augs.py),
-consultato perche' le descrizioni testuali sono ambigue; nessuna riga
-copiata.
+Implementate seguendo il codice ufficiale (datasets/batch_augs.py), consultato
+perche' le descrizioni testuali sono ambigue; nessuna riga copiata.
 
-Due cose che non sono quello che sembrano:
-
-- `mixing` non e' il mixup di Zhang et al., ma il "between-class learning"
-  di Tokozume et al. 2017: i due segnali sono bilanciati per LIVELLO SONORO
-  e la miscela e' rinormalizzata in energia.
-- `phasemix` preserva l'ampiezza di un campione e prende solo la fase
-  dell'altro: l'ampiezza non si mescola affatto.
+Due cose che non sono quello che sembrano: `mixing` non e' il mixup di Zhang et
+al. ma il between-class learning di Tokozume et al. 2017, con i due segnali
+bilanciati per livello sonoro; `phasemix` preserva l'ampiezza di un campione e
+prende solo la fase dell'altro.
 """
 
 from __future__ import annotations
@@ -34,8 +29,8 @@ def _hann(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     return _WINDOWS[key]
 
 
-# Oltre questa soglia il secondo suono e' troppo debole per meritare la
-# propria etichetta. Valore preso dal codice di EAT.
+# Oltre questa soglia il secondo suono e' troppo debole per meritare la propria
+# etichetta. Valore preso dal codice di EAT.
 LAM_LABEL_THRESHOLD = 0.9
 
 
@@ -52,8 +47,8 @@ def mix_targets(
 
         target = clamp(one_hot(y1) + one_hot(y2) * (lam < 0.9), max=1)
 
-    Target MULTI-HOT, non morbido: `lam` entra come soglia e non come peso.
-    Il clamp copre il caso di due campioni della stessa classe.
+    Multi-hot, non morbido: `lam` entra come soglia e non come peso. Il clamp
+    copre il caso di due campioni della stessa classe.
     """
     keep = (lam < LAM_LABEL_THRESHOLD).to(targets.dtype).unsqueeze(1)
     return torch.clamp(targets + targets_other * keep, max=1.0)
@@ -69,12 +64,11 @@ def mixing(
         p  = 1 / (1 + 10^((G1-G2)/20) * (1-lam)/lam)
         out = (x1 p + x2 (1-p)) / sqrt(p^2 + (1-p)^2)
 
-    I DATI pesano `p`, corretto per il livello; le ETICHETTE pesano `lam`,
-    il rapporto percettivo voluto. La divisione tiene costante l'energia
-    attesa, cosi' il volume non diventa un indizio dell'augmentation.
+    I dati pesano `p`, corretto per il livello; le etichette pesano `lam`, il
+    rapporto percettivo voluto. La divisione tiene costante l'energia attesa,
+    cosi' il volume non diventa un indizio dell'augmentation.
 
-    lam ~ Uniform[lam_min, 1] come in EAT, non una Beta. `lam` si puo'
-    forzare per rendere deterministici i test.
+    lam ~ Uniform[lam_min, 1] come in EAT, non una Beta.
     """
     b = wave.shape[0]
     perm = torch.randperm(b, device=wave.device)
@@ -102,16 +96,13 @@ def phasemix(
 
         X      = STFT(x1)
         ph     = lam * angle(X1) + (1-lam) * angle(X2)
-        X_new  = |X1| * exp(j ph)                 <- ampiezza di x1, intatta
+        X_new  = |X1| * exp(j ph)
         out    = iSTFT(X_new)
 
-    Le fasi sono interpolate sugli ANGOLI, come fa EAT, discontinuita' a
-    +/-pi compresa. L'ampiezza resta preservata sulla matrice STFT ma non
-    sul segnale ricostruito: la iSTFT proietta sul sottospazio delle STFT
-    consistenti e cambia anche i moduli. E' una proprieta' del metodo, non
-    un difetto dell'implementazione.
-
-    `lam` si puo' forzare per rendere deterministici i test.
+    Le fasi sono interpolate sugli angoli, come fa EAT, discontinuita' a +/-pi
+    compresa. L'ampiezza resta preservata sulla matrice STFT ma non sul segnale
+    ricostruito, perche' la iSTFT proietta sul sottospazio delle STFT
+    consistenti: e' una proprieta' del metodo, non dell'implementazione.
     """
     b, n = wave.shape
     perm = torch.randperm(b, device=wave.device)
@@ -135,9 +126,8 @@ def phasemix(
         center=True, length=n,
     )
 
-    # lam dell'etichetta rimappato in [0.5, 1]: mescolare la sola fase altera
-    # il segnale meno che mescolare tutto. Con la soglia a 0.9 la seconda
-    # etichetta sopravvive per lam < 0.8, cioe' nell'80% dei casi.
+    # lam dell'etichetta rimappato in [0.5, 1], come in EAT: mescolare la sola
+    # fase altera il segnale meno che mescolare tutto.
     lam_label = lam * 0.5 + 0.5
     return mixed, mix_targets(targets, targets[perm], lam_label)
 
@@ -157,13 +147,12 @@ def apply_augmentations(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Sceglie a caso una delle augmentation attive, o nessuna.
 
-    Dispatch come in `BatchAugs.__call__` di EAT: se sorteggiata, UNA sola
-    augmentation si applica all'INTERO batch. `mix_ratio` e' la probabilita'
-    di mescolare (default 1, cioe' sempre); `epoch_mix` e' la soglia sotto
-    la quale il mixing resta spento, per partire su dati puliti.
+    Dispatch come in `BatchAugs.__call__` di EAT: se sorteggiata, una sola
+    augmentation si applica all'intero batch. `mix_ratio` e' la probabilita' di
+    mescolare, `epoch_mix` la soglia sotto cui il mixing resta spento.
 
-    Restituisce SEMPRE target [B, C], anche senza augmentation: il percorso
-    di loss e' unico e la BCE non ha rami condizionali.
+    Restituisce sempre target [B, C], anche senza augmentation, cosi' il
+    percorso di loss e' unico.
     """
     targets = one_hot(labels, num_classes)
     if not names or epoch <= epoch_mix or float(torch.rand(())) > mix_ratio:

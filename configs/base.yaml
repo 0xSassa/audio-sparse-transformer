@@ -1,14 +1,10 @@
-# Configurazione comune a tutti gli esperimenti.
-# I file dense.yaml / sparse.yaml erediteranno da qui sovrascrivendo `model`.
-#
-# Ogni valore marcato [ASSUNZIONE] non e' dichiarato dal paper di
-# Kavaki & Mandel: e' una scelta nostra, e come tale va riportata
-# nel README e discussa all'orale.
+# Configurazione comune; dense.yaml, dense_flatten.yaml e sparse.yaml
+# ereditano da qui. Ogni valore marcato [ASSUNZIONE] non e' dichiarato dal
+# paper di Kavaki & Mandel: e' una scelta nostra.
 
 seed: 0
-deterministic: true             # costa un po' di tempo per epoca, ma i run
-                                # diventano bit-identici e il resume
-                                # esattamente trasparente.
+deterministic: true             # costa tempo per epoca, ma rende i run
+                                # bit-identici e il resume trasparente
 
 data:
   cache_dir: data/cache
@@ -18,66 +14,45 @@ data:
   num_workers: 4
 
 features:                       # [ASSUNZIONE] il paper non dichiara nulla di
-  type: log_mel                 #   questo blocco. Finestra e hop sono la
-  n_fft: 400                    #   convenzione della letteratura su questo
-  hop_length: 160               #   dataset (AST: 25 ms / 10 ms; KWT: 30/10):
-  n_mels: 64                    #   400/160 @16 kHz = 25 ms / 10 ms -> 101 frame
-                                #   per clip da 1 s, F=16 dopo lo stem. I 64 bin
-                                #   stanno fra i 40 di KWT e i 128 di AST.
+  type: log_mel                 # questo blocco. 400/160 @ 16 kHz = 25 ms / 10 ms
+  n_fft: 400                    # (AST: 25/10; KWT: 30/10), quindi 101 frame per
+  hop_length: 160               # clip da 1 s e F=16 dopo lo stem. I 64 bin
+  n_mels: 64                    # stanno fra i 40 di KWT e i 128 di AST
   f_min: 20.0
   f_max: 7600.0
   top_db: 80.0
-                                # Niente normalizzazione per-campione: ne' il
-                                # paper ne' gli ancestor la usano, e il livello
-                                # assoluto porta segnale. Rimossa dal codice,
-                                # non spenta.
 
-# La normalizzazione dello stem non e' un'opzione: e' LayerNorm sui canali
-# DOPO il pooling, come nel codice di SparseFormer. Le varianti batchnorm e
-# "none" sono state rimosse dal modello perche' nessun run le ha mai usate.
-
-augment:                        # dichiarate dal paper: "mixing and phasemix [1]"
-  names: [mixing, phasemix]     # implementate seguendo datasets/batch_augs.py di EAT
-  mix_ratio: 1.0                # probabilita' di mescolare. DEFAULT DI EAT = 1,
-                                # cioe' SEMPRE. Avevamo assunto 0.5: sbagliato.
-  epoch_mix: -1                 # soglia di epoca sotto cui il mixing e' spento
-                                # (EAT lo usa per partire su dati puliti).
-                                # -1 = sempre attivo
+augment:                        # dichiarate dal paper: "mixing and phasemix",
+  names: [mixing, phasemix]     # implementate seguendo batch_augs.py di EAT
+  mix_ratio: 1.0                # probabilita' di mescolare; 1 = sempre, default
+                                # di EAT
+  epoch_mix: -1                 # epoca sotto cui il mixing resta spento, come
+                                # in EAT; -1 = sempre attivo
   lam_label_threshold: 0.9      # oltre questo lam la seconda etichetta cade
-                                # lam: mixing ~ U[0.1,1], phasemix ~ U[0,1] (da EAT)
+                                # lam: mixing ~ U[0.1,1], phasemix ~ U[0,1]
 
 optim:
-  # AdamW e one-cycle sono DICHIARATI dal paper (sez. 3.2) e sono cablati nel
-  # codice: non compaiono qui come chiavi perche' non c'e' nulla da scegliere,
-  # e una chiave che il codice non legge e' una scelta che non esiste.
+  # AdamW e one-cycle sono dichiarati dal paper e cablati nel codice: non
+  # compaiono qui perche' non c'e' nulla da scegliere.
   lr: 0.0003                    # dichiarato
   betas: [0.9, 0.99]            # dichiarato
   eps: 1.0e-8                   # dichiarato
   weight_decay: 1.0e-5          # dichiarato
   wd_skip_1d_params: true       # EAT esclude dal decay ogni parametro con
-                                # len(shape)==1: bias, LayerNorm, BatchNorm.
-                                # Non e' una nostra aggiunta, e' il riferimento.
+                                # len(shape)==1: bias e norme
   pct_start: 0.1                # parametri di one-cycle, dal trainer.py di EAT
-  div_factor: 25.0              # default PyTorch, usato da EAT
-  final_div_factor: 10000.0     # default PyTorch, usato da EAT
+  div_factor: 25.0
+  final_div_factor: 10000.0
   batch_size: 64                # dichiarato
-  epochs: 100                   # [ASSUNZIONE] unico iperparametro di training
-                                # che nessuna fonte fissa
+  epochs: 100                   # [ASSUNZIONE] nessuna fonte lo fissa
   ema_decay: 0.995              # dichiarato
-                                # La loss e' la BCE su target multi-hot (ramo
-                                # 'bce' di EAT), cablata: il mixing produce due
-                                # etichette per campione, quindi la CE non e'
-                                # applicabile e non c'e' scelta da esporre.
+  # La loss e' la BCE su target multi-hot (ramo 'bce' di EAT), cablata: il
+  # mixing produce due etichette per campione, quindi la CE non e' applicabile.
 
 eval:
-  use_ema: true                 # si valuta il modello EMA
-  test_once: true               # il test set si tocca una sola volta
+  use_ema: true
+  test_once: true
 
 log:
   dir: results
   tensorboard: true
-  # Il tracciamento vive in due posti e basta: `metrics.csv` nella cartella del
-  # run, che porta la curva per epoca, e i log TensorBoard. Weights & Biases
-  # era la terza destinazione ed e' stato
-  # rimosso: il confronto fra run che lo giustificava lo fa gia' il CSV, e un
-  # servizio con account e rete e' un requisito in piu' per chi riproduce.

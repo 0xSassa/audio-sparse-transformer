@@ -3,17 +3,13 @@
     python -m src.train --config configs/dense.yaml --seed 0
     python -m src.train --config configs/dense.yaml --epochs 5 --tag smoke
 
-Ogni run e' determinato dalla config piu' il seed, e la config viene
-archiviata accanto ai risultati.
-
-Tre scelte da conoscere prima di leggere il codice:
+Ogni run e' determinato dalla config piu' il seed, e la config viene archiviata
+accanto ai risultati. Tre scelte da conoscere:
 
 1. Si valuta il modello EMA, non i pesi correnti, come in entrambi i paper.
-2. L'accuratezza di TRAINING non e' interpretabile: con le augmentation
-   attive a ogni batch il modello vede target multi-hot. Si guarda solo
-   quella di validation.
-3. Il test set si tocca UNA VOLTA SOLA, alla fine, con una guardia in
-   `scripts/evaluate.py` che lo impedisce due volte.
+2. L'accuratezza di training non e' interpretabile, perche' con le augmentation
+   il modello vede target multi-hot: si guarda solo quella di validation.
+3. Il test set si tocca una volta sola, alla fine, da `scripts/evaluate.py`.
 """
 
 from __future__ import annotations
@@ -53,9 +49,7 @@ from src.utils import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-# --------------------------------------------------------------------------
-# Costruzione dei pezzi
-# --------------------------------------------------------------------------
+# --- costruzione dei pezzi ---
 
 def build_frontend(cfg: dict[str, Any]) -> LogMelSpectrogram:
     f = cfg["features"]
@@ -68,33 +62,29 @@ def build_frontend(cfg: dict[str, Any]) -> LogMelSpectrogram:
 
 MODELS = {"dense": DenseAudioTransformer, "sparse": SparseAudioTransformer}
 
-# Chiavi che i checkpoint e i `resolved_config.json` ARCHIVIATI portano
-# ancora ma che il codice non conosce piu': `build_model` le scarta per poter
-# ricaricare i pesi vecchi. Il valore archiviato coincide con l'unico
-# comportamento rimasto.
+# Chiavi che i checkpoint archiviati portano ancora ma che il codice non conosce
+# piu'. `build_model` le scarta per poter ricaricare i pesi vecchi: il valore
+# archiviato coincide con l'unico comportamento rimasto.
 OBSOLETE_MODEL_KEYS = ("stem", "norm", "pos_encoding", "num_conv_layers")
 
 
 def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:
     """Costruisce il modello dalla config, scegliendo su `model.kind`.
 
-    I due modelli espongono la stessa interfaccia — spettrogramma in, logits
-    fuori, piu' `seq_len` e `feature_shape` — quindi training loop,
-    valutazione e contatore di FLOPs non li distinguono.
+    I due modelli espongono la stessa interfaccia (spettrogramma in, logits
+    fuori, piu' `seq_len` e `feature_shape`), quindi training loop, valutazione
+    e contatore di FLOPs non li distinguono.
     """
     m = dict(cfg["model"])
     kind = m.pop("kind", "dense")
     if kind not in MODELS:
         raise ValueError(f"model.kind sconosciuto: {kind!r} (attesi {sorted(MODELS)})")
 
-    # tiene ricaricabili i checkpoint archiviati, da cui `evaluate.py`
-    # ricostruisce il modello
     for obsoleta in OBSOLETE_MODEL_KEYS:
         m.pop(obsoleta, None)
 
-    # `pool_stride` invece non ha default: e' DEDOTTO dai vincoli del paper, e
-    # ricadere in silenzio su (2,2) darebbe 26 frame invece di 51, cioe' un
-    # altro esperimento.
+    # `pool_stride` non ha default: ricadere in silenzio su (2,2) darebbe 26
+    # frame invece di 51, cioe' un altro esperimento.
     if "pool_stride" not in m:
         raise ValueError(
             "la configurazione non dichiara model.pool_stride: e' un parametro "
@@ -116,13 +106,7 @@ def build_optimizer(model: nn.Module, cfg: dict[str, Any]) -> torch.optim.Optimi
     )
 
 
-# --------------------------------------------------------------------------
-# Un'epoca
-# --------------------------------------------------------------------------
-
-# Tutto in fp32, training compreso: l'autocast in bf16 non e' mai stata usata
-# in nessuno dei run riportati ed e' stata rimossa.
-
+# --- un'epoca ---
 
 def train_one_epoch(
     model: nn.Module, frontend: nn.Module, ema: ModelEMA, loader,
@@ -135,10 +119,9 @@ def train_one_epoch(
     total_loss, total_gnorm, seen, steps = 0.0, 0.0, 0, 0
     start = time.perf_counter()
 
-    # L'iteratore si crea QUI, non al `for`, e si semina DOPO: costruirlo
-    # consuma estrazioni dal generatore globale (`base_seed` dei worker) solo
-    # nel processo che lo costruisce, quindi un run ripreso e uno continuo
-    # divergerebbero. Cosi' lo stato a inizio ciclo e' identico nei due casi.
+    # L'iteratore si crea qui, non al `for`, e si semina dopo: costruirlo
+    # consuma estrazioni dal generatore globale, quindi un run ripreso e uno
+    # continuo divergerebbero.
     data_iter = iter(loader)
     seed_epoch(base_seed, epoch)
 
@@ -147,8 +130,8 @@ def train_one_epoch(
 
         from tqdm import tqdm
 
-        # disattivata fuori dal terminale: in un file di log una barra di
-        # avanzamento produce migliaia di righe inutili
+        # disattivata fuori dal terminale: in un file di log produrrebbe
+        # migliaia di righe
         iterator = tqdm(data_iter, desc=f"epoca {epoch}", leave=False,
                         unit="batch", total=len(loader),
                         disable=not sys.stderr.isatty())
@@ -193,10 +176,9 @@ def evaluate(
     model: nn.Module, frontend: nn.Module, loader, device: torch.device,
     num_classes: int, *, collect: bool = False,
 ) -> dict[str, Any]:
-    """Accuratezza top-1 e loss su target one-hot (nessuna augmentation).
+    """Accuratezza top-1 e loss su target one-hot, senza augmentation.
 
-    Con `collect=True` restituisce anche etichette e predizioni, per le
-    metriche per classe.
+    Con `collect=True` restituisce anche etichette e predizioni.
     """
     was_training = model.training
     model.eval()
@@ -229,19 +211,13 @@ def evaluate(
     return out
 
 
-# --------------------------------------------------------------------------
-# Checkpoint
-# --------------------------------------------------------------------------
+# --- checkpoint e main ---
 
 def save_checkpoint(path: Path, **state: Any) -> None:
     tmp = path.with_suffix(".tmp")
     torch.save(state, tmp)
     tmp.replace(path)          # atomico: un'interruzione non lascia file rotti
 
-
-# --------------------------------------------------------------------------
-# Main
-# --------------------------------------------------------------------------
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -260,21 +236,17 @@ def main() -> int:
                          "--set model.num_tokens=9. Ripetibile. Richiede "
                          "--tag, per non sovrascrivere il run di base")
     ap.add_argument("--stop-after", type=int, default=None, metavar="N",
-                    help="ferma dopo N epoche in QUESTA invocazione, lasciando "
-                         "lo schedule configurato per il totale. Serve a "
-                         "spezzare un run lungo su piu' sessioni: si riprende "
-                         "con --resume e la curva del learning rate resta "
-                         "quella giusta")
+                    help="ferma dopo N epoche in questa invocazione, lasciando "
+                         "lo schedule configurato per il totale: serve a "
+                         "spezzare un run lungo su piu' sessioni")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     if args.epochs is not None:
         cfg["optim"]["epochs"] = args.epochs
 
-    # Override applicati PRIMA di archiviare resolved_config.json, cosi' il
-    # file riporta i valori realmente usati. Senza --tag non si parte:
-    # un'ablation che scrive nella cartella del run di base lo distrugge in
-    # silenzio.
+    # Override applicati prima di archiviare resolved_config.json, cosi' il
+    # file riporta i valori realmente usati.
     if args.overrides:
         if args.tag is None:
             print("[errore] --set richiede --tag: senza, questo run scriverebbe "
@@ -287,8 +259,7 @@ def main() -> int:
             for line in apply_overrides(cfg, args.overrides):
                 print(f"[override] {line}")
         except (KeyError, TypeError, ValueError) as exc:
-            # niente traceback: l'errore e' nella riga di comando, e il
-            # messaggio elenca gia' le chiavi disponibili
+            # niente traceback: l'errore e' nella riga di comando
             print(f"[errore] {exc}")
             return 2
 
@@ -296,9 +267,9 @@ def main() -> int:
                      else args.deterministic)
     cfg["deterministic"] = deterministic
 
-    # Il backward di `grid_sample` non e' deterministico su CUDA: in modalita'
-    # stretta PyTorch solleverebbe un errore. Si rilassa a `warn_only` SOLO
-    # per il modello sparso, e il livello ottenuto finisce nel summary.
+    # Il backward di `grid_sample` non e' deterministico su CUDA e in modalita'
+    # stretta PyTorch solleverebbe un errore: si rilassa a `warn_only` solo per
+    # il modello sparso, e il livello ottenuto finisce nel summary.
     needs_relaxed = cfg["model"].get("kind") == "sparse"
     determinism = seed_everything(args.seed, deterministic=deterministic,
                                   warn_only=needs_relaxed)
@@ -335,9 +306,8 @@ def main() -> int:
         final_div_factor=cfg["optim"]["final_div_factor"],
     )
 
-    # FLOPs misurati sul modello di QUESTO run e registrati col resto: sono la
-    # metrica centrale, non si ricalcolano dopo sperando che la configurazione
-    # fosse la stessa.
+    # FLOPs misurati sul modello di questo run e registrati col resto, invece
+    # di ricalcolarli dopo sperando che la configurazione fosse la stessa
     from src.flops import analyze
 
     cost = analyze(build_model(cfg, frontend.n_mels, n_frames),
@@ -366,11 +336,9 @@ def main() -> int:
     if args.resume and ckpt_last.exists():
         state = torch.load(ckpt_last, map_location=device, weights_only=False)
 
-        # Il numero di epoche NON e' modificabile in ripresa: one-cycle lega la
-        # forma dello schedule al totale dei passi, che `load_state_dict`
-        # ripristina dal checkpoint. Riprendere con un valore diverso da' un
-        # errore criptico o, se maggiore, uno schedule silenziosamente
-        # sbagliato: meglio fermarsi subito.
+        # Il numero di epoche non e' modificabile in ripresa: one-cycle lega la
+        # forma dello schedule al totale dei passi, e riprendere con un valore
+        # diverso darebbe uno schedule silenziosamente sbagliato.
         old = state.get("config", {}).get("optim", {})
         mismatches = [
             f"{k}: checkpoint {old.get(k)!r} vs richiesto {cfg['optim'][k]!r}"
@@ -416,8 +384,8 @@ def main() -> int:
               f"val(EMA) {100*ev_ema['accuracy']:.2f}%  "
               f"val(raw) {100*ev_raw['accuracy']:.2f}%  {tr['seconds']:.0f}s{mark}")
 
-        # per lo sparso: le regioni si stanno muovendo? E' l'unico modo di
-        # accorgersi che il meccanismo centrale del paper e' inerte.
+        # per lo sparso: le regioni si stanno muovendo, o il meccanismo
+        # centrale del paper e' inerte?
         diag = model.diagnostics() if hasattr(model, "diagnostics") else {}
         if diag:
             inerte = "   <-- MECCANISMO INERTE" if diag["region_adjust_norm"] == 0 else ""
@@ -450,7 +418,7 @@ def main() -> int:
                   f"--seed {args.seed} --tag {tag} --resume")
             return 0
 
-    # Analisi per classe sul modello migliore, su VALIDATION.
+    # analisi per classe sul modello migliore, su validation
     best_state = torch.load(ckpt_best, map_location=device, weights_only=False)
     ema.module.load_state_dict(best_state["ema"])
     final = evaluate(ema.module, frontend, val_loader, device,

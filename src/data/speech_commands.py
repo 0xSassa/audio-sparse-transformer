@@ -1,10 +1,9 @@
-"""
-Pipeline dati per Google Speech Commands V2 (Warden, arXiv:1804.03209).
+"""Pipeline dati per Google Speech Commands V2 (Warden, arXiv:1804.03209).
 
 Protocollo del paper (sez. 3.1): 35 classi, 16 kHz, clip zero-paddate a 1 s,
-split UFFICIALI (`validation_list.txt` / `testing_list.txt`), che sono
-speaker-disjoint. I conteggi attesi 84_843 / 9_981 / 11_005 sono un test di
-correttezza: se non tornano, `build_splits()` fallisce.
+split ufficiali (`validation_list.txt` / `testing_list.txt`), speaker-disjoint.
+I conteggi attesi 84_843 / 9_981 / 11_005 sono un test di correttezza: se non
+tornano, `build_splits()` fallisce.
 """
 
 from __future__ import annotations
@@ -49,9 +48,7 @@ class Splits:
         return {"train": self.train, "validation": self.validation, "test": self.test}
 
 
-# --------------------------------------------------------------------------
-# Download
-# --------------------------------------------------------------------------
+# --- download ---
 
 def download_and_extract(root: Path, *, force: bool = False) -> Path:
     """Scarica ed estrae SC-V2 in `root/speech_commands_v0.02`.
@@ -109,9 +106,7 @@ def _md5(path: Path, chunk: int = 1 << 20) -> str:
     return h.hexdigest()
 
 
-# --------------------------------------------------------------------------
-# Split ufficiali
-# --------------------------------------------------------------------------
+# --- split ufficiali ---
 
 def build_splits(data_dir: Path, *, strict: bool = True) -> Splits:
     """Costruisce i tre split dagli elenchi ufficiali.
@@ -168,9 +163,7 @@ def _read_list(path: Path) -> set[str]:
         return {line.strip() for line in fh if line.strip()}
 
 
-# --------------------------------------------------------------------------
-# Cache memory-mapped
-# --------------------------------------------------------------------------
+# --- cache memory-mapped ---
 
 def build_cache(splits: Splits, out_dir: Path) -> None:
     """Materializza ogni split in un `.npy` int16 di forma [N, 16000].

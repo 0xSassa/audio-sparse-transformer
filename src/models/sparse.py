@@ -1,18 +1,15 @@
-"""Sparse feature extractor — il metodo di Kavaki & Mandel.
+"""Sparse feature extractor: il metodo di Kavaki & Mandel.
 
-Invece di tutti i frame temporali, il transformer riceve N TOKEN LATENTI,
-ciascuno accoppiato a una REGIONE del piano tempo-frequenza da cui estrae
-informazione. Token e regioni iniziali sono parametri appresi: il modello
-impara dove guardare. Configurazione dichiarata: N=4, P=36, d_token=64,
-L_rep=3.
+Il transformer riceve N token latenti invece dei frame temporali, ognuno
+accoppiato a una regione del piano tempo-frequenza da cui estrae informazione.
+Token e regioni iniziali sono parametri appresi. Formule dal paper, dettagli non
+dichiarati dal codice di SparseFormer (github.com/showlab/sparseformer): nessuna
+riga copiata.
 
-Formule dal paper, dettagli non dichiarati dal codice ufficiale di
-SparseFormer (github.com/showlab/sparseformer). Nessuna riga copiata.
-
-ASSI. La feature map e' [B, C, F, T]: F (frequenza) e' l'altezza, T (tempo)
-la larghezza. Le regioni stanno in coordinate normalizzate [0, 1] come
-angoli opposti (x1, y1, x2, y2); `grid_sample` vuole [-1, 1], da cui la
-conversione 2*c-1 al campionamento.
+Assi: la feature map e' [B, C, F, T], con F (frequenza) altezza e T (tempo)
+larghezza. Le regioni stanno in coordinate normalizzate [0, 1] come angoli
+opposti (x1, y1, x2, y2); `grid_sample` vuole [-1, 1], da cui la conversione
+2*c-1 al campionamento.
 """
 
 from __future__ import annotations
@@ -26,20 +23,14 @@ from einops import rearrange
 from torch import nn
 
 # "none" e' la lettura letterale del paper: nulla impedisce alle regioni di
-# uscire dal piano, e nemmeno SparseFormer lo impedisce. "clip" e' una NOSTRA
-# ablation: risponde alla domanda se quel vincolo mancante conti.
+# uscire dal piano, e nemmeno SparseFormer lo impedisce. "clip" e' una nostra
+# variante, per misurare quanto conta quel vincolo mancante.
 RegionConstraint = Literal["none", "clip"]
 
-# Come si determinano le regioni. Serve a rispondere alla domanda che il paper
-# pone implicitamente e non misura: la saliency appresa serve davvero?
-#
-#   "learned"  il metodo del paper: regioni apprese piu' aggiustamento per
-#              campione a ogni ripetizione.
-#   "grid"     `to_delta` e `box_init` congelati: nessuna saliency.
-#
-# Alla PRIMA ripetizione le regioni sono identiche per ogni ingresso anche in
-# "learned", perche' i token entrano come `token_init`: l'adattivita' esiste
-# solo dalla seconda in poi.
+# "learned" e' il metodo del paper; "grid" congela `to_delta` e `box_init`,
+# quindi nessuna saliency appresa. Alla prima ripetizione le regioni sono
+# identiche per ogni ingresso anche in "learned", perche' i token entrano come
+# `token_init`: l'adattivita' esiste solo dalla seconda in poi.
 RegionMode = Literal["learned", "grid"]
 
 
@@ -57,13 +48,11 @@ def cwh_to_boxes(center: torch.Tensor, size: torch.Tensor) -> torch.Tensor:
 def init_boxes_on_grid(num_tokens: int, unit: float = 0.5) -> torch.Tensor:
     """Regioni iniziali su una griglia regolare in [0, 1].
 
-    Il paper: «we initialize the center of the regions to a grid and the
-    width and height of them to half of the feature dimension» — da cui
-    `unit = 0.5`.
-
-    La griglia e' root x root con root = sqrt(N), quindi N DEVE ESSERE UN
-    QUADRATO PERFETTO: e' il vincolo strutturale, ereditato da SparseFormer,
-    che spiega perche' l'ablation della Tabella 3 usa N in {4, 9, 16, 25, 36}.
+    Il paper: «we initialize the center of the regions to a grid and the width
+    and height of them to half of the feature dimension», da cui `unit = 0.5`.
+    La griglia e' sqrt(N) x sqrt(N), quindi N deve essere un quadrato perfetto:
+    e' il vincolo, ereditato da SparseFormer, che spiega l'ablation su
+    N in {4, 9, 16, 25, 36}.
     """
     root = round(math.sqrt(num_tokens))
     if root * root != num_tokens:
@@ -71,8 +60,8 @@ def init_boxes_on_grid(num_tokens: int, unit: float = 0.5) -> torch.Tensor:
             f"num_tokens={num_tokens} non e' un quadrato perfetto: la griglia "
             f"di inizializzazione e' {root}x{root}. Valori ammessi: 4, 9, 16, 25, 36..."
         )
-    # posizioni equispaziate in [0, 1-unit]; con root=1 si evita la
-    # divisione per zero mettendo l'unica regione all'origine
+    # posizioni equispaziate in [0, 1-unit]; con root=1 si evita la divisione
+    # per zero mettendo l'unica regione all'origine
     steps = torch.arange(root, dtype=torch.float32)
     steps = steps / (root - 1) if root > 1 else steps
     gx = steps.view(root, 1).expand(root, root)
@@ -83,15 +72,13 @@ def init_boxes_on_grid(num_tokens: int, unit: float = 0.5) -> torch.Tensor:
 
 
 class RegionAdjust(nn.Module):
-    """Passo 1 — il token sposta e ridimensiona la propria regione.
+    """Passo 1: il token sposta e ridimensiona la propria regione.
 
         (tx, ty, tw, th) = Linear(t)
         x' = x + tx*w      w' = w * exp(tw)
 
-    L'esponenziale (come in Faster R-CNN) garantisce dimensioni positive per
-    costruzione, rende l'aggiornamento invariante di scala — la rete impara
-    rapporti, non incrementi — e simmetrico fra allargare e restringere.
-    Anche gli spostamenti sono relativi alla dimensione (tx*w).
+    L'esponenziale, come in Faster R-CNN, da' dimensioni positive per
+    costruzione e rende l'aggiornamento invariante di scala.
     """
 
     def __init__(self, token_dim: int, constraint: RegionConstraint = "none",
@@ -105,16 +92,11 @@ class RegionAdjust(nn.Module):
         nn.init.zeros_(self.to_delta.weight)
         nn.init.zeros_(self.to_delta.bias)
 
-    # Limite sul delta logaritmico prima dell'esponenziale.  [NOSTRA AGGIUNTA]
-    # Serve perche' exp() in float32 va a infinito oltre ~88: un solo passo
-    # anomalo darebbe regioni inf o 0, quindi NaN nel gradiente.
-    #
-    # Il valore 4 lascia a una regione di moltiplicare il proprio lato per
-    # e^4 ~ 55 a ogni ripetizione: molto oltre qualunque regione che stia
-    # ancora dentro il piano, e molto sotto la soglia di overflow. Ne' il
-    # paper ne' SparseFormer prevedono questo limite, e non e' inerte: sulla
-    # prima ripetizione non interviene mai, dalla seconda in poi taglia i
-    # fattori di scala richiesti oltre e^4.
+    # [NOSTRA AGGIUNTA] exp() in float32 va a infinito oltre ~88, e un solo
+    # passo anomalo darebbe regioni inf o 0, quindi NaN nel gradiente. Con 4 una
+    # regione puo' moltiplicare il proprio lato per e^4 ~ 55 a ogni ripetizione.
+    # Ne' il paper ne' SparseFormer lo prevedono, e non e' inerte: dalla seconda
+    # ripetizione taglia i fattori di scala richiesti oltre e^4.
     MAX_LOG_SCALE = 4.0
 
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
@@ -125,11 +107,8 @@ class RegionAdjust(nn.Module):
         size = size * log_scale.exp()
 
         if self.constraint == "clip":
-            # Regione riportata dentro [0,1]x[0,1]: prima la dimensione, poi
-            # il centro nell'intervallo in cui la regione sta tutta dentro.
-            # L'ordine conta — vincolare il centro per primo lascerebbe
-            # passare regioni grandi centrate al bordo. Dove il clamp morde
-            # il gradiente su `delta` e' nullo.
+            # prima la dimensione, poi il centro: vincolare il centro per primo
+            # lascerebbe passare regioni grandi centrate al bordo
             size = size.clamp(self.min_size, 1.0)
             half = 0.5 * size
             center = torch.min(torch.max(center, half), 1.0 - half)
@@ -138,7 +117,7 @@ class RegionAdjust(nn.Module):
 
 
 class SparseSampler(nn.Module):
-    """Passo 2 — P punti campionati nella regione, per interpolazione bilineare.
+    """Passo 2: P punti campionati nella regione, per interpolazione bilineare.
 
         {(dx_i, dy_i)}_P = Linear(LayerNorm(t))
         x~_i = x + 0.5 * dx_i * w
@@ -148,14 +127,9 @@ class SparseSampler(nn.Module):
 
         offset = (offset - mean(-2)) / (3 * (std(-2) + 1e-7))
 
-    Media e deviazione sono SULL'ASSE DEI P PUNTI, non sul batch: dopo, la
-    deviazione vale 1/3, quindi il 99.7% della massa cade dentro la regione
-    per costruzione. Il modello controlla cosi' la FORMA della nuvola,
-    mentre posizione e dimensione restano governate dalla regione.
-
-    L'interpolazione bilineare rende differenziabile la SELEZIONE: dF/dx~ e'
-    una differenza finita fra celle adiacenti, ed e' il motivo per cui si
-    campiona sull'uscita della early convolution e non sullo spettrogramma.
+    Media e deviazione stanno sull'asse dei P punti, non sul batch, quindi il
+    99,7 % della massa cade dentro la regione per costruzione: il modello
+    controlla la forma della nuvola, la regione posizione e dimensione.
     """
 
     def __init__(self, token_dim: int, num_points: int) -> None:
@@ -187,26 +161,22 @@ class SparseSampler(nn.Module):
 
 
 class AdaptiveDecoder(nn.Module):
-    """Passo 3 — i P campioni tornano nel token, con pesi generati dal token.
+    """Passo 3: i P campioni tornano nel token, con pesi generati dal token.
 
         [Mc | Ms] = F(t),  Mc in R^{CxC},  Ms in R^{PxP}
         x1 = GELU(x0 Mc)        mixing sui canali
         x2 = GELU(Ms x1)        mixing spaziale
         t' = t + Linear(x2)     aggiornamento residuo
 
-    Mc e Ms sono FUNZIONI DEL TOKEN — stesso principio delle hypernetwork —
-    quindi ogni token decide come mescolare i propri campioni invece di
-    subire pesi buoni in media. Il paper e' esplicito: «simply using a linear
-    layer for this encoding is not effective».
+    Mc e Ms sono funzioni del token, quindi ogni token decide come mescolare i
+    propri campioni: «simply using a linear layer for this encoding is not
+    effective». E' il blocco piu' pesante dell'estrattore, perche' F produce
+    C^2 + P^2 valori, 10.512 con C=96 e P=36.
 
-    E' il blocco piu' pesante dell'estrattore: F produce C^2 + P^2 valori,
-    10.512 uscite con C=96 e P=36.
-
-    L'ultimo Linear opera sul tensore APPIATTITO P*C -> d. Il paper non lo
-    dice; lo dice AdaMixer (Gao et al., CVPR 2022), che Kavaki & Mandel
-    citano a fianco dell'equazione (9): "the final output ... is flattened
-    and transformed to the d_q dimension by a linear layer to add back to
-    the content vector".
+    L'ultimo Linear opera sul tensore appiattito P*C -> d. Non lo dice il paper
+    ma AdaMixer (Gao et al., CVPR 2022), citato a fianco dell'equazione (9):
+    "the final output ... is flattened and transformed to the d_q dimension by
+    a linear layer to add back to the content vector".
     """
 
     def __init__(self, token_dim: int, channels: int, num_points: int,
@@ -238,11 +208,10 @@ class AdaptiveDecoder(nn.Module):
 class SparseFeatureExtractor(nn.Module):
     """L_rep ripetizioni di {aggiusta regione, campiona, decodifica}.
 
-    I moduli NON sono condivisi fra ripetizioni, e qui ci si discosta da
-    SparseFormer, che invece li condivide ("lightweight, repeated & weight
-    sharing", sua fig. 2). A imporlo e' il budget di Kavaki & Mandel: con
-    pesi condivisi il modello avrebbe 2.010.591 parametri contro i 2,87 M
-    dichiarati, cioe' -30 %; senza condivisione 2.822.711, cioe' -1,6 %.
+    I moduli non sono condivisi fra le ripetizioni, a differenza di
+    SparseFormer che li condivide. A imporlo e' il budget di Kavaki & Mandel:
+    con pesi condivisi il modello avrebbe 2.010.591 parametri contro i 2,87 M
+    dichiarati (-30 %), senza condivisione 2.822.711 (-1,6 %).
     """
 
     def __init__(self, num_tokens: int = 4, num_points: int = 36,
@@ -268,9 +237,9 @@ class SparseFeatureExtractor(nn.Module):
             for _ in range(repeats)
         )
 
-        # Congelamento DOPO la costruzione, senza sostituire i moduli: forma,
-        # parametri e FLOPs restano identici a "learned", cosi' l'ablation e'
-        # un confronto controllato e non un modello piu' piccolo.
+        # congelamento dopo la costruzione, senza sostituire i moduli: forma,
+        # parametri e FLOPs restano identici a "learned", quindi l'ablation e'
+        # un confronto controllato e non un modello piu' piccolo
         self.region_mode = region_mode
         if region_mode == "grid":
             for stage in self.stages:

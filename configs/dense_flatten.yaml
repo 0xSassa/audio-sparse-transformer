@@ -1,44 +1,23 @@
-# Dense-transformer, variante `flatten`: il secondo estremo del bracketing.
+# Dense-transformer, ricostruzione `flatten`: la lettura ADOTTATA, da cui
+# vengono i risultati riportati. Identica a dense.yaml tranne `seq_mode`.
 #
-# Identica a dense.yaml tranne che per `seq_mode`. Le due varianti
-# racchiudono l'incertezza sulla ricostruzione, perche' nessuna
-# configurazione soddisfa entrambi i vincoli del paper e le due sbagliano
-# in direzioni opposte:
-#
-#                  parametri              costo
-#   pool_freq   4.875.235  (+1,6 %)   0,5275 GFLOP  (-18,2 %)
-#   flatten     5.197.795  (+8,3 %)   0,5604 GFLOP  (-13,1 %)
-#   dichiarati  4,80 M                0,645  GFLOP
-#
-# La differenza sostanziale non e' pero' nei numeri: e' che `pool_freq`
-# MEDIA VIA l'asse frequenza, quindi ogni token porta 96 valori (i canali
-# della convoluzione), mentre `flatten` conserva la struttura spettrale e
-# ogni token ne porta 1536 (96 canali x 16 bin).
-#
-# Si adotta `flatten`, ed e' la tokenizzazione di KWT sullo stesso dataset:
-# "the spectrogram is first mapped to a higher dimension d, using a linear
-# projection matrix W0 in R^{FxD} in the frequency domain". Ogni finestra
-# temporale entra con tutte le sue frequenze, e la loro ablation sulle patch
-# trova migliori proprio quelle a frequenza piena, una per frame.
-#
-# Nota sui run archiviati: `results/dense_seed0` e' la stessa ricostruzione
-# `pool_freq` con la lettura alternativa dei canali (c196_proj96);
-# `results/dense_c96_seed0` e' quella con c96, cosi' il confronto col
-# flatten e' controllato sui canali.
+# `flatten` conserva la struttura spettrale, quindi ogni token porta
+# 96 x 16 = 1536 valori invece dei 96 di `pool_freq`. E' la tokenizzazione di
+# KWT sullo stesso dataset: "the spectrogram is first mapped to a higher
+# dimension d, using a linear projection matrix W0 in R^{FxD} in the frequency
+# domain". Qui: 5.197.795 parametri (+8,3 %), 0,5604 GFLOP (-13,1 %).
 
 defaults: base.yaml
 
 model:
   kind: dense
-  channel_reading: c96         # vedi dense.yaml: il 196 e' un refuso
+  channel_reading: c96
   pool_stride: [2, 1]
 
-  seq_mode: flatten            # <-- l'unica differenza da dense.yaml
+  seq_mode: flatten            # l'unica differenza da dense.yaml
 
   dim: 224
   depth: 8
   num_heads: 7
   ffn_ratio: 4
   dropout: 0.0
-
-# Sequenza risultante: [C=96, F=16, T=51] -> 51 token di dimensione 1536

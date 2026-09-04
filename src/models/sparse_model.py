@@ -1,17 +1,15 @@
-"""Audio Sparse-Transformer completo — il modello di Kavaki & Mandel.
+"""Audio Sparse-Transformer completo, il modello di Kavaki & Mandel.
 
     spettrogramma  [B, 1, 64, 101]
       -> early convolution        [B, 96, 16, 51]
-      -> sparse feature extractor [B, 4, 64]      <- da 816 celle a 4 token
+      -> sparse feature extractor [B, 4, 64]      da 816 celle a 4 token
       -> ponte lineare 64 -> 128  [B, 4, 128]
-      -> 8 transformer encoder    [B, 4, 128]     senza codifica posizionale
+      -> 8 transformer encoder    [B, 4, 128]
       -> media + classificatore   [B, 35]
 
-Condivide con il modello denso il front-end, l'encoder e il training loop:
-l'unica differenza e' COME si producono i token.
-
-Niente codifica posizionale, ed e' dichiarato dal paper: i token latenti
-sono un insieme, non una sequenza.
+Condivide col modello denso front-end, encoder e training loop: l'unica
+differenza e' come si producono i token. Nessuna codifica posizionale, ed e'
+dichiarato: i token latenti sono un insieme, non una sequenza.
 """
 
 from __future__ import annotations
@@ -31,11 +29,9 @@ class SparseAudioTransformer(nn.Module):
         n_mels: int = 64,
         n_frames: int = 101,
         *,
-        # front-end identico al denso, cosi' il confronto e' controllato; i
-        # default sono la configurazione adottata (`configs/sparse.yaml`)
+        # i default sono la configurazione adottata (`configs/sparse.yaml`)
         channel_reading: ChannelReading = "c96",
         pool_stride: tuple[int, int] = (2, 1),
-        # estrattore sparso
         num_tokens: int = 4,
         num_points: int = 36,
         token_dim: int = 64,
@@ -44,7 +40,6 @@ class SparseAudioTransformer(nn.Module):
         unit: float = 0.5,
         region_constraint: RegionConstraint = "none",
         region_mode: RegionMode = "learned",
-        # transformer di classificazione
         dim: int = 128,
         depth: int = 8,
         num_heads: int = 4,
@@ -71,9 +66,8 @@ class SparseAudioTransformer(nn.Module):
         self.encoder = TransformerEncoder(dim, depth, num_heads, ffn_ratio, dropout)
         self.head = nn.Linear(dim, num_classes)
 
-        # copia della griglia iniziale, per misurare in `diagnostics` quanto
-        # le regioni si sono spostate. Buffer non persistente: non finisce
-        # nei checkpoint.
+        # copia della griglia iniziale per `diagnostics`; buffer non
+        # persistente, quindi non finisce nei checkpoint
         self.register_buffer("_box_init_0", self.extractor.box_init.detach().clone(),
                              persistent=False)
 
@@ -86,18 +80,15 @@ class SparseAudioTransformer(nn.Module):
 
     @torch.no_grad()
     def diagnostics(self) -> dict[str, float]:
-        """Il meccanismo centrale del paper sta funzionando?
+        """Due misure che dicono se il meccanismo del paper sta funzionando.
 
-        Se le regioni non si muovono il modello si addestra comunque,
-        degradando a un campionamento fisso, e nulla nei log lo segnala.
-        Due misure gratuite (nessun forward):
+        Se le regioni non si muovono il modello si addestra comunque, degradando
+        a un campionamento fisso, e nulla nei log lo segnala.
 
         `region_init_drift`  spostamento delle regioni apprese dalla griglia
             iniziale: zero = il modello non ha imparato dove guardare.
         `region_adjust_norm` norma dei pesi dell'aggiustamento per campione,
-            inizializzati a zero: > 0 = quel ramo sta ricevendo gradiente.
-
-        Entrambe a zero dopo qualche epoca = il meccanismo e' morto.
+            inizializzati a zero: > 0 = quel ramo riceve gradiente.
         """
         drift = (self.extractor.box_init - self._box_init_0).norm(dim=-1).mean()
         adjust = sum(float(s["adjust"].to_delta.weight.abs().sum())

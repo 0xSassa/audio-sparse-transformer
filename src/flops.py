@@ -1,24 +1,19 @@
-"""Contatore di FLOPs: la metrica centrale del progetto.
+"""Contatore di FLOPs.
 
 Tre avvertenze, ognuna capace da sola di invalidare il confronto:
 
-1. QUI SI CONTANO FLOPs, NON MAC. `torch.utils.flop_counter` conta la
-   moltiplicazione-addizione come 2 operazioni. Il paper NON dichiara la
-   propria convenzione, quindi i suoi numeri e i nostri non sono
-   confrontabili a meno di un fattore che non conosciamo: per questo la
-   nostra convenzione va dichiarata, sorvegliata da un test e usata dovunque
-   allo stesso modo.
-2. `grid_sample` non e' contata da nessuno strumento — e' gather e
-   interpolazione, senza matmul. Nella configurazione adottata varrebbe lo
-   0.60 % del costo del modello sparso, quindi escluderla non sposta il
-   confronto; ma e' il meccanismo che il paper difende, e va detto.
-3. Si misura su UN input da 1 secondo, in inferenza, con batch 1. Il
-   training costa circa 3x, ma non e' quello che si riporta ne' qui ne' nel
-   paper.
+1. Si contano FLOPs, non MAC: `torch.utils.flop_counter` conta la
+   moltiplicazione-addizione come 2 operazioni. Il paper non dichiara la
+   propria convenzione, quindi i suoi numeri e i nostri non sono confrontabili
+   a meno di un fattore che non conosciamo.
+2. `grid_sample` non e' contata da nessuno strumento, perche' e' gather e
+   interpolazione senza matmul. Nella configurazione adottata varrebbe lo
+   0,60 % del costo del modello sparso.
+3. Si misura su un input da 1 secondo, in inferenza, con batch 1. Il training
+   costa circa 3x, ma non e' quello che si riporta ne' qui ne' nel paper.
 
-Non si contano softmax, GELU e LayerNorm: e' la convenzione con cui sono
-riportati i FLOPs in letteratura, quella del paper compresa, e cambiarla
-renderebbe i due numeri non confrontabili.
+Softmax, GELU e LayerNorm non si contano: e' la convenzione con cui sono
+riportati i FLOPs in letteratura, quella del paper compresa.
 """
 
 from __future__ import annotations
@@ -55,8 +50,8 @@ def analyze(
 ) -> FlopReport:
     """Misura il costo di un forward con batch 1.
 
-    `input_shape` e' la forma SENZA la dimensione di batch,
-    es. (1, 64, 101) per uno spettrogramma log-mel.
+    `input_shape` e' la forma senza la dimensione di batch, es. (1, 64, 101)
+    per uno spettrogramma log-mel.
     """
     model = model.to(device).eval()
     x = torch.zeros(1, *input_shape, device=device)
@@ -71,10 +66,8 @@ def _count_native(model: nn.Module, x: torch.Tensor) -> float | None:
     # Niente torch.no_grad(), ed e' voluto: sotto no_grad il ModuleTracker di
     # FlopCounterMode fallisce sui Parameter espansi (le regioni iniziali del
     # modello sparso), che non hanno grad_fn. Il grafo attivo non cambia il
-    # conteggio, che riguarda solo le op del forward.
+    # conteggio.
     counter = FlopCounterMode(display=False)
     with counter:
         model(x)
     return float(counter.get_total_flops())
-
-

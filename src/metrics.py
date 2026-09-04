@@ -1,9 +1,8 @@
 """Metriche per classe e analisi delle confusioni.
 
-L'accuratezza aggregata su 35 classi nasconde molto: in SC-V2 lo
-sbilanciamento fra classi e' di 2.6x. Si riportano quindi anche
-l'accuratezza bilanciata, le classi peggiori e le coppie piu' confuse —
-piu' leggibili di una matrice 35x35.
+In SC-V2 lo sbilanciamento fra classi e' di 2,6x, quindi oltre all'accuratezza
+aggregata si riportano quella bilanciata, le classi peggiori e le coppie piu'
+confuse.
 """
 
 from __future__ import annotations

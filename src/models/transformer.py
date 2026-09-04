@@ -1,18 +1,16 @@
 """Encoder transformer, reimplementato senza nn.MultiheadAttention.
 
-COMPLESSITA' di un blocco, per n elementi in dimensione d:
+Costo di un blocco, per n elementi in dimensione d:
 
     proiezioni Q, K, V, O   4 n d^2      lineare in n
-    punteggi Q K^T           n^2 d       QUADRATICO in n
-    aggregazione A V         n^2 d       QUADRATICO in n
+    punteggi Q K^T           n^2 d       quadratico in n
+    aggregazione A V         n^2 d       quadratico in n
     feed-forward (ratio r)  2 r n d^2    lineare in n
 
-Totale ~ (4 + 2r) n d^2 + 2 n^2 d: il termine quadratico domina solo per
-n > (2 + r) d, cioe' n > 768 con d=128 e r=4. Le nostre sequenze sono molto
-piu' corte, quindi domina il termine LINEARE — ed e' il motivo per cui il
-guadagno del modello sparso si misura col contatore di FLOPs invece di
-dedurlo dal rapporto (26/4)^2. I parametri, (4 + 2r) d^2 piu' bias e norme,
-non dipendono da n.
+Il termine quadratico domina solo per n > (2 + r) d, cioe' n > 768 con d=128 e
+r=4. Le sequenze qui sono molto piu' corte, quindi il guadagno del modello
+sparso si misura col contatore di FLOPs invece di dedurlo da (51/4)^2. I
+parametri, (4 + 2r) d^2 piu' bias e norme, non dipendono da n.
 """
 
 from __future__ import annotations
@@ -27,9 +25,8 @@ from torch import nn
 class MultiHeadSelfAttention(nn.Module):
     """Self-attention multi-testa, scritta per esteso.
 
-    Lo scaling 1/sqrt(d_head) tiene la varianza dei punteggi a 1: senza, i
-    logit crescono con la dimensione, la softmax satura e il gradiente
-    svanisce.
+    Lo scaling 1/sqrt(d_head) tiene la varianza dei punteggi a 1: senza, la
+    softmax satura e il gradiente svanisce al crescere della dimensione.
     """
 
     def __init__(self, dim: int, num_heads: int, dropout: float = 0.0) -> None:
@@ -40,8 +37,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.head_dim = dim // num_heads
         self.scale = 1.0 / math.sqrt(self.head_dim)
 
-        # Q, K, V in una sola proiezione: un GEMM invece di tre, il modello
-        # non cambia.
+        # Q, K, V in una sola proiezione: un GEMM invece di tre
         self.qkv = nn.Linear(dim, 3 * dim)
         self.out = nn.Linear(dim, dim)
         self.attn_drop = nn.Dropout(dropout)
@@ -83,9 +79,8 @@ class FeedForward(nn.Module):
 class EncoderBlock(nn.Module):
     """Blocco pre-norm: x + Attn(LN(x)), poi x + FFN(LN(x)).
 
-    Il post-norm di Vaswani et al. 2017 richiede warmup del learning rate
-    per non divergere; col pre-norm il ramo residuo resta pulito e il
-    training e' stabile senza.
+    Il post-norm di Vaswani et al. 2017 richiede warmup del learning rate per
+    non divergere; col pre-norm il ramo residuo resta pulito.
     """
 
     def __init__(self, dim: int, num_heads: int, ratio: int = 4,
@@ -105,9 +100,8 @@ class EncoderBlock(nn.Module):
 class TransformerEncoder(nn.Module):
     """Stack di blocchi pre-norm, con LayerNorm finale.
 
-    I run archiviati usano d=224 x 8 sul denso e d=128 x 8 sullo sparso,
-    quest'ultimo DICHIARATO dal paper. Per il denso la larghezza e'
-    ricostruita dai due soli numeri che il paper ne dichiara (README, sez. 6).
+    d=128 x 8 sullo sparso, dichiarato dal paper; d=224 x 8 sul denso, dove la
+    larghezza e' ricostruita (README, sez. 3).
     """
 
     def __init__(self, dim: int, depth: int, num_heads: int, ratio: int = 4,

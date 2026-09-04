@@ -2,8 +2,7 @@
 
     python scripts/prepare_data.py --root data/raw --cache data/cache
 
-Il passo che conta non e' il download: e' la verifica che gli split diano
-esattamente 84_843 / 9_981 / 11_005. Se non tornano, lo script si ferma.
+Lo script si ferma se gli split non danno esattamente 84_843 / 9_981 / 11_005.
 """
 
 from __future__ import annotations

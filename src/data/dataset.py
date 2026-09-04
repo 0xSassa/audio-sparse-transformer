@@ -1,8 +1,7 @@
 """Dataset e DataLoader su cache memory-mapped.
 
-Restituisce forme d'onda grezze float32 in [-1, 1]; spettrogramma e
-augmentation avvengono sul batch in GPU, per tenere il DataLoader fuori dal
-percorso critico.
+Restituisce forme d'onda grezze float32 in [-1, 1]: spettrogramma e augmentation
+avvengono sul batch in GPU, cosi' il DataLoader resta fuori dal percorso critico.
 """
 
 from __future__ import annotations
@@ -21,10 +20,9 @@ INT16_SCALE = 32_768.0
 class SpeechCommandsCached(Dataset):
     """Dataset sulla cache memmap.
 
-    La memmap si apre pigramente e viene rimossa in `__getstate__`: con
-    'spawn' (Windows) il Dataset viene picklato per ogni worker, e
-    serializzare l'array da 2.7 GB fallirebbe. Ogni worker riapre la propria
-    vista sullo stesso file, condividendo le pagine.
+    La memmap si apre pigramente e viene rimossa in `__getstate__`: con 'spawn'
+    (Windows) il Dataset viene picklato per ogni worker, e serializzare l'array
+    da 2,7 GB fallirebbe. Ogni worker riapre la propria vista sullo stesso file.
     """
 
     def __init__(self, cache_dir: Path, split: str) -> None:
@@ -62,10 +60,10 @@ class SpeechCommandsCached(Dataset):
 class EpochShuffleSampler(Sampler[int]):
     """Permutazione che dipende solo da (seed, epoca).
 
-    Sostituisce `shuffle=True`, il cui seed viene estratto dal generatore
-    globale: con `persistent_workers` un run ripreso consuma un'estrazione in
-    piu' di uno continuo e l'ordine dei dati diverge, anche ripristinando
-    tutti gli stati RNG. Stesso schema di `set_epoch` in `DistributedSampler`.
+    Sostituisce `shuffle=True`, il cui seed esce dal generatore globale: con
+    `persistent_workers` un run ripreso consuma un'estrazione in piu' di uno
+    continuo e l'ordine dei dati diverge, anche ripristinando gli stati RNG.
+    Stesso schema di `set_epoch` in `DistributedSampler`.
     """
 
     def __init__(self, num_samples: int, seed: int) -> None:

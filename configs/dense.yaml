@@ -1,49 +1,30 @@
-# Dense-transformer: il baseline del confronto controllato di Kavaki & Mandel.
+# Dense-transformer, ricostruzione `pool_freq`: la lettura SCARTATA. Quella
+# adottata, da cui vengono i risultati riportati, e' dense_flatten.yaml.
 #
-# Del modello denso il paper NON dichiara alcun iperparametro: solo 4.80 M
-# parametri e 0.645 G FLOPs (Tabella 2). Questa configurazione e' quindi una
-# RICOSTRUZIONE, con quei due numeri come unici vincoli. Nessun valore di
-# `dim` li soddisfa entrambi; la scelta adottata e' quella che rende piu'
-# piccolo il peggiore dei due scarti (README, sez. 6).
-#
-#   parametri  4.875.235   dichiarati 4,80 M   ->  +1,6 %
-#   costo      0,5275 GFLOP dichiarati 0,645   ->  -18,2 %
-#
-# ATTENZIONE: questo file e' la ricostruzione SCARTATA (`pool_freq`). Quella
-# adottata, da cui vengono i risultati riportati, e' `dense_flatten.yaml`.
+# Del denso il paper dichiara solo 4,80 M parametri e 0,645 GFLOP (Tab. 2), e
+# nessun `dim` soddisfa entrambi i vincoli: 224 minimizza il peggiore dei due
+# scarti. Qui: 4.875.235 parametri (+1,6 %), 0,5275 GFLOP (-18,2 %).
 
 defaults: base.yaml            # i blocchi non ripetuti qui vengono da la'
 
 model:
   kind: dense
 
-  # --- front-end convolutivo ------------------------------------------
-  channel_reading: c96         # "96 dimensional feature". Il "196 kernels"
-                               # della sez. 3.2 e' un refuso: SparseFormer,
-                               # l'ancestor del metodo, usa 96 canali e un
-                               # solo strato 7x7 stride 2. c196_proj96 resta
-                               # implementata come lettura alternativa.
-  pool_stride: [2, 1]          # [ASSUNZIONE] solo sull'asse frequenza.
-                               # SparseFormer usa stride 2 su ENTRAMBI gli
-                               # assi, naturale su un'immagine dove le due
-                               # dimensioni sono omogenee; qui il tempo e'
-                               # l'asse della sequenza e dimezzarlo lascerebbe
-                               # 26 frame, un passo di 40 ms.
+  channel_reading: c96         # "96 dimensional feature" (sez. 3.2); il "196
+                               # kernels" due righe dopo e' un refuso, come
+                               # conferma SparseFormer. La lettura alternativa
+                               # e' c196_proj96
+  pool_stride: [2, 1]          # [ASSUNZIONE] solo sull'asse frequenza:
+                               # dimezzare anche il tempo lascerebbe 26 frame,
+                               # cioe' un passo di 40 ms
 
-  # --- dalla feature map alla sequenza --------------------------------
-  seq_mode: pool_freq          # media sull'asse frequenza: la lettura NON
-                               # adottata. Quella adottata segue KWT e sta in
-                               # dense_flatten.yaml
+  seq_mode: pool_freq          # media sull'asse frequenza: 51 token da 96
+                               # valori, contro i 1536 di `flatten`
 
-  # --- encoder --------------------------------------------------------
   dim: 224
-  depth: 8                     # DICHIARATO dal paper: "8 transformer-encoders"
-  num_heads: 7                 # 224/7 = 32 dimensioni per testa, come
-                               # nell'encoder sparso
+  depth: 8                     # dichiarato: "8 transformer-encoders"
+  num_heads: 7                 # 32 dimensioni per testa, come nello sparso
   ffn_ratio: 4
-  # Nessuna codifica posizionale: il paper la dichiara assente sullo sparso e
-  # tace sul denso. E' una nostra ASSUNZIONE, presa per simmetria.
   dropout: 0.0
-
-# Sequenza risultante: [C=96, F=16, T=51]  ->  51 token di dimensione 96
-
+  # [ASSUNZIONE] nessuna codifica posizionale: il paper la dichiara assente
+  # sullo sparso e tace sul denso, quindi assente per simmetria.

@@ -1,11 +1,10 @@
 """Front-end tempo-frequenza.
 
-Il paper non dichiara alcun parametro dello spettrogramma. Finestra 25 ms e
-hop 10 ms sono la convenzione della letteratura su questo dataset (AST:
-"25 ms Hamming window every 10 ms"; KWT: 30 ms / 10 ms), e su un secondo di
-audio danno 101 frame. I 64 bin mel sono un'assunzione, fra i 40 di KWT e i
-128 di AST; dopo lo stem danno F=16. Nessuna normalizzazione per campione,
-come nel paper e negli ancestor.
+[ASSUNZIONE] Il paper non dichiara nulla dello spettrogramma. Finestra 25 ms e
+hop 10 ms sono la convenzione su questo dataset (AST: "25 ms Hamming window
+every 10 ms"; KWT: 30/10) e danno 101 frame su un secondo di audio; i 64 bin mel
+stanno fra i 40 di KWT e i 128 di AST, e dopo lo stem danno F=16. Nessuna
+normalizzazione per campione, come nel paper e negli ancestor.
 """
 
 from __future__ import annotations

@@ -1,8 +1,7 @@
 """Tracciamento degli esperimenti: CSV e TensorBoard.
 
-`metrics.csv` nella cartella del run e' la fonte di verita': porta una riga
-per epoca ed e' versionato con i risultati. TensorBoard serve solo a
-guardare il run mentre gira.
+`metrics.csv` nella cartella del run e' la fonte di verita', una riga per epoca,
+ed e' versionato coi risultati. TensorBoard serve a guardare il run mentre gira.
 """
 
 from __future__ import annotations

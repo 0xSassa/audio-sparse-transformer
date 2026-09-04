@@ -1,23 +1,18 @@
 """Dense-transformer: il baseline del confronto controllato del paper.
 
-Stessa struttura del modello sparso, ma i token sono i FRAME TEMPORALI della
-early convolution invece dei token latenti campionati (96.67%, 4.80 M
-parametri, 0.645 GFLOPs dichiarati; e' da qui che il paper ricava il -91.47%
-di costo).
+Stessa struttura del modello sparso, ma i token sono i frame temporali della
+early convolution invece dei token latenti campionati. Il paper ne dichiara solo
+4,80 M parametri e 0,645 GFLOP (Tab. 2), quindi la configurazione e' ricostruita
+con quei due numeri come unici vincoli, da cui la parametrizzazione spinta della
+classe.
 
-Il paper non dichiara alcun iperparametro del denso, solo parametri e FLOPs:
-la configurazione e' RICOSTRUITA usando quei due numeri come vincoli, da cui
-la parametrizzazione spinta della classe.
-
-`seq_mode` — come [B, C, F, T] diventa una sequenza:
+`seq_mode`, cioe' come [B, C, F, T] diventa una sequenza:
 
     "flatten"    ogni istante porta tutti i suoi bin: N = T, dim = C*F
     "pool_freq"  media sull'asse frequenza:           N = T, dim = C
 
-Si adotta "flatten", la tokenizzazione di KWT sullo stesso dataset: ogni
-finestra temporale entra con tutte le sue frequenze, proiettata da una sola
-matrice. Niente codifica posizionale: e' una nostra ASSUNZIONE per simmetria
-col modello sparso, non una scelta misurata.
+Si adotta "flatten", la tokenizzazione di KWT sullo stesso dataset. Nessuna
+codifica posizionale: [ASSUNZIONE] per simmetria col modello sparso.
 """
 
 from __future__ import annotations
@@ -41,8 +36,8 @@ class DenseAudioTransformer(nn.Module):
         n_mels: int = 64,
         n_frames: int = 101,
         *,
-        # default = configurazione adottata (`configs/dense_flatten.yaml`),
-        # quella da cui vengono i risultati riportati
+        # i default sono la configurazione adottata
+        # (`configs/dense_flatten.yaml`), da cui vengono i risultati riportati
         channel_reading: ChannelReading = "c96",
         pool_stride: tuple[int, int] = (2, 1),
         seq_mode: SeqMode = "flatten",

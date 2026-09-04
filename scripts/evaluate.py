@@ -1,15 +1,12 @@
-"""Valutazione finale sul TEST SET — con guardia contro l'uso ripetuto.
+"""Valutazione finale sul test set, con guardia contro l'uso ripetuto.
 
     python scripts/evaluate.py --run dense_seed0
 
 Valutare piu' volte il test set, cambiando qualcosa in mezzo, equivale a
-selezionare su di esso: il numero smette di essere una stima onesta della
-generalizzazione, ed e' un errore senza sintomi visibili.
-
-Al primo utilizzo lo script scrive `TEST_EVALUATED.json` nella cartella del
-run e poi si rifiuta di ripartire, salvo `--force`, che pero' resta
-registrato nel file. La selezione del checkpoint avviene sul VALIDATION,
-durante il training: qui si valuta e basta.
+selezionare su di esso, ed e' un errore senza sintomi visibili. Al primo uso lo
+script scrive `TEST_EVALUATED.json` nella cartella del run e poi si rifiuta di
+ripartire, salvo `--force`, che resta registrato nel file. Il checkpoint e' gia'
+stato selezionato sul validation, durante il training.
 """
 
 from __future__ import annotations
