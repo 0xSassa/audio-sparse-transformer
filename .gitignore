@@ -1,4 +1,4 @@
-# Dati: MAI nel repository (la consegna chiede il codice, non i dati)
+# Dati: MAI nel repository (la consegna chiede il codice, non i dati).
 #
 # ATTENZIONE alla barra iniziale: "data/" senza slash davanti matcha
 # QUALSIASI cartella chiamata data a ogni livello dell'albero, e quindi
@@ -9,67 +9,53 @@
 *.tar.gz
 *.wav
 
-# Ambiente
+# Ambienti virtuali e cache degli strumenti
 .venv/
 DL_F/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
 
-# Output degli esperimenti.
-# Si versionano metriche, configurazioni e report — sono l'evidenza dei
-# risultati e pesano pochi KB. Restano fuori i pesi, i log binari di
-# TensorBoard e la cache locale di W&B.
-results/**/*.pt
-results/**/*.ckpt
-results/**/*.tmp
-results/**/tb/
-results/**/wandb_id.txt
+# Output degli esperimenti: di ogni run si versionano configurazione,
+# metriche per epoca e report, che sono l'evidenza dei risultati e pesano
+# pochi KB. Tutto il resto (pesi, log binari, figure, diagnostiche) resta
+# sul disco. La lista bianca e' piu' sicura di un elenco di esclusioni:
+# un artefatto nuovo resta fuori per default invece di entrare per svista.
+/results/*/*
+!/results/*/config.yaml
+!/results/*/resolved_config.json
+!/results/*/metrics.csv
+!/results/*/summary.json
+!/results/*/validation_report.json
+!/results/*/test_report.json
+!/results/*/TEST_EVALUATED.json
+/results/*.md
+/results/*.json
+/results/*.png
+!/results/*_aggregate.json
 runs/
-wandb/
-optuna*.db
 
-# Si consegna SOLO cio' che serve a riprodurre: preparazione dei dati,
-# training, valutazione sul test set. Restano fuori gli strumenti di verifica
-# e quelli che producono figure, tabelle e diagnostiche, il cui output e' gia'
-# stato prodotto e vive nella presentazione. Insieme agli script escono le loro
-# uscite: un artefatto che nessuno script versionato rigenera sarebbe orfano.
-# Tutti questi file restano sul disco.
-/scripts/plot_results.py
-/scripts/plot_sampling.py
-/scripts/cost_ablation.py
-/scripts/region_geometry.py
-/scripts/verify_runs.py
-/scripts/verify.py
-/scripts/check_env.py
+# Si consegna solo cio' che serve a riprodurre: preparazione dei dati,
+# training, valutazione sul test set. Gli strumenti di lavoro restano sul
+# disco, fuori dal repository.
+/scripts/*
+!/scripts/prepare_data.py
+!/scripts/run_seeds.py
+!/scripts/evaluate.py
 /tests/
-# I numeri dichiarati dal paper, trascritti: li leggevano solo gli
-# script di verifica e i test. Senza di loro e' codice senza consumatori,
-# e i valori che servono a leggere le tabelle stanno nel README.
 /src/paper.py
-results/accuracy_vs_flops.png
-results/summary_table.md
-results/cost_ablation.md
-results/cost_ablation.json
-results/**/sampling_trace.png
-results/**/region_geometry.json
 
-# PDF dei paper: non ridistribuibili. Documenti di lavoro personali
-# (manuale, diario, analisi dei paper e i loro sorgenti in docs/): restano
-# sul disco, fuori dal repository. La consegna prevede codice piu'
-# istruzioni di riproduzione, quindi il README.md e' l'unico documento
-# che ne fa parte.
+# Documenti di lavoro e materiale di riferimento: la consegna prevede
+# codice piu' istruzioni di riproduzione, quindi README.md e' l'unico
+# documento che ne fa parte. I PDF dei paper non sono ridistribuibili.
+/*.md
+!/README.md
+/*.html
+/*_files/
 *.pdf
 /docs/
-/scripts/build_docs.ps1
-report_valutazione_critica.md
-
-# Materiale di riferimento, non artefatti del progetto: restano sul disco
-# ma fuori dal repository. La pagina del corso e' reperibile online e il
-# solo CSS di Semantic UI pesava il 90% delle righe versionate.
-B031278 - Deep Learning - Fall 2025.html
-B031278 - Deep Learning - Fall 2025_files/
-paper pre progetto/
 
 # Sistema
 .DS_Store
