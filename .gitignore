@@ -44,7 +44,6 @@ runs/
 !/scripts/prepare_data.py
 !/scripts/run_seeds.py
 !/scripts/evaluate.py
-/tests/
 /src/*.py
 !/src/__init__.py
 !/src/flops.py

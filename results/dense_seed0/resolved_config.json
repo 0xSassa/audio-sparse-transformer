@@ -73,13 +73,6 @@
   },
   "log": {
     "dir": "results",
-    "tensorboard": true,
-    "wandb": {
-      "enabled": true,
-      "project": "audio-sparse-transformer",
-      "entity": null,
-      "mode": "online",
-      "log_checkpoints": false
-    }
+    "tensorboard": true
   }
 }

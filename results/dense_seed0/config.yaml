@@ -3,7 +3,7 @@
 # Del modello denso il paper NON dichiara alcun iperparametro: solo 4.80 M
 # parametri e 0.645 G FLOPs (Tabella 2). Questa configurazione e' quindi una
 # RICOSTRUZIONE, ottenuta cercando fra 432 combinazioni quelle compatibili
-# con quei due numeri. Vedi Manuale_tecnico.pdf, cap. 8.
+# con quei due numeri.
 #
 #   parametri  4.899.147   dichiarati 4,80 M   ->  +2,1 %
 #   costo      0,574 GFLOP dichiarati 0,645    ->  -11,0 %
