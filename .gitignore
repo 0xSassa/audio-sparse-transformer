@@ -29,17 +29,18 @@ runs/
 wandb/
 optuna*.db
 
-# Si consegna solo cio' che serve a riprodurre e a verificare: dati,
-# training, valutazione sul test set e scripts/verify.py. Restano fuori gli
-# strumenti che producono figure, tabelle e diagnostiche, il cui output e'
-# gia' stato prodotto e vive nella presentazione. Insieme agli script escono
-# le loro uscite: un artefatto che nessuno script versionato rigenera sarebbe
-# orfano. Tutti questi file restano sul disco.
+# Si consegna SOLO cio' che serve a riprodurre: preparazione dei dati,
+# training, valutazione sul test set. Restano fuori gli strumenti di verifica
+# e quelli che producono figure, tabelle e diagnostiche, il cui output e' gia'
+# stato prodotto e vive nella presentazione. Insieme agli script escono le loro
+# uscite: un artefatto che nessuno script versionato rigenera sarebbe orfano.
+# Tutti questi file restano sul disco.
 /scripts/plot_results.py
 /scripts/plot_sampling.py
 /scripts/cost_ablation.py
 /scripts/region_geometry.py
 /scripts/verify_runs.py
+/scripts/verify.py
 /scripts/check_env.py
 /tests/
 # I numeri dichiarati dal paper, trascritti: li leggevano solo gli

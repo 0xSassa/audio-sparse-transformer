@@ -17,33 +17,20 @@ Obiettivo: riprodurre il metodo, non i suoi numeri. I due modelli sono addestrat
 da zero su 3 seed, l'ablation è rifatta su entrambi gli assi, e le sezioni 3 e 4
 elencano ogni scelta che il paper non dichiara.
 
-## Verifica in un comando
-
-```bash
-python scripts/verify.py
-```
-
-Costruisce i modelli dai config, controlla che i parametri delle nove
-configurazioni della Tabella 3 stiano entro il 2 % dei valori dichiarati e
-ricalcola i numeri di questo README dai run archiviati. Venti secondi, senza
-dataset e senza GPU; esce con 1 se qualcosa non torna. Riaddestrare da zero è
-un'altra cosa, ed è la sezione 6.
-
 ---
 
 ## 1. Contenuto
 
 Il codice sta in `src/`, un YAML per esperimento in `configs/`, i tre script di
-esecuzione più quello di verifica in `scripts/`. Dati e pesi non sono inclusi; i
-file di testo in `results/` bastano a ricostruire ogni numero di questo
-documento.
+esecuzione in `scripts/`. Dati e pesi non sono inclusi; i file di testo in
+`results/` bastano a ricostruire ogni numero di questo documento.
 
 ```
 configs/   base.yaml è ereditato dagli altri tre
 src/       data/    split ufficiali, cache memory-mapped, log-mel, augmentation
            models/  early convolution, encoder, denso, estrattore sparso
            train.py, flops.py, metrics.py, utils.py, tracking.py
-scripts/   verify.py, prepare_data.py, run_seeds.py, evaluate.py
+scripts/   prepare_data.py, run_seeds.py, evaluate.py
 results/   config, metriche per epoca e report dei 22 run archiviati
 ```
 
