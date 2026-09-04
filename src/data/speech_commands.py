@@ -233,13 +233,3 @@ def build_cache(splits: Splits, out_dir: Path) -> None:
     with open(out_dir / "meta.json", "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)
     print(f"[cache] scritto {out_dir / 'meta.json'}")
-
-
-def load_cache(cache_dir: Path, split: str) -> tuple[np.ndarray, np.ndarray]:
-    """Ritorna (waves int16 memmap [N, 16000], labels int64 [N])."""
-    cache_dir = Path(cache_dir)
-    waves = np.load(cache_dir / f"{split}_wave.npy", mmap_mode="r")
-    labels = np.load(cache_dir / f"{split}_label.npy")
-    if waves.shape[0] != labels.shape[0]:
-        raise RuntimeError(f"cache incoerente per '{split}'")
-    return waves, labels

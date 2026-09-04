@@ -7,7 +7,6 @@ from .speech_commands import (
     build_cache,
     build_splits,
     download_and_extract,
-    load_cache,
 )
 
 __all__ = [
@@ -19,7 +18,6 @@ __all__ = [
     "build_cache",
     "build_splits",
     "download_and_extract",
-    "load_cache",
     "make_loader",
     "mixing",
     "one_hot",

@@ -9,9 +9,9 @@ Tre avvertenze, ognuna capace da sola di invalidare il confronto:
    nostra convenzione va dichiarata, sorvegliata da un test e usata dovunque
    allo stesso modo.
 2. `grid_sample` non e' contata da nessuno strumento — e' gather e
-   interpolazione, senza matmul — e va aggiunta a mano con
-   `grid_sample_flops()`. Nella configurazione adottata vale lo 0.60 % del
-   costo del modello sparso.
+   interpolazione, senza matmul. Nella configurazione adottata varrebbe lo
+   0.60 % del costo del modello sparso, quindi escluderla non sposta il
+   confronto; ma e' il meccanismo che il paper difende, e va detto.
 3. Si misura su UN input da 1 secondo, in inferenza, con batch 1. Il
    training costa circa 3x, ma non e' quello che si riporta ne' qui ne' nel
    paper.
@@ -45,15 +45,6 @@ class FlopReport:
 
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
-
-
-def grid_sample_flops(num_points: int, channels: int) -> float:
-    """FLOPs dell'interpolazione bilineare, contati a mano.
-
-    Per punto e canale: 4 letture pesate + 3 somme = 7 operazioni, piu' ~4
-    per i pesi, condivisi fra i canali.
-    """
-    return num_points * (4.0 + channels * 7.0)
 
 
 def analyze(

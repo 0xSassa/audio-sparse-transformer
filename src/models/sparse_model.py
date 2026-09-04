@@ -20,8 +20,7 @@ import torch
 from torch import nn
 
 from .frontend import ChannelReading, EarlyConv
-from .sparse import (RegionConstraint, RegionMode, SparseFeatureExtractor,
-                     geometry_from_trace)
+from .sparse import RegionConstraint, RegionMode, SparseFeatureExtractor
 from .transformer import TransformerEncoder
 
 
@@ -104,22 +103,3 @@ class SparseAudioTransformer(nn.Module):
         adjust = sum(float(s["adjust"].to_delta.weight.abs().sum())
                      for s in self.extractor.stages)
         return {"region_init_drift": float(drift), "region_adjust_norm": adjust}
-
-    @torch.no_grad()
-    def sampling_trace(self, spec: torch.Tensor) -> list[dict]:
-        """Regioni e token a ogni stadio — per riprodurre la Figura 2.
-
-        Verifica qualitativa del meccanismo: si vede il campionamento
-        passare da uniforme a concentrato sulle regioni informative.
-        """
-        _, trace = self.extractor(self.frontend(spec), return_trace=True)
-        return trace
-
-    @torch.no_grad()
-    def sampling_geometry(self, spec: torch.Tensor) -> list[dict]:
-        """Conteggi sulla geometria del campionamento, per ripetizione.
-
-        Riscontro quantitativo di cio' che la Figura 2 del paper mostra a
-        occhio. I conteggi sono grezzi, quindi aggregabili su piu' batch.
-        """
-        return geometry_from_trace(self.sampling_trace(spec))

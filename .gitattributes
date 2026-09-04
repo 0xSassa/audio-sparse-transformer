@@ -9,9 +9,6 @@
 # piattaforma. E' la configurazione neutra.
 * text=auto eol=lf
 
-# Gli script PowerShell restano CRLF: alcune versioni di Windows
-# PowerShell non gestiscono bene i qui-documenti con soli LF.
-*.ps1 text eol=crlf
 
 # Binari: nessuna conversione, e diff non testuale.
 *.pdf  binary

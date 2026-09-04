@@ -19,7 +19,6 @@ Tre scelte da conoscere prima di leggere il codice:
 from __future__ import annotations
 
 import argparse
-import inspect
 import json
 import shutil
 import time
@@ -74,26 +73,6 @@ MODELS = {"dense": DenseAudioTransformer, "sparse": SparseAudioTransformer}
 # ricaricare i pesi vecchi. Il valore archiviato coincide con l'unico
 # comportamento rimasto.
 OBSOLETE_MODEL_KEYS = ("stem", "norm", "pos_encoding", "num_conv_layers")
-
-
-def model_config_with_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
-    """La config di un modello archiviato, completata coi default correnti.
-
-    Un `resolved_config.json` scritto prima che un'opzione esistesse non la
-    contiene, e confrontarlo con uno scritto dopo direbbe che sono due modelli
-    diversi quando sono lo stesso. I default si leggono dalla firma della
-    classe, cosi' non esiste un secondo elenco da tenere allineato; le opzioni
-    RIMOSSE dalla firma non si leggono piu' e vanno scartate a mano, ed e' a
-    cosa serve `OBSOLETE_MODEL_KEYS`.
-    """
-    model = MODELS.get(cfg.get("kind"))
-    if model is None:
-        return dict(cfg)
-    out = {k: v for k, v in cfg.items() if k not in OBSOLETE_MODEL_KEYS}
-    for name, param in inspect.signature(model.__init__).parameters.items():
-        if param.default is not inspect.Parameter.empty and name not in out:
-            out[name] = param.default
-    return out
 
 
 def build_model(cfg: dict[str, Any], n_mels: int, n_frames: int) -> nn.Module:

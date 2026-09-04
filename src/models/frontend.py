@@ -34,14 +34,6 @@ class FrontendShape:
     freq: int
     time: int
 
-    @property
-    def num_frames(self) -> int:
-        return self.time
-
-    @property
-    def frame_dim(self) -> int:
-        return self.channels * self.freq
-
     def __str__(self) -> str:
         return f"[C={self.channels}, F={self.freq}, T={self.time}]"
 

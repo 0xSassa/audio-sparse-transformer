@@ -115,13 +115,7 @@ class RegionAdjust(nn.Module):
     # paper ne' SparseFormer prevedono questo limite.
     MAX_LOG_SCALE = 4.0
 
-    def forward(self, tokens: torch.Tensor, boxes: torch.Tensor,
-                *, return_delta: bool = False):
-        """`return_delta=True` restituisce anche il delta PRIMA del clamp.
-
-        Serve solo alla diagnostica: e' l'unico modo di misurare quanto
-        spesso `MAX_LOG_SCALE` morde. Il percorso di training non lo usa.
-        """
+    def forward(self, tokens: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
         delta = self.to_delta(tokens)                      # [B, N, 4]
         center, size = boxes_to_cwh(boxes)
         center = center + delta[..., :2] * size
@@ -138,8 +132,7 @@ class RegionAdjust(nn.Module):
             half = 0.5 * size
             center = torch.min(torch.max(center, half), 1.0 - half)
 
-        out = cwh_to_boxes(center, size)
-        return (out, delta) if return_delta else out
+        return cwh_to_boxes(center, size)
 
 
 class SparseSampler(nn.Module):
@@ -170,13 +163,8 @@ class SparseSampler(nn.Module):
         self.to_offsets = nn.Linear(token_dim, num_points * 2)
 
     def forward(self, tokens: torch.Tensor, boxes: torch.Tensor,
-                features: torch.Tensor, *, return_coords: bool = False):
-        """tokens [B,N,d] · boxes [B,N,4] · features [B,C,F,T] -> [B,N,P,C].
-
-        `return_coords=True` aggiunge le coordinate normalizzate dei P punti,
-        [B,N,P,2] in [0,1] sugli assi (tempo, frequenza): servono solo alla
-        Figura 2, il percorso di training resta identico.
-        """
+                features: torch.Tensor) -> torch.Tensor:
+        """tokens [B,N,d] · boxes [B,N,4] · features [B,C,F,T] -> [B,N,P,C]."""
         b, n, _ = tokens.shape
         offsets = self.to_offsets(self.norm(tokens))
         offsets = offsets.view(b, n, self.num_points, 2)
@@ -193,8 +181,7 @@ class SparseSampler(nn.Module):
         grid = 2.0 * coords - 1.0                          # [B,N,P,2]
         sampled = F.grid_sample(features, grid, mode="bilinear",
                                 padding_mode="border", align_corners=False)
-        out = rearrange(sampled, "b c n p -> b n p c")
-        return (out, coords) if return_coords else out
+        return rearrange(sampled, "b c n p -> b n p c")
 
 
 class AdaptiveDecoder(nn.Module):
@@ -246,43 +233,6 @@ class AdaptiveDecoder(nn.Module):
         return tokens + self.out(x.reshape(b, n, p * c))
 
 
-def geometry_from_trace(trace: list[dict]) -> list[dict]:
-    """Quanto del campionamento resta DENTRO il piano, ripetizione per ripetizione.
-
-    Nulla, nel metodo del paper, tiene le regioni dentro [0,1]^2: il delta di
-    `RegionAdjust` sposta il centro e moltiplica il lato per un esponenziale
-    senza vincoli. Quando una regione esce, i punti che cadono fuori vengono
-    serviti da `padding_mode="border"`, cioe' leggono il bordo della feature
-    map: il campionamento continua a produrre numeri, e smette di essere
-    selettivo. Non c'e' nessun sintomo nella loss.
-
-    Conteggi grezzi e non frequenze, cosi' chi aggrega su piu' batch somma
-    invece di mediare medie:
-
-        inside/points   punti con entrambe le coordinate in [0,1]
-        size_sum/boxes  lato medio delle regioni, in unita' di piano (1.0 =
-                        tutto l'asse); il valore iniziale e' `unit`, 0.5
-        size_max        lato massimo visto
-    """
-    out = []
-    for stage in trace:
-        _, size = boxes_to_cwh(stage["boxes"])
-        pts = stage["points"]
-        log_scale = stage["delta"][..., 2:]
-        out.append({
-            "inside": int(((pts >= 0) & (pts <= 1)).all(-1).sum()),
-            "points": int(pts.shape[0] * pts.shape[1] * pts.shape[2]),
-            "size_sum": float(size.sum()),
-            "size_max": float(size.max()),
-            "boxes": int(size.shape[0] * size.shape[1] * size.shape[2]),
-            # quante componenti di scala vengono tagliate da MAX_LOG_SCALE:
-            # e' la misura della nostra deviazione dalla lettera del paper
-            "clamped": int((log_scale.abs() >= RegionAdjust.MAX_LOG_SCALE).sum()),
-            "scales": int(log_scale.numel()),
-        })
-    return out
-
-
 class SparseFeatureExtractor(nn.Module):
     """L_rep ripetizioni di {aggiusta regione, campiona, decodifica}.
 
@@ -326,30 +276,15 @@ class SparseFeatureExtractor(nn.Module):
                     param.requires_grad_(False)
             self.box_init.requires_grad_(False)
 
-    def forward(self, features: torch.Tensor,
-                return_trace: bool = False):
-        """features [B,C,F,T] -> token [B,N,d].
-
-        `return_trace=True` aggiunge, per ogni stadio, le regioni (`boxes`),
-        i token e le coordinate dei P punti (`points`, [B,N,P,2] in [0,1]):
-        servono a riprodurre la Figura 2 del paper.
-        """
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """features [B,C,F,T] -> token [B,N,d]."""
         b = features.shape[0]
         tokens = self.token_init.unsqueeze(0).expand(b, -1, -1)
         boxes = self.box_init.unsqueeze(0).expand(b, -1, -1)
-        trace = []
 
         for stage in self.stages:
-            if return_trace:
-                boxes, delta = stage["adjust"](tokens, boxes, return_delta=True)
-                sampled, coords = stage["sample"](tokens, boxes, features,
-                                                  return_coords=True)
-            else:
-                boxes = stage["adjust"](tokens, boxes)
-                sampled = stage["sample"](tokens, boxes, features)
+            boxes = stage["adjust"](tokens, boxes)
+            sampled = stage["sample"](tokens, boxes, features)
             tokens = stage["decode"](tokens, sampled)
-            if return_trace:
-                trace.append({"boxes": boxes.detach(), "tokens": tokens.detach(),
-                              "points": coords.detach(), "delta": delta.detach()})
 
-        return (tokens, trace) if return_trace else tokens
+        return tokens
