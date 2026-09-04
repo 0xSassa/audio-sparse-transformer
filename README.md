@@ -8,17 +8,14 @@ Riproduzione di:
 > H. Salami Kavaki, M. I. Mandel. *Audio Sparse-Transformer for Speech
 > Classification.* ICASSP 2025, pp. 1–5. DOI 10.1109/ICASSP49660.2025.10890475
 
-Il paper non ha codice pubblico: modello, training e misure sono reimplementati
-dalle sue formule. Dove il paper tace, la scelta viene dalle fonti che esso
-stesso indica — **SparseFormer**, di cui il metodo è la trasposizione all'audio,
-ed **EAT**, da cui vengono augmentation e ottimizzatore — e dalla letteratura
-sullo stesso dataset (**KWT**, **AST**). Dataset: Google Speech Commands V2,
-35 classi, split ufficiali speaker-disjoint.
+Dataset: Google Speech Commands V2, 35 classi, split ufficiali speaker-disjoint.
+Il paper non ha codice pubblico, quindi modello, training e misure sono
+reimplementati dalle sue formule; dove tace decidono le fonti che cita
+(SparseFormer, AdaMixer, EAT) e la letteratura sullo stesso dataset (KWT, AST).
 
-Obiettivo: riprodurre il **metodo**, non i suoi numeri. Entrambi i modelli del
-paper sono implementati e addestrati da zero, l'ablation è rifatta su entrambi
-gli assi, e le sezioni 3 e 4 elencano ogni punto in cui la nostra lettura si
-discosta dal testo.
+Obiettivo: riprodurre il metodo, non i suoi numeri. I due modelli sono addestrati
+da zero su 3 seed, l'ablation è rifatta su entrambi gli assi, e le sezioni 3 e 4
+elencano ogni scelta che il paper non dichiara.
 
 ---
 
@@ -30,27 +27,22 @@ src/       data/    split ufficiali, cache memory-mapped, log-mel, augmentation
            models/  early convolution, encoder, denso, estrattore sparso
            train.py, flops.py, metrics.py, utils.py, tracking.py
 scripts/   prepare_data.py, run_seeds.py, evaluate.py
-results/   configurazione, metriche per epoca e report dei 22 run archiviati
+results/   config, metriche per epoca e report dei 22 run archiviati
 ```
 
-Dati e pesi non sono inclusi. Di ogni run restano `config.yaml`,
-`resolved_config.json`, `metrics.csv`, `summary.json` e i report di valutazione:
-bastano a ricostruire ogni numero di questo documento.
+Dati e pesi non sono inclusi. I file di testo in `results/` bastano a ricostruire
+ogni numero di questo documento.
 
 ---
 
-## 2. Cosa abbiamo fatto
+## 2. Il metodo e la sua implementazione
 
-### Il metodo
-
-Kavaki & Mandel sostituiscono la sequenza di frame che un transformer audio
-riceve di solito con **N token latenti**, N molto minore del numero di frame.
-Ogni token `t ∈ R^d` è accoppiato a una regione `b = (x, y, w, h)` del piano
-tempo-frequenza; token e regioni iniziali sono parametri appresi, con le regioni
-su una griglia `√N × √N` di lato pari a metà del piano — da cui il vincolo,
-ereditato da SparseFormer, che N sia un quadrato perfetto, e la ragione per cui
-l'ablation del paper usa N ∈ {4, 9, 16, 25, 36}. Il modello ripete `L_rep` volte
-tre passi:
+N token latenti al posto della sequenza di frame, con N molto minore del numero
+di frame. Ogni token `t ∈ R^d` è accoppiato a una regione `b = (x, y, w, h)` del
+piano tempo-frequenza; token e regioni iniziali sono parametri appresi, le
+regioni su una griglia `√N × √N` di lato pari a metà del piano. N deve quindi
+essere un quadrato perfetto, vincolo ereditato da SparseFormer, e l'ablation del
+paper usa N ∈ {4, 9, 16, 25, 36}. Il modello ripete `L_rep` volte tre passi:
 
 ```
 # 1. aggiustamento della regione, con la parametrizzazione dei detector alla
@@ -73,20 +65,15 @@ x1 = GELU(x0 · Mc)      x2 = GELU(Ms · x1)      t' = t + Linear(x2)
 ```
 
 L'interpolazione bilineare rende differenziabile la selezione: la derivata
-rispetto alle coordinate è una differenza finita fra celle adiacenti, e per
-questo si campiona sull'uscita di una convoluzione iniziale e non sullo
-spettrogramma grezzo, dove quel gradiente sarebbe troppo rumoroso (§3.2, che cita
-SparseFormer e Xiao et al., *Early convolutions help transformers see better*).
-I pesi del decoding sono funzione del token, così ogni token decide come
-mescolare i propri campioni: «simply using a linear layer for this encoding is
-not effective». Gli N token finali entrano in uno stack di transformer-encoder,
-senza codifica posizionale perché sono un insieme e non una sequenza, e si
-classifica sulla media delle loro rappresentazioni.
+rispetto alle coordinate è una differenza finita fra celle adiacenti, e sullo
+spettrogramma grezzo sarebbe troppo rumorosa. Per questo si campiona sull'uscita
+della convoluzione iniziale (§3.2, che cita SparseFormer e Xiao et al.). I pesi
+del decoding sono generati dal token e non fissi: «simply using a linear layer
+for this encoding is not effective». Gli N token finali entrano in uno stack di
+transformer-encoder, senza codifica posizionale perché sono un insieme e non una
+sequenza, e si classifica sulla loro media.
 
-### L'architettura
-
-I due modelli condividono tutto tranne come si arriva ai token, così il confronto
-è controllato.
+### Architettura
 
 ```
 log-mel                [B, 1, 64, 101]
@@ -99,93 +86,86 @@ early convolution      [B, 96, 16, 51]   conv 7×7 s2 → ReLU → maxpool → L
 media sui token + classificatore lineare  [B, 35]
 ```
 
-L'encoder è reimplementato senza `nn.MultiheadAttention`, con blocchi pre-norm
-come in ViT e in SparseFormer. Il termine quadratico in n (`QKᵀ` e `AV`, 2n²d)
-supera quello lineare (4nd² + 2rnd²) solo per n > (2+r)·d, cioè n > 768 con d=128
-e r=4: le nostre sequenze sono molto più corte, quindi passare da 51 frame a 4
-token non fa risparmiare quanto suggerisce (51/4)², e il guadagno si misura col
-contatore di `src/flops.py` invece di dedurlo.
+I due modelli condividono tutto tranne come si arriva ai token, così il confronto
+è controllato. L'encoder è scritto senza `nn.MultiheadAttention`, con blocchi
+pre-norm come in ViT e SparseFormer. Il termine quadratico in n (2n²d) supera
+quello lineare (4nd² + 2rnd²) solo per n > (2+r)·d, cioè n > 768 con d=128 e r=4:
+qui le sequenze sono molto più corte, quindi passare da 51 frame a 4 token non
+risparmia quanto suggerisce (51/4)², e il guadagno si misura con `src/flops.py`.
 
-### Cosa è implementato alla lettera
+### Implementato alla lettera
 
-Del modello sparso il paper dichiara la configurazione completa (Tab. 1: N=4,
-P=36, d_token=64, d_encoder=128, L_rep=3, L_enc=8) e il training: AdamW con
-β=(0,9, 0,99), lr 3·10⁻⁴, schedule one-cycle, weight decay 10⁻⁵, EMA 0,995,
-batch 64 e le augmentation *mixing* e *phasemix*, entrambe di EAT — che pubblica
-*phasemix* per esteso come Algoritmo 2, rimappaggio `λy = 0,5·λ + 0,5` incluso.
-Nessuna riga di codice è copiata: i repository ufficiali di EAT e SparseFormer
-sono stati consultati per sciogliere ambiguità, e ogni punto in cui una fonte ha
-deciso una scelta è annotato nel codice e nei config.
+Il paper dichiara la configurazione del modello sparso (Tab. 1: N=4, P=36,
+d_token=64, d_encoder=128, L_rep=3, L_enc=8) e il training: AdamW β=(0,9, 0,99),
+lr 3·10⁻⁴, one-cycle, weight decay 10⁻⁵, EMA 0,995, batch 64, augmentation
+*mixing* e *phasemix*. Le due augmentation vengono da EAT, che pubblica
+*phasemix* come Algoritmo 2, rimappaggio `λy = 0,5·λ + 0,5` incluso. Nessuna riga
+di codice è copiata dai repository di EAT e SparseFormer, consultati solo per
+sciogliere ambiguità.
 
 ---
 
-## 3. Dove il paper tace: decide la letteratura che esso cita
+## 3. Scelte dedotte dalla letteratura
 
 | Punto non dichiarato | Scelta | Fonte |
 |---|---|---|
-| Canali della early convolution: il §3.2 dice «96 dimensional feature» e due righe dopo «196 kernels» | 96 canali, un solo strato: conv 7×7 s2 → ReLU → max pool → LayerNorm sui canali | SparseFormer, *Model configurations*: «ResNet-like early convolutional layers (a 7×7 stride-2 convolution, a ReLU, and a 3×3 stride-2 max pooling) to extract initial 96-d image features». La lettura alternativa — 196 kernel più una proiezione 1×1, che salva entrambe le frasi al prezzo di uno strato mai nominato — resta implementata come `channel_reading: c196_proj96` |
-| Su cosa opera l'ultimo `Linear` del decoding | sul tensore appiattito, P·C → d | AdaMixer, che il paper cita proprio a fianco dell'eq. (9): «The final output … is flattened and transformed to the d_q dimension by a linear layer to add back to the content vector» |
-| Condivisione dei pesi dell'estrattore fra le `L_rep` ripetizioni | pesi **non** condivisi | SparseFormer li condivide e lo dichiara, ma qui decide il budget del paper riprodotto: condividendoli il modello avrebbe 2 010 591 parametri contro i 2,87 M dichiarati (−30 %), senza condivisione 2 822 711 (−1,6 %). Non a caso 2 010 591 è anche il conto del modello a una sola ripetizione (sez. 5) |
-| Front-end tempo-frequenza: il paper non ne dichiara nulla | log-mel, finestra 25 ms, hop 10 ms → 101 frame per clip da 1 s | AST: «128-dimensional log Mel filterbank features computed with a 25 ms Hamming window every 10 ms»; KWT: «Time window length 30 ms, Time window stride 10 ms». Su questo dataset l'hop di 10 ms è la convenzione |
-| Tokenizzazione del baseline denso: il paper ne dichiara solo parametri e FLOPs | `flatten`: un token per frame, con tutte le sue frequenze (96 × 16 = 1536 valori) | KWT, sullo stesso dataset: «the spectrogram is first mapped to a higher dimension d, using a linear projection matrix W₀ ∈ R^{F×d} in the frequency domain», e la sua ablation sulle patch trova migliori proprio quelle a frequenza piena, una per frame. La lettura alternativa, che media via la frequenza, resta in `configs/dense.yaml` |
-| Loss | BCE su target multi-hot, senza label smoothing | EAT, da cui vengono le augmentation: «The loss is label-smoothing … for single-label classification tasks, and binary cross-entropy for the multi-label case. When applying mixing augmentations we use multi-label objective and use binary cross-entropy». La stessa frase spiega perché qui non c'è label smoothing |
-| Larghezza dell'encoder denso | `dim`=224 | La profondità la dà il paper (8 encoder, e il denso «uses the same architecture»), quindi resta solo `dim`, con i due soli numeri dichiarati come vincoli. Nessun valore li soddisfa entrambi: `dim`=240 azzera quasi lo scarto sul costo (−1,2 %) ma sbaglia i parametri del +24 %, `dim`=208 fa l'opposto. Si adotta il valore che minimizza il peggiore dei due scarti |
+| Canali della early convolution: il §3.2 dice «96 dimensional feature» e due righe dopo «196 kernels» | 96 canali, un solo strato: conv 7×7 s2, ReLU, max pool, LayerNorm sui canali | SparseFormer, *Model configurations*: «ResNet-like early convolutional layers (a 7×7 stride-2 convolution, a ReLU, and a 3×3 stride-2 max pooling) to extract initial 96-d image features». L'altra lettura, 196 kernel più una proiezione 1×1, resta in `channel_reading: c196_proj96` |
+| Su cosa opera l'ultimo `Linear` del decoding | sul tensore appiattito, P·C → d | AdaMixer, citato a fianco dell'eq. (9): «The final output … is flattened and transformed to the d_q dimension by a linear layer to add back to the content vector» |
+| Pesi dell'estrattore condivisi fra le `L_rep` ripetizioni | non condivisi | SparseFormer li condivide e lo dichiara; il budget del paper riprodotto no. Condivisi: 2 010 591 parametri contro i 2,87 M dichiarati (−30 %). Non condivisi: 2 822 711 (−1,6 %) |
+| Front-end tempo-frequenza | log-mel, finestra 25 ms, hop 10 ms, 101 frame per clip da 1 s | AST: «128-dimensional log Mel filterbank features computed with a 25 ms Hamming window every 10 ms»; KWT: «Time window length 30 ms, Time window stride 10 ms» |
+| Tokenizzazione del baseline denso, di cui il paper dà solo parametri e FLOPs | `flatten`: un token per frame con tutte le sue frequenze, 96 × 16 = 1536 valori | KWT, sullo stesso dataset: «the spectrogram is first mapped to a higher dimension d, using a linear projection matrix W₀ ∈ R^{F×d} in the frequency domain», e la sua ablation sulle patch preferisce quelle a frequenza piena. L'alternativa, che media via la frequenza, resta in `configs/dense.yaml` |
+| Loss | BCE su target multi-hot, senza label smoothing | EAT, da cui vengono le augmentation: «The loss is label-smoothing … for single-label classification tasks, and binary cross-entropy for the multi-label case. When applying mixing augmentations we use multi-label objective and use binary cross-entropy» |
+| Larghezza dell'encoder denso | `dim`=224 | La profondità la dà il paper (8 encoder, e il denso «uses the same architecture»). Su `dim` gli unici vincoli sono i due numeri dichiarati, e nessun valore li soddisfa entrambi: `dim`=240 sbaglia il costo dell'1,2 % e i parametri del 24 %, `dim`=208 fa l'opposto. 224 minimizza il peggiore dei due scarti |
 
 ---
 
-## 4. Assunzioni: scelte nostre, che nessuna fonte fissa
+## 4. Assunzioni nostre
 
 Ogni voce è marcata `[ASSUNZIONE]` anche in `configs/base.yaml`.
 
 | Punto | Scelta |
 |---|---|
 | Bin mel dello spettrogramma | 64, fra i 40 di KWT e i 128 di AST; danno F=16 dopo lo stem |
-| Stride del max pooling, che il paper non dà | `(2, 1)`: solo sull'asse frequenza |
-| Teste dell'attenzione, non dichiarate | 4 nello sparso e 7 nel denso, cioè 32 dimensioni per testa in entrambi |
+| Stride del max pooling | `(2, 1)`, solo sull'asse frequenza |
+| Teste dell'attenzione | 4 nello sparso e 7 nel denso, cioè 32 dimensioni per testa in entrambi |
 | Numero di epoche | 100 |
-| Codifica posizionale del denso, taciuta dal paper | assente, per simmetria con lo sparso |
+| Codifica posizionale del denso | assente, per simmetria con lo sparso |
 | Limite sul delta logaritmico prima dell'esponenziale | `MAX_LOG_SCALE = 4,0` |
 
-Lo **stride del pooling** è l'unico punto in cui ci si discosta dall'ancestor.
-SparseFormer dimezza entrambi gli assi, naturale su un'immagine, dove le due
-dimensioni sono omogenee e dimezzarle insieme conserva le proporzioni. Una mappa
-tempo-frequenza non ha quella simmetria: il tempo è l'asse lungo cui il modello
-denso costruisce la propria sequenza, e su clip di un secondo dimezzarlo
-lascerebbe 26 frame, cioè un passo di 40 ms.
+SparseFormer dimezza entrambi gli assi nel pooling, che su un'immagine sono
+omogenei. Qui il tempo è l'asse lungo cui il modello denso costruisce la
+sequenza, e su clip di un secondo dimezzarlo lascerebbe 26 frame, cioè un passo
+di 40 ms: il pooling agisce solo sulla frequenza.
 
-Il **limite sul delta logaritmico** evita che un passo anomalo mandi `exp()` in
-overflow (float32 esplode oltre ~88), con regioni infinite e NaN nel gradiente.
-Né il paper né SparseFormer lo prevedono, e non è inerte: sulla prima ripetizione
-non interviene mai, dalla seconda in poi taglia i fattori di scala richiesti
-oltre e⁴ ≈ 55. È la deviazione dal paper che pesa di più fra quelle dichiarate
-qui.
+Il limite sul delta logaritmico evita che un passo anomalo mandi `exp()` in
+overflow (in float32 esplode oltre ~88), con regioni infinite e NaN nel
+gradiente. Né il paper né SparseFormer lo prevedono, e non è inerte: dalla seconda
+ripetizione taglia i fattori di scala oltre e⁴ ≈ 55.
 
 ---
 
 ## 5. Risultati
 
-Modello EMA, checkpoint selezionato sul validation set durante il training. Il
-test set è stato toccato una volta sola per modello, a esperimenti chiusi; media
-± deviazione standard su 3 seed.
+Modello EMA, checkpoint selezionato sul validation set. Il test set è stato
+valutato una volta sola per modello, a esperimenti chiusi; media ± deviazione
+standard su 3 seed.
 
 | Modello | Test (3 seed) | Validation (3 seed) | Params | GFLOP |
 |---|---|---|---|---|
-| Denso `flatten`, baseline adottato | **97,03 % ± 0,20** | 96,97 ± 0,04 | 5 197 795 | 0,5604 |
-| Sparso N=4, configurazione del paper | **95,52 % ± 0,31** | 95,71 ± 0,37 | 2 822 711 | 0,0485 |
+| Denso `flatten`, baseline adottato | 97,03 % ± 0,20 | 96,97 ± 0,04 | 5 197 795 | 0,5604 |
+| Sparso N=4, configurazione del paper | 95,52 % ± 0,31 | 95,71 ± 0,37 | 2 822 711 | 0,0485 |
 
-Dichiarati dal paper (Tab. 2): sparso 96,88 % con 2,87 M e 0,055 G; denso
-96,67 % con 4,80 M e 0,645 G. **Il segno del confronto si rovescia**: il paper dà
-il modello sparso 0,21 punti sopra il proprio denso, qui lo troviamo un punto e
-mezzo sotto. Il nostro baseline denso è ricostruito con la tokenizzazione di KWT,
-quindi è più forte di quello che il paper lascia intravedere.
+Il paper (Tab. 2) dichiara 96,88 % con 2,87 M e 0,055 G per lo sparso, 96,67 %
+con 4,80 M e 0,645 G per il denso: lo sparso 0,21 punti sopra il proprio
+baseline. Qui sta un punto e mezzo sotto, e il nostro baseline usa la
+tokenizzazione di KWT, più forte di quella che il paper lascia intravedere.
 
 ### Ablation
 
-La metà alta della Tabella 3 — l'accuratezza che cresce col numero di token — si
-riproduce; la metà bassa, lungo il numero di campioni per token, no. Gli otto
-punti sono a 50 epoche e a un solo seed, per essere confrontabili fra loro; la
-colonna «Paper» non è alla pari, perché i suoi numeri sono su test e a budget
-pieno.
+La metà alta della Tabella 3, l'accuratezza che cresce col numero di token, si
+riproduce; la metà bassa lungo P no. Gli otto punti sono a 50 epoche e a un solo
+seed; la colonna «Paper» non è alla pari, perché i suoi numeri sono su test e a
+budget pieno.
 
 | Config. | Val % | Paper % | Params | Dichiarati | GFLOP |
 |---|---|---|---|---|---|
@@ -198,17 +178,14 @@ pieno.
 | P=64 | 94,62 | 96,98 | 3 492 527 | 3,53 M | 0,0664 |
 | P=128 | 93,67 | 96,95 | 5 323 823 | 5,35 M | 0,1233 |
 
-**I parametri tornano entro il 2 % su tutte e nove le configurazioni dichiarate**
-(N=4 e P=36 sono lo stesso punto), e i due assi si controllano a vicenda: lungo N
-il paper li dà costanti, lungo P li fa più che raddoppiare, per via di
-`Ms ∈ R^{P×P}`. Riprodurre per caso entrambi gli andamenti è improbabile, ed è la
-verifica più forte che il progetto abbia della propria lettura del metodo; si
-rifà costruendo i nove modelli con
-`src.models.sparse_model.SparseAudioTransformer` e sommandone i parametri, senza
-addestrare nulla. I costi no, e la ragione è che il paper non dichiara né la
-convenzione di conteggio (FLOPs o MAC) né lo spettrogramma da cui dipende il
-termine fisso: senza quel dato il front-end non è ricostruibile, e recuperarlo
-sarebbe un'assunzione travestita da deduzione.
+I parametri tornano entro il 2 % su tutte e nove le configurazioni dichiarate
+(N=4 e P=36 sono lo stesso punto): lungo N il paper li dà costanti, lungo P li fa
+più che raddoppiare per via di `Ms ∈ R^{P×P}`, e i due andamenti si riproducono
+entrambi. Il conto si rifà costruendo i nove modelli con
+`src.models.sparse_model.SparseAudioTransformer`, senza addestrare nulla.
+
+I costi no: il paper non dichiara né la convenzione di conteggio (FLOPs o MAC) né
+lo spettrogramma, da cui dipende il termine fisso.
 
 ### Varianti che il paper non prevede, spente per default
 
@@ -220,12 +197,12 @@ sarebbe un'assunzione travestita da deduzione.
 | Regioni vincolate al piano (`region_constraint=clip`) | `sparse_clip_seed0` | 95,21 |
 | Denso `pool_freq`, ricostruzione scartata (c96 / c196_proj96) | `dense_c96_seed0` / `dense_seed0` | 94,09 / 94,67 |
 
-Congelare le regioni non cambia forma, parametri né FLOPs, e chiede se la
-saliency appresa serva davvero. Le altre cartelle sono `dense_flatten_seed{0,1,2}` e `sparse_seed{0,1,2}` (i due
-run principali, 100 epoche, gli unici sei con `test_report.json`),
-`sparse_N{4,9,16,25,36}_seed0` e `sparse_P{16,64,128}_seed0` (ablation, 50
-epoche). I nomi sono quelli di esecuzione e non vengono cambiati a posteriori: la
-configurazione realmente usata sta in `resolved_config.json`.
+Congelare le regioni non cambia forma, parametri né FLOPs, e misura quanto vale
+la saliency appresa. Le altre cartelle sono `dense_flatten_seed{0,1,2}` e
+`sparse_seed{0,1,2}` (i due run principali, 100 epoche, gli unici sei con
+`test_report.json`), `sparse_N{4,9,16,25,36}_seed0` e `sparse_P{16,64,128}_seed0`
+(ablation, 50 epoche). La configurazione realmente usata sta in
+`resolved_config.json`.
 
 ---
 
@@ -233,9 +210,9 @@ configurazione realmente usata sta in `resolved_config.json`.
 
 ### Installazione
 
-Python 3.12 e una GPU NVIDIA. Su Blackwell (sm_120, es. RTX 5050) la build CUDA
-12.8 non è opzionale: le wheel di default arrivano a sm_90 e falliscono a runtime
-con `no kernel image is available for execution on the device`.
+Python 3.12 e una GPU NVIDIA. Su Blackwell (sm_120, es. RTX 5050) serve la build
+CUDA 12.8: le wheel di default arrivano a sm_90 e falliscono a runtime con
+`no kernel image is available for execution on the device`.
 
 ```bash
 python -m venv .venv
@@ -261,13 +238,14 @@ python scripts/prepare_data.py --root data/raw --cache data/cache
 Scarica Speech Commands V2 (~2,3 GB, non incluso) e costruisce una cache
 memory-mapped `int16`. Lo script si ferma se gli split non danno esattamente
 84 843 / 9 981 / 11 005 campioni: sono i conteggi del paper e vengono da
-`validation_list.txt` e `testing_list.txt`, che Warden definisce con un hash
-dell'id del parlante. Sono quindi speaker-disjoint, mentre uno split casuale
+`validation_list.txt` e `testing_list.txt`, che Warden costruisce con un hash
+dell'id del parlante. Uno split casuale non sarebbe speaker-disjoint e
 misurerebbe anche quanto il modello riconosce le voci invece delle parole.
 
 ### Training
 
-Un'epoca costa ~60 s sulla RTX 5050 Laptop: ~1,7 ore per un run da 100 epoche.
+Un'epoca costa ~60 s sulla RTX 5050 Laptop, cioè ~1,7 ore per un run da 100
+epoche.
 
 ```bash
 # i due run del risultato principale, 3 seed ciascuno
@@ -320,11 +298,10 @@ Altre opzioni: `--epochs N`, `--resume` (riprende da `last.pt`), `--stop-after N
 `validation_report.json` e i log TensorBoard; nel repository sono versionati solo
 i file di testo.
 
-I run sono deterministici per default. Il backward di `grid_sample` non ha
-implementazione deterministica su CUDA — accumula con `atomicAdd`, quindi
-l'ordine delle somme in virgola mobile varia fra esecuzioni — perciò il modello
-sparso gira con `warn_only` e non è bit-riproducibile. Il livello effettivamente
-ottenuto finisce in `summary.json` accanto ai risultati.
+I run sono deterministici per default, tranne lo sparso: il backward di
+`grid_sample` accumula con `atomicAdd` e su CUDA non ha implementazione
+deterministica, quindi gira con `warn_only` e non è bit-riproducibile. Il livello
+ottenuto finisce in `summary.json`.
 
 ### Valutazione sul test set
 
@@ -332,30 +309,29 @@ ottenuto finisce in `summary.json` accanto ai risultati.
 python scripts/evaluate.py --run dense_flatten_seed0
 ```
 
-Il test set si tocca una volta sola: lo script scrive `TEST_EVALUATED.json` nella
-cartella del run e poi si rifiuta di ripartire, salvo `--force`, che però resta
-registrato. Si valuta sempre il modello EMA, sul checkpoint selezionato in
-validation.
+Lo script scrive `TEST_EVALUATED.json` nella cartella del run e poi si rifiuta di
+ripartire, salvo `--force`, che resta registrato nel file. Si valuta sempre il
+modello EMA, sul checkpoint selezionato in validation.
 
 ---
 
 ## 7. Riferimenti
 
 - H. Salami Kavaki, M. I. Mandel. *Audio Sparse-Transformer for Speech
-  Classification.* ICASSP 2025 — il paper riprodotto
+  Classification.* ICASSP 2025. Il paper riprodotto
 - Z. Gao, Z. Tong, L. Wang, M. Z. Shou. *SparseFormer: Sparse Visual Recognition
-  via Limited Latent Tokens.* arXiv:2304.03768 — l'ancestor del metodo
+  via Limited Latent Tokens.* arXiv:2304.03768. L'ancestor del metodo
 - Z. Gao, L. Wang, B. Han, S. Guo. *AdaMixer: A Fast-Converging Query-Based
-  Object Detector.* CVPR 2022 — il decoding adattivo
-- S. Ren, K. He, R. Girshick, J. Sun. *Faster R-CNN.* NeurIPS 2015 — la
+  Object Detector.* CVPR 2022. Il decoding adattivo
+- S. Ren, K. He, R. Girshick, J. Sun. *Faster R-CNN.* NeurIPS 2015. La
   parametrizzazione delle regioni
 - T. Xiao et al. *Early Convolutions Help Transformers See Better.* NeurIPS 2021
 - A. Gazneli, G. Zimerman, T. Ridnik, G. Sharir, A. Noy. *End-to-End Audio
-  Strikes Back (EAT).* arXiv:2204.11479 — augmentation, loss e ottimizzatore
+  Strikes Back (EAT).* arXiv:2204.11479. Augmentation, loss e ottimizzatore
 - A. Berg, M. O'Connor, M. Tairum Cruz. *Keyword Transformer (KWT).*
-  arXiv:2104.00769 — tokenizzazione del baseline denso
+  arXiv:2104.00769. Tokenizzazione del baseline denso
 - Y. Gong, Y.-A. Chung, J. Glass. *AST: Audio Spectrogram Transformer.*
   arXiv:2104.01778
 - P. Warden. *Speech Commands: A Dataset for Limited-Vocabulary Speech
-  Recognition.* arXiv:1804.03209 — il dataset, non incluso:
+  Recognition.* arXiv:1804.03209. Il dataset, non incluso:
   `http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz`
