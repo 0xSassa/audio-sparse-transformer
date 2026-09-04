@@ -12,8 +12,7 @@
 #
 # L'elenco e' la chiusura transitiva delle sole dipendenze che il codice
 # importa davvero, non un `pip freeze` dell'ambiente di lavoro: quello
-# portava dentro anche jupyter, optuna, fvcore e altri pacchetti che nessun
-# file di questo repository usa piu'.
+# porterebbe dentro pacchetti che nessun file di questo repository usa.
 absl-py==2.5.0
 cffi==2.1.1
 colorama==0.4.6
