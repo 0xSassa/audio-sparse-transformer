@@ -17,6 +17,20 @@ Obiettivo: riprodurre il metodo. I due modelli sono addestrati da zero su 3
 seed, l'ablation è rifatta su entrambi gli assi, e le sezioni 3 e 4 elencano
 ogni scelta che il paper non dichiara.
 
+## Risultato in breve
+
+La riproduzione **non conferma il vantaggio di accuratezza** riportato dal
+paper: sul test set il modello sparso raggiunge il 95,52 %, contro il 97,03 %
+del baseline denso. Il compromesso computazionale resta però netto: 2,82 M
+contro 5,20 M parametri e 0,0485 contro 0,5604 GFLOP. In sintesi, lo sparso usa
+il 45,7 % di parametri in meno e richiede 11,6 volte meno FLOP, perdendo 1,51
+punti percentuali di accuratezza.
+
+I numeri principali sono medie su tre seed, con modelli addestrati da zero e
+checkpoint selezionati sul validation set. I dettagli sulle assunzioni e sui
+limiti del confronto sono riportati sotto: il risultato non smentisce il paper,
+ma mostra quanto le scelte non dichiarate possano incidere su una riproduzione.
+
 ---
 
 ## 1. Contenuto
@@ -298,3 +312,11 @@ registrato. Si valuta sempre il modello EMA.
 - P. Warden. *Speech Commands: A Dataset for Limited-Vocabulary Speech
   Recognition.* arXiv:1804.03209. Il dataset, non incluso:
   `http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz`
+
+---
+
+## Licenza
+
+Il codice originale di questo repository è distribuito con licenza
+[MIT](LICENSE). Dataset, paper e dipendenze mantengono le rispettive licenze e
+condizioni d'uso.
